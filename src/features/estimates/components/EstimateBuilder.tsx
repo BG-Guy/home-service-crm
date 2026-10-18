@@ -2,14 +2,25 @@
 
 import {
   Ellipsis,
+  MessageSquareQuote,
+  PencilLine,
   PenLine,
   Plus,
+  Printer,
+  RotateCcw,
   Send,
   SlidersHorizontal,
   Star,
+  XCircle,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useMemo, useOptimistic, useState, useTransition } from "react";
+import {
+  type ReactNode,
+  useMemo,
+  useOptimistic,
+  useState,
+  useTransition,
+} from "react";
 import {
   type EditorLine,
   LineEditor,
@@ -22,6 +33,7 @@ import { Button } from "@/ui/components/Button";
 import { DateField, TextArea, TextField } from "@/ui/components/Field";
 import { IconButton } from "@/ui/components/IconButton";
 import { ListRow, ListSection } from "@/ui/components/List";
+import { usePageActions } from "@/ui/components/PageActions";
 import { SegmentedControl } from "@/ui/components/SegmentedControl";
 import { Sheet } from "@/ui/components/Sheet";
 import { Pill } from "@/ui/components/StatusPill";
@@ -235,6 +247,34 @@ export function EstimateBuilder({
         ]
       : []),
   ];
+  // Desktop: the "…" items live in the action rail beside the sidebar.
+  const RAIL: Record<string, { short: string; icon: ReactNode }> = {
+    "Edit details": { short: "Details", icon: <PencilLine /> },
+    "Print / PDF": { short: "Print", icon: <Printer /> },
+    "Approve on behalf (verbal)": {
+      short: "Verbal OK",
+      icon: <MessageSquareQuote />,
+    },
+    "Mark declined": { short: "Declined", icon: <XCircle /> },
+    "Reopen estimate": { short: "Reopen", icon: <RotateCcw /> },
+  };
+  const inRail = usePageActions({
+    title: e.number,
+    subtitle: "Estimate actions",
+    groups: [
+      {
+        title: "Estimate",
+        actions: more
+          .filter((m) => !m.destructive)
+          .map((m) => ({ ...m, ...RAIL[m.label] })),
+      },
+      {
+        actions: more
+          .filter((m) => m.destructive)
+          .map((m) => ({ ...m, ...RAIL[m.label] })),
+      },
+    ],
+  });
 
   return (
     <>
@@ -270,6 +310,7 @@ export function EstimateBuilder({
         <IconButton
           label="More actions"
           variant="gray"
+          className={inRail ? "lg:hidden" : undefined}
           onClick={() => setSheet("more")}
         >
           <Ellipsis size={20} />
