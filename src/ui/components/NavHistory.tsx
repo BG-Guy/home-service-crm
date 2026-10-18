@@ -2,7 +2,7 @@
 
 import { ChevronLeft, ChevronRight, Ellipsis } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   type Crumb,
@@ -10,8 +10,6 @@ import {
   getServerTrail,
   getTrail,
   nameVisit,
-  recordVisit,
-  scopeTrailTo,
   subscribeTrail,
   titleOf,
 } from "@/client/nav-history";
@@ -23,7 +21,7 @@ import { useNavTitles } from "./nav-titles-context";
 
 /*
  * History breadcrumbs (QA: "show the pages I visited, not the app's folders").
- * - `HistoryTracker` (once, in AppShell) records every page this tab visits.
+ * - `HistoryTracker` (its own module, once in AppShell) records every page this tab visits.
  * - `CrumbTitle` (inside NavBar / LargeTitleHeader) names the page in the trail.
  * - `HistoryBack` is the nav bar's leading item: on phones the iOS back button,
  *   pointing at the page you actually came from (long-press for the whole trail);
@@ -57,20 +55,6 @@ export function BackButton({ href, label = "Back" }: BackTarget) {
       <span className="truncate">{label}</span>
     </Link>
   );
-}
-
-/** Records each page (and its query) this tab visits; scoped to the user. */
-export function HistoryTracker({ userId }: { userId: string }) {
-  const pathname = usePathname();
-  const params = useSearchParams();
-  const qs = params?.toString() ?? "";
-  useEffect(() => {
-    scopeTrailTo(userId);
-  }, [userId]);
-  useEffect(() => {
-    if (pathname) recordVisit(qs ? `${pathname}?${qs}` : pathname);
-  }, [pathname, qs]);
-  return null;
 }
 
 /** Names the current page in the trail (rendered by the nav bars). */

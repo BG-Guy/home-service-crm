@@ -2,7 +2,7 @@ import { type ReactNode, Suspense } from "react";
 import { cx } from "../cx";
 import { iconFor } from "../icons";
 import { Avatar } from "./Avatar";
-import { HistoryTracker } from "./NavHistory";
+import { HistoryTracker } from "./HistoryTracker";
 import { NavTitlesProvider } from "./NavTitles";
 import { type NavTitle, uniqueTitles } from "./nav-titles";
 import { Sidebar } from "./Sidebar";

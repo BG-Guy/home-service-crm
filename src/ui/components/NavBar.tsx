@@ -150,9 +150,14 @@ export function LargeTitleHeader({
       {typeof title === "string" && <CrumbTitle title={title} />}
       <header className="mx-auto max-w-[var(--content-max)] px-[var(--gutter)] pb-2">
         <h1 className="text-large-title tracking-tight">{title}</h1>
-        {subtitle && (
-          <p className="-mt-0.5 text-subhead text-label-2">{subtitle}</p>
-        )}
+        {/* A control as the subtitle (e.g. a date jump that opens a popover or a
+            sheet) can't sit inside a <p>. */}
+        {subtitle &&
+          (typeof subtitle === "string" ? (
+            <p className="-mt-0.5 text-subhead text-label-2">{subtitle}</p>
+          ) : (
+            <div className="-mt-0.5 text-subhead text-label-2">{subtitle}</div>
+          ))}
         <ScrollSentinel />
         {search && <div className="mt-2">{search}</div>}
         {children && <div className="mt-3">{children}</div>}
