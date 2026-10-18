@@ -7,7 +7,13 @@ import { useConfirm } from "@/ui/components/Alert";
 import { Button } from "@/ui/components/Button";
 import { Chip, ChipRow } from "@/ui/components/Chip";
 import { EmptyState } from "@/ui/components/EmptyState";
-import { Select, TextArea, TextField } from "@/ui/components/Field";
+import {
+  DateField,
+  Select,
+  TextArea,
+  TextField,
+  TimeField,
+} from "@/ui/components/Field";
 import { ListSection } from "@/ui/components/List";
 import { SegmentedControl } from "@/ui/components/SegmentedControl";
 import { Sheet } from "@/ui/components/Sheet";
@@ -447,16 +453,14 @@ export function RemindersManager({
                 {(draft.rtype === "once" ||
                   draft.rtype === "every_n_days" ||
                   draft.rtype === "every_n_months") && (
-                  <TextField
+                  <DateField
                     label={draft.rtype === "once" ? "Date" : "Starting"}
-                    type="date"
                     value={draft.date}
                     onChange={(e) => set("date", e.currentTarget.value)}
                   />
                 )}
-                <TextField
+                <TimeField
                   label="Time"
-                  type="time"
                   value={draft.time}
                   onChange={(e) => set("time", e.currentTarget.value)}
                 />

@@ -4,6 +4,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState, useTransition } from "react";
 import { UrlSegmented } from "@/features/settings/components/UrlSegmented";
 import { Button } from "@/ui/components/Button";
+import { DateField } from "@/ui/components/Field";
 import { cx } from "@/ui/cx";
 import { PERIOD_LABELS, PERIODS, type PeriodKey } from "../period";
 
@@ -70,26 +71,23 @@ export function PeriodBar({
             pending && "opacity-70",
           )}
         >
-          <label className="flex min-w-[9rem] flex-1 flex-col gap-1 text-footnote text-label-2">
-            From
-            <input
-              type="date"
-              value={from}
-              max={todayKey}
-              onChange={(e) => setFrom(e.currentTarget.value)}
-              className="min-h-11 rounded-lg bg-fill-3 px-3 text-body text-label"
-            />
-          </label>
-          <label className="flex min-w-[9rem] flex-1 flex-col gap-1 text-footnote text-label-2">
-            To
-            <input
-              type="date"
-              value={to}
-              max={todayKey}
-              onChange={(e) => setTo(e.currentTarget.value)}
-              className="min-h-11 rounded-lg bg-fill-3 px-3 text-body text-label"
-            />
-          </label>
+          <DateField
+            label="From"
+            value={from}
+            max={todayKey}
+            presets={false}
+            onChange={(e) => setFrom(e.currentTarget.value)}
+            className="min-w-[9rem] flex-1"
+          />
+          <DateField
+            label="To"
+            value={to}
+            min={from || undefined}
+            max={todayKey}
+            presets={false}
+            onChange={(e) => setTo(e.currentTarget.value)}
+            className="min-w-[9rem] flex-1"
+          />
           <Button
             size="md"
             onClick={apply}

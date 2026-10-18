@@ -1003,6 +1003,166 @@
     transition-duration: 450ms;
   }
 
+  /* ---------- Pickers: calendar window + time wheels (DatePicker / TimePicker) ---------- */
+  /* Anchored popover (mouse / trackpad): springs out of its field, flips above it
+     when there's no room below. */
+  .picker-pop {
+    position: fixed;
+    inset: auto;
+    margin: 0;
+    padding: 12px 12px 14px;
+    border: 0;
+    width: 340px;
+    max-width: calc(100vw - 16px);
+    border-radius: 20px;
+    background: var(--card);
+    color: var(--label);
+    box-shadow:
+      var(--shadow-float),
+      0 0 0 0.5px var(--sep);
+    overflow: visible;
+    opacity: 0;
+    transform: translateY(-10px) scale(0.96);
+    transition:
+      opacity 180ms ease,
+      transform var(--dur-snappy) var(--ease-spring-snappy),
+      overlay 220ms allow-discrete,
+      display 220ms allow-discrete;
+  }
+  .picker-pop[data-side="top"] {
+    transform: translateY(10px) scale(0.96);
+  }
+  .picker-pop:popover-open {
+    opacity: 1;
+    transform: none;
+  }
+  @starting-style {
+    .picker-pop:popover-open {
+      opacity: 0;
+      transform: translateY(-10px) scale(0.96);
+    }
+    .picker-pop[data-side="top"]:popover-open {
+      transform: translateY(10px) scale(0.96);
+    }
+  }
+  /* Day ↔ month-grid switch and the picked day's little pop. */
+  .cal-enter {
+    animation: cal-enter 240ms ease-out both;
+  }
+  @keyframes cal-enter {
+    from {
+      opacity: 0;
+      transform: scale(0.98);
+    }
+  }
+  .cal-day-picked {
+    animation: cal-pick var(--dur-bouncy) var(--ease-spring-bouncy) both;
+  }
+  @keyframes cal-pick {
+    from {
+      transform: scale(0.7);
+    }
+  }
+  /* Time field: typed segments with a mouse, the wheel sheet on touch screens. */
+  .tp-fine {
+    display: flex;
+  }
+  .tp-coarse {
+    display: none;
+  }
+  @media (pointer: coarse) {
+    .tp-fine {
+      display: none;
+    }
+    .tp-coarse {
+      display: flex;
+    }
+  }
+  /* iOS Clock-style wheels: snap, fade toward the edges, roll on a cylinder. */
+  .wheels {
+    isolation: isolate;
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      #000 32%,
+      #000 68%,
+      transparent
+    );
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      #000 32%,
+      #000 68%,
+      transparent
+    );
+  }
+  .wheel-band {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    top: 50%;
+    z-index: -1;
+    height: 40px;
+    margin-top: -20px;
+    border-radius: 10px;
+    background: var(--fill-2);
+    pointer-events: none;
+  }
+  .wheel {
+    flex: 1 1 0;
+    min-width: 72px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scroll-snap-type: y mandatory;
+    scrollbar-width: none;
+    outline-offset: -2px;
+    border-radius: 10px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .wheel::-webkit-scrollbar {
+    display: none;
+  }
+  .wheel-item {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 23px;
+    line-height: 1;
+    scroll-snap-align: center;
+    cursor: default;
+    user-select: none;
+    transition: color 150ms ease;
+  }
+  @supports (animation-timeline: view()) {
+    .wheel-item {
+      animation: wheel-roll linear both;
+      animation-timeline: view();
+    }
+  }
+  @keyframes wheel-roll {
+    0% {
+      transform: perspective(420px) rotateX(58deg) scale(0.88);
+    }
+    50% {
+      transform: none;
+    }
+    100% {
+      transform: perspective(420px) rotateX(-58deg) scale(0.88);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .picker-pop,
+    .picker-pop[data-side="top"] {
+      transform: none;
+      transition-duration: 0.01ms;
+    }
+    .cal-enter,
+    .cal-day-picked,
+    .wheel-item {
+      animation: none;
+    }
+  }
+
   /* ---------- Native date/time inputs: left-aligned like other fields ---------- */
   input[type="date"]::-webkit-date-and-time-value,
   input[type="time"]::-webkit-date-and-time-value {

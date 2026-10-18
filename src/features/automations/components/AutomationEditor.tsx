@@ -8,7 +8,7 @@ import { useConfirm } from "@/ui/components/Alert";
 import { Banner } from "@/ui/components/Banner";
 import { Button } from "@/ui/components/Button";
 import { Chip, ChipRow } from "@/ui/components/Chip";
-import { Select, TextArea, TextField } from "@/ui/components/Field";
+import { Select, TextArea, TextField, TimeField } from "@/ui/components/Field";
 import { IconButton } from "@/ui/components/IconButton";
 import { ListSection } from "@/ui/components/List";
 import { MessageBubble } from "@/ui/components/MessageBubble";
@@ -472,9 +472,8 @@ export function AutomationEditor({
                 options={anchorOpts}
                 onChange={(e) => setStep(i, { anchor: e.currentTarget.value })}
               />
-              <TextField
+              <TimeField
                 label="At time (optional)"
-                type="time"
                 value={s.at ?? ""}
                 onChange={(e) =>
                   setStep(i, { at: e.currentTarget.value || undefined })
