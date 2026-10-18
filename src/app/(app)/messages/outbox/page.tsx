@@ -46,6 +46,11 @@ export default async function OutboxPage({
       canSeeAll={canSeeAll}
       linkDelimiter={settings.messaging.link_delimiter}
       renderedAt={Date.now()}
+      // Everyone's cards need jobs.view_all; your own are for your jobs.
+      linkJobs={
+        user.perms.has("jobs.view_all") ||
+        (scope === "mine" && user.perms.has("jobs.view_own"))
+      }
     />
   );
 

@@ -108,12 +108,42 @@ export function kindVisual(kind: string): {
   return { icon: "dot", tone: "gray" };
 }
 
-/** Deep link for an activity row's entity (Appendix A routes only). */
+/** What an activity row knows besides its entity, and who is looking. */
+export interface ActivityLinkContext {
+  jobId?: string | null;
+  customerId?: string | null;
+  /** The vehicle a log, issue or document row belongs to (row data). */
+  vehicleId?: string | null;
+  /** The viewer may open teammates' profiles (`users.manage`). */
+  canOpenTeam?: boolean;
+  /** The viewer: their own profile always opens. */
+  viewerId?: string | null;
+}
+
+/** Vehicle sub-records (logs, issues, documents, trips) live on the vehicle's page. */
+const VEHICLE_RECORDS = new Set([
+  "vehicle_issue",
+  "document",
+  "odometer",
+  "fuel",
+  "service",
+  "inspection",
+  "trip",
+]);
+
+/**
+ * Deep link for an activity row's entity (Appendix A routes; the same places as
+ * `entityUrl` in automations/context.ts). `undefined` when the row has nowhere
+ * useful to go, or nowhere the viewer may go (a teammate without users.manage).
+ */
 export function activityHref(
   entityType: string,
   entityId: string,
-  ctx: { jobId?: string | null; customerId?: string | null } = {},
+  ctx: ActivityLinkContext = {},
 ): string | undefined {
+  const job = ctx.jobId ? `/jobs/${ctx.jobId}` : undefined;
+  if (VEHICLE_RECORDS.has(entityType))
+    return ctx.vehicleId ? `/vehicles/${ctx.vehicleId}` : job;
   switch (entityType) {
     case "job":
       return `/jobs/${entityId}`;
@@ -123,20 +153,40 @@ export function activityHref(
       return `/leads/${entityId}`;
     case "estimate":
       return `/estimates/${entityId}`;
+    case "change_order":
+      return `/estimates/co/${entityId}`;
     case "invoice":
       return `/invoices/${entityId}`;
+    case "payment":
+    case "refund":
+    case "deposit_request":
+      // Money on a job is on its invoice tab.
+      return job ? `${job}?tab=invoice` : undefined;
+    case "part_purchase":
+      // A job's receipts are on its parts tab (approvals are admin-only).
+      return job ? `${job}?tab=parts` : undefined;
     case "vehicle":
       return `/vehicles/${entityId}`;
     case "tool":
       return `/tools/${entityId}`;
+    case "tool_audit":
+      return `/tools/audits/${entityId}`;
     case "dispute":
       return `/disputes/${entityId}`;
+    case "settlement":
+      return `/pay/statements/${entityId}`;
+    case "task":
+      return "/tasks";
+    case "user":
+      return ctx.canOpenTeam || (!!ctx.viewerId && entityId === ctx.viewerId)
+        ? `/team/${entityId}`
+        : job;
     case "message":
     case "scheduled_message":
       return ctx.customerId ? `/messages/${ctx.customerId}` : undefined;
     case "review_request":
-      return ctx.jobId ? `/jobs/${ctx.jobId}` : undefined;
+      return job;
     default:
-      return ctx.jobId ? `/jobs/${ctx.jobId}` : undefined;
+      return job;
   }
 }

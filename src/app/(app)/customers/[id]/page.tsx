@@ -287,11 +287,28 @@ export default async function CustomerDetailPage({
               <StatCard
                 label="Lifetime"
                 value={<MoneyText cents={c.lifetimeCents} compactWhole />}
+                // Lifetime = their payments net of refunds.
+                href={
+                  p.has("payments.view_all")
+                    ? `/payments?customer=${c.id}`
+                    : undefined
+                }
               />
             )}
             <StatCard
               label="Jobs"
               value={c.jobCount}
+              // Found by name, like "See all jobs" (an anonymized name isn't theirs).
+              href={
+                anonymized
+                  ? undefined
+                  : p.has("jobs.view_all")
+                    ? `/jobs?q=${encodeURIComponent(c.displayName)}`
+                    : p.has("jobs.view_own")
+                      ? // Your jobs list starts on upcoming; these are all of them.
+                        `/jobs?q=${encodeURIComponent(c.displayName)}&view=all`
+                      : undefined
+              }
               className={
                 (c.balanceCents != null ? 1 : 0) +
                   (p.has("invoices.view") ? 1 : 0) ===

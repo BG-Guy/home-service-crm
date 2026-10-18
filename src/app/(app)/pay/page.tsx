@@ -26,6 +26,7 @@ import { ListRow, ListSection } from "@/ui/components/List";
 import { MoneyText } from "@/ui/components/MoneyText";
 import { LargeTitleHeader } from "@/ui/components/NavBar";
 import { Pill } from "@/ui/components/StatusPill";
+import { TextLink } from "@/ui/components/TextLink";
 import { PageTransition } from "@/ui/motion/PageTransition";
 
 export const metadata: Metadata = { title: "Pay" };
@@ -34,9 +35,12 @@ const m = (c: number) => formatMoney(c);
 const signed = (c: number) => (c > 0 ? `+${m(c)}` : m(c));
 
 export default async function PayPage() {
-  await requireUser("payroll.view_own");
+  const user = await requireUser("payroll.view_own");
   if (!(await isEnabled("payroll"))) notFound();
   const o = await getPayOverview();
+  // Your pay lines are jobs you worked.
+  const canOpenJobs =
+    user.perms.has("jobs.view_all") || user.perms.has("jobs.view_own");
   const b = o.byType;
   const wages =
     (b.commission ?? 0) +
@@ -158,7 +162,12 @@ export default async function PayPage() {
                 <ListRow
                   key={j.jobId}
                   multiline
-                  title={`${j.jobNumber} · ${j.title}`}
+                  // The amount is the "why" button, so the title is the link.
+                  title={
+                    <TextLink href={canOpenJobs ? `/jobs/${j.jobId}` : null}>
+                      {`${j.jobNumber} · ${j.title}`}
+                    </TextLink>
+                  }
                   subtitle={
                     <span className="flex flex-wrap items-center gap-1.5">
                       <span>

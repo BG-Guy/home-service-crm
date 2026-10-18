@@ -6,6 +6,7 @@ import { getCompanyTimezone, isEnabled } from "@/lib/settings";
 import { dateKey } from "@/lib/time";
 import { ListRow, ListSection } from "@/ui/components/List";
 import { Pill, StatusPill } from "@/ui/components/StatusPill";
+import { TextLink } from "@/ui/components/TextLink";
 import { AddReceiptButton, RemovePartButton } from "./components/LineActions";
 import type {
   JobPartsPanelProps,
@@ -223,6 +224,9 @@ export async function UnreceiptedPartsSection({
     date ?? dateKey(new Date(), tz),
     tz,
   );
+  // Your own lines: parts you bought on your jobs today.
+  const canOpenJobs =
+    user.perms.has("jobs.view_all") || user.perms.has("jobs.view_own");
   return (
     <ListSection
       header="Receipts"
@@ -247,7 +251,17 @@ export async function UnreceiptedPartsSection({
             iconTone="orange"
             multiline
             title={r.name}
-            subtitle={`${r.jobNumber} · ${formatMoney(r.totalCents)}`}
+            // "Snap" is the accessory, so only the job number links.
+            subtitle={
+              <>
+                <TextLink
+                  href={canOpenJobs ? `/jobs/${r.jobId}?tab=parts` : null}
+                >
+                  {r.jobNumber}
+                </TextLink>
+                {` · ${formatMoney(r.totalCents)}`}
+              </>
+            }
             accessory={
               r.partPurchaseId ? (
                 <AddReceiptButton

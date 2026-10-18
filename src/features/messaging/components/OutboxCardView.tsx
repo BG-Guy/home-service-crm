@@ -14,6 +14,7 @@ import { Button } from "@/ui/components/Button";
 import { TextArea } from "@/ui/components/Field";
 import { Sheet } from "@/ui/components/Sheet";
 import { Pill } from "@/ui/components/StatusPill";
+import { TextLink } from "@/ui/components/TextLink";
 import { toast } from "@/ui/components/Toast";
 import { cx } from "@/ui/cx";
 import { editOutboxBody, markOutboxSent, skipOutbox } from "../actions";
@@ -63,6 +64,7 @@ export function OutboxCardView({
   showAssignee = false,
   emphasized = false,
   renderedAt,
+  linkJobs = false,
 }: {
   card: OutboxCard;
   linkDelimiter?: "auto" | SmsSeparator;
@@ -71,6 +73,8 @@ export function OutboxCardView({
   emphasized?: boolean;
   /** Server render time (ms) for server-rendered cards: hydration-safe relative times. */
   renderedAt?: number;
+  /** The viewer may open the card's job: its number links there. */
+  linkJobs?: boolean;
 }) {
   const now = useNow(renderedAt);
   const [body, setBody] = useState(card.body);
@@ -203,7 +207,16 @@ export function OutboxCardView({
           </div>
           <p className="truncate text-subhead text-label-2">
             {card.templateLabel}
-            {card.jobNumber ? ` · ${card.jobNumber}` : ""}
+            {card.jobNumber ? (
+              <>
+                {" · "}
+                <TextLink
+                  href={linkJobs && card.jobId ? `/jobs/${card.jobId}` : null}
+                >
+                  {card.jobNumber}
+                </TextLink>
+              </>
+            ) : null}
             {card.channel === "whatsapp" ? " · WhatsApp" : ""}
             {showAssignee && card.assignedName ? ` · ${card.assignedName}` : ""}
           </p>
