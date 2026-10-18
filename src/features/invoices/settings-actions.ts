@@ -44,14 +44,11 @@ export const saveDocumentSettings = action({
   }),
   audit: "settings.invoices_updated",
   async run({ input, tx, actor }) {
-    const labels = input.estimates.option_labels
-      .map((l) => l.trim())
-      .filter(Boolean)
-      .slice(0, 3);
-    if (labels.length === 0)
-      throw new ValidationError({
-        "estimates.option_labels": ["Name at least one option."],
-      });
+    // Labels are by position (an estimate has 1–3 options): a blank one gets its
+    // default name ("Option 2"), so a later label never shifts into its slot.
+    const labels = [0, 1, 2].map(
+      (i) => input.estimates.option_labels[i]?.trim() || `Option ${i + 1}`,
+    );
     await updateSettings(
       tx,
       {

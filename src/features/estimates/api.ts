@@ -52,6 +52,7 @@ import {
   canApproveEstimate,
   coolingOffApplies,
   headlineTotal,
+  nextOptionLabel,
   type OptionLineLike,
   optionTotals,
 } from "./logic";
@@ -349,7 +350,7 @@ export async function createEstimateDraft(
     .insert(estimateOptions)
     .values({
       estimateId: row.id,
-      label: s.estimates.option_labels[0] ?? "Option 1",
+      label: nextOptionLabel(s.estimates.option_labels, []),
       recommended: true,
       sort: 0,
     })

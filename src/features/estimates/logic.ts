@@ -34,6 +34,29 @@ export function canApproveEstimate(
   return !e.expiresAt || e.expiresAt.getTime() > now.getTime();
 }
 
+/** An estimate holds 1, 2 or 3 options; one of them can be Recommended. */
+export const MAX_ESTIMATE_OPTIONS = 3;
+
+/**
+ * Label for a new option: the configured label for its position (`option_labels`,
+ * default Option 1 / 2 / 3), else the first configured label not in use, else
+ * "Option N" (N = its position, skipping numbers already used).
+ */
+export function nextOptionLabel(
+  labels: readonly string[],
+  used: readonly string[],
+): string {
+  const taken = new Set(used);
+  const free = (l: string | undefined): l is string => !!l && !taken.has(l);
+  const atPosition = labels[used.length];
+  if (free(atPosition)) return atPosition;
+  const unused = labels.find(free);
+  if (unused) return unused;
+  let n = used.length + 1;
+  while (taken.has(`Option ${n}`)) n++;
+  return `Option ${n}`;
+}
+
 export interface OptionLineLike extends MathLine {
   id: string;
   isServiceFee?: boolean;
@@ -86,7 +109,8 @@ export function headlineTotal(
 /**
  * FTC Cooling-Off Rule (16 CFR 429) ⚖️: a sale at the customer's home of $25 or
  * more that goes beyond the requested repair (service type flagged
- * `upsell_covered`, or lines tagged upsell) needs the 3-business-day notice.
+ * `upsell_covered`, or lines marked "Beyond the requested repair", `is_upsell`)
+ * needs the 3-business-day notice.
  */
 export function coolingOffApplies(a: {
   totalCents: number;

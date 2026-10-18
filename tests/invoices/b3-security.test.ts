@@ -538,7 +538,7 @@ describe("T2-06 approved option total", () => {
     });
     const total = async () =>
       (await listEstimatesForViewer(admin, { customerId }))[0]?.totalCents;
-    expect(await total()).toBe(10_000); // recommended ("Good")
+    expect(await total()).toBe(10_000); // recommended (the first option)
     await db
       .update(estimates)
       .set({ status: "approved", approvedOptionId: better?.id })

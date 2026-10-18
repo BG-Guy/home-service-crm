@@ -12,7 +12,6 @@ import { Select, TextArea, TextField } from "@/ui/components/Field";
 import { ListRow, ListSection } from "@/ui/components/List";
 import { MoneyField } from "@/ui/components/MoneyField";
 import { Sheet } from "@/ui/components/Sheet";
-import { Pill } from "@/ui/components/StatusPill";
 import { SwipeActions } from "@/ui/components/SwipeActions";
 import { ToggleRow } from "@/ui/components/Toggle";
 import { discountKindLabel } from "../line-labels";
@@ -27,6 +26,9 @@ import {
 // orders (SPEC M07/M08). Tap a line to edit it in a sheet; add from the price book
 // (S14) or as a custom line. The parent decides persistence: `onSave`/`onDelete`
 // return true on success (immediate server actions) or update local state (revise).
+// Rows carry no tags: lines are plain items. Optional add-on lines are legacy
+// (estimates written before options replaced them): their row says "Optional" and
+// only they keep the switch, so they can be turned into regular items.
 
 export interface EditorLine {
   id?: string;
@@ -108,6 +110,10 @@ export function lineSubtitle(l: EditorLine, showCost = false): string {
     const kind = discountKindLabel(l.name);
     if (kind) parts.push(kind);
   } else {
+    if (l.isOptional)
+      parts.push(
+        l.isSelected === false ? "Optional, not in total" : "Optional",
+      );
     parts.push(`${qtyFmt.format(l.qty)} × ${formatMoney(l.unitPriceCents)}`);
     if (l.discountCents) parts.push(`−${formatMoney(l.discountCents)} off`);
     if (l.taxable) parts.push("Taxable");
@@ -210,25 +216,7 @@ export function LineEditor({
           const row = (
             <ListRow
               key={l.id ?? l.name}
-              title={
-                <span className="flex items-center gap-2">
-                  <span className="truncate">{l.name}</span>
-                  {l.isOptional && (
-                    <Pill
-                      size="sm"
-                      dot={false}
-                      tone={l.isSelected ? "green" : "gray"}
-                    >
-                      Add-on
-                    </Pill>
-                  )}
-                  {l.isUpsell && (
-                    <Pill size="sm" dot={false} tone="indigo">
-                      Upsell
-                    </Pill>
-                  )}
-                </span>
-              }
+              title={<span className="block truncate">{l.name}</span>}
               subtitle={lineSubtitle(l, showCost)}
               detail={
                 <span
@@ -548,10 +536,13 @@ function LineSheet({
                 onChange={(e) => set({ isServiceFee: e.currentTarget.checked })}
               />
             )}
-            {variant === "estimate" && (
+            {/* New lines are never optional (the customer chooses between
+                options, not items); a legacy optional line keeps the switch so
+                it can be turned off (and back on before saving). */}
+            {variant === "estimate" && line?.isOptional && (
               <ToggleRow
-                title="Optional add-on"
-                subtitle="The customer can tick it on or off"
+                title="Optional"
+                subtitle="The customer ticks it on or off. Turn off to make it a regular item."
                 checked={l.isOptional ?? false}
                 onChange={(e) =>
                   set({
@@ -561,6 +552,7 @@ function LineSheet({
                 }
               />
             )}
+            {/* ⚖️ Legal input, not a tag: it never shows on the row. */}
             {variant !== "invoice" && (
               <ToggleRow
                 title="Beyond the requested repair"

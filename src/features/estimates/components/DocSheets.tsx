@@ -195,7 +195,7 @@ export function VerbalApprovalSheet({
           value={note}
           onChange={(e) => setNote(e.currentTarget.value)}
           rows={3}
-          placeholder="e.g. Called 2:15 PM, approved Better option incl. tax"
+          placeholder="e.g. Called 2:15 PM, approved option 2 incl. tax"
         />
       </div>
     </Sheet>

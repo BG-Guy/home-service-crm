@@ -77,7 +77,7 @@ export async function JobEstimatePanel({ jobId }: JobEstimatePanelProps) {
             compact
             icon={<FileText size={40} />}
             title="No estimate yet"
-            message="Build good / better / best options and have the customer sign before you start."
+            message="Write up to 3 options, star the one you recommend and have the customer sign before you start."
             action={
               canCreate ? (
                 <Button href={`/estimates/new?jobId=${jobId}`} variant="tinted">

@@ -9,7 +9,7 @@ export const manifest = defineModule({
   key: "estimates",
   name: "Estimates",
   description:
-    "Good/better/best estimates, e-sign, change orders and the price book.",
+    "Estimates with 1–3 options (one recommended), e-sign, change orders and the price book.",
   owner: "B3",
   grants,
   flags,
