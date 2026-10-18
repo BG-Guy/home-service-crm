@@ -1,8 +1,15 @@
 "use client";
 
-import { Ellipsis, PenLine, Plus, Send, SlidersHorizontal } from "lucide-react";
+import {
+  Ellipsis,
+  PenLine,
+  Plus,
+  Send,
+  SlidersHorizontal,
+  Star,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useOptimistic, useState, useTransition } from "react";
 import {
   type EditorLine,
   LineEditor,
@@ -33,13 +40,15 @@ import {
   updateEstimateInfo,
   updateEstimateOption,
 } from "../actions";
-import { optionTotals } from "../logic";
+import { MAX_ESTIMATE_OPTIONS, optionTotals } from "../logic";
 import { DeclineSheet, SendDocSheet, VerbalApprovalSheet } from "./DocSheets";
 
-// Estimate builder (SPEC M07): 1–3 options (Good/Better/Best, editable, one
-// Recommended), lines from the price book or custom (add-ons, upsell, service-fee
-// "credited if approved"), discounts within the role limit, details, then send,
-// sign on this device (S15), approve on behalf (verbal) or decline.
+// Estimate builder (SPEC M07): write 1, 2 or 3 options (labels from
+// settings.estimates.option_labels, editable) and star the one you recommend (one
+// tap, next to the option switcher; hidden with a single option). Lines come from
+// the price book or are custom (service-fee "credited if approved"), with no
+// per-item tags; discounts within the role limit, details, then send, sign on
+// this device (S15), approve on behalf (verbal) or decline.
 
 export interface BuilderOption {
   id: string;
@@ -170,6 +179,25 @@ export function EstimateBuilder({
         setActiveId((r.data as { optionId: string }).optionId);
     });
 
+  // Recommend an option with one tap (★). Optimistic; the action clears the
+  // other options' star. A single option is implicitly the one, so no UI.
+  const multi = options.length > 1;
+  const [recommendedId, setRecommendedId] = useOptimistic(
+    options.find((o) => o.recommended)?.id ?? null,
+  );
+  const [, startRecommend] = useTransition();
+  const activeRecommended = !!active && active.id === recommendedId;
+  const toggleRecommended = () => {
+    if (!active) return;
+    const on = !activeRecommended;
+    startRecommend(async () => {
+      setRecommendedId(on ? active.id : null);
+      report(
+        await updateEstimateOption({ optionId: active.id, recommended: on }),
+      );
+    });
+  };
+
   const more: ActionSheetItem[] = [
     ...(editable
       ? [{ label: "Edit details", onSelect: () => setSheet("details") }]
@@ -251,7 +279,7 @@ export function EstimateBuilder({
       {/* Options */}
       <section aria-label="Options" className="space-y-3">
         <div className="flex items-center gap-2">
-          {options.length > 1 ? (
+          {multi ? (
             <SegmentedControl
               label="Options"
               className="flex-1"
@@ -259,12 +287,17 @@ export function EstimateBuilder({
               onChange={setActiveId}
               segments={options.map((o) => ({
                 value: o.id,
-                label: (
-                  <span className="truncate">
-                    {o.label}
-                    {o.recommended ? " ★" : ""}
-                  </span>
-                ),
+                // The star leads so a truncated label on a narrow phone keeps it.
+                label:
+                  o.id === recommendedId ? (
+                    <span className="truncate">
+                      <span aria-hidden>★ </span>
+                      {o.label}
+                      <span className="sr-only"> (recommended)</span>
+                    </span>
+                  ) : (
+                    <span className="truncate">{o.label}</span>
+                  ),
               }))}
             />
           ) : (
@@ -274,6 +307,25 @@ export function EstimateBuilder({
           )}
           {editable ? (
             <>
+              {multi && active ? (
+                <IconButton
+                  label={`Recommend “${active.label}”`}
+                  aria-pressed={activeRecommended}
+                  variant="gray"
+                  size={36}
+                  onClick={toggleRecommended}
+                >
+                  <Star
+                    size={18}
+                    aria-hidden
+                    className={
+                      activeRecommended
+                        ? "fill-[var(--sys-yellow)] text-[var(--sys-yellow)]"
+                        : undefined
+                    }
+                  />
+                </IconButton>
+              ) : null}
               <IconButton
                 label="Option settings"
                 variant="gray"
@@ -282,7 +334,7 @@ export function EstimateBuilder({
               >
                 <SlidersHorizontal size={18} />
               </IconButton>
-              {options.length < 3 ? (
+              {options.length < MAX_ESTIMATE_OPTIONS ? (
                 <IconButton
                   label="Add option"
                   variant="gray"
@@ -300,7 +352,13 @@ export function EstimateBuilder({
             </>
           ) : null}
         </div>
-        {active?.recommended && options.length > 1 ? (
+        {editable ? (
+          <p className="px-1 text-footnote text-label-2">
+            {multi
+              ? `Write up to ${MAX_ESTIMATE_OPTIONS} options. Star the one you recommend; customers see it highlighted.`
+              : `Write up to ${MAX_ESTIMATE_OPTIONS} options for the customer to choose from.`}
+          </p>
+        ) : activeRecommended && multi ? (
           <p className="px-1 text-footnote text-label-2">
             <Pill size="sm" dot={false} tone="green">
               Recommended
@@ -319,7 +377,7 @@ export function EstimateBuilder({
             taxExempt={taxExempt}
             allowDiscount={perms.discount}
             showCost={perms.showCost}
-            emptyHint="Add services and parts from the price book. Mark extras as add-ons the customer can tick."
+            emptyHint="Add the services and parts for this option from the price book, or type a custom line."
             onSave={async (line) =>
               report(
                 await saveEstimateLine({
@@ -390,12 +448,12 @@ export function EstimateBuilder({
       />
       {active && editable ? (
         <OptionSheet
-          key={`opt-${active.id}-${active.label}-${active.recommended}`}
+          key={`opt-${active.id}-${active.label}`}
           open={sheet === "option"}
           onClose={() => setSheet(null)}
           option={active}
-          canDelete={options.length > 1}
-          canAdd={options.length < 3}
+          canDelete={multi}
+          canAdd={options.length < MAX_ESTIMATE_OPTIONS}
           onAddBlank={() => {
             setSheet(null);
             addOption(false);
@@ -546,31 +604,35 @@ export function ChoosePanel({
   coolingOff: boolean;
 }) {
   const pick = options.find((o) => o.id === pickId);
+  // Optional add-on lines exist only on older estimates; new ones have none.
   const extras = (pick?.lines ?? []).filter((l) => l.isOptional);
   return (
     <div className="flex flex-col gap-5 px-[var(--gutter)] pb-6">
       <ListSection header="Option">
-        {options.map((o) => (
-          <ListRow
-            key={o.id}
-            title={
-              <span className="flex items-center gap-2">
-                {o.label}
-                {o.recommended ? (
-                  <Pill size="sm" dot={false} tone="green">
-                    Recommended
-                  </Pill>
-                ) : null}
-              </span>
-            }
-            subtitle={`${o.lines.filter((l) => !l.isOptional).length} items`}
-            accessory={o.id === pickId ? "check" : "none"}
-            onClick={() => onPick(o.id)}
-          />
-        ))}
+        {options.map((o) => {
+          const items = o.lines.filter((l) => !l.isOptional).length;
+          return (
+            <ListRow
+              key={o.id}
+              title={
+                <span className="flex items-center gap-2">
+                  {o.label}
+                  {o.recommended && options.length > 1 ? (
+                    <Pill size="sm" dot={false} tone="green">
+                      Recommended
+                    </Pill>
+                  ) : null}
+                </span>
+              }
+              subtitle={`${items} item${items === 1 ? "" : "s"}`}
+              accessory={o.id === pickId ? "check" : "none"}
+              onClick={() => onPick(o.id)}
+            />
+          );
+        })}
       </ListSection>
       {extras.length > 0 ? (
-        <ListSection header="Add-ons">
+        <ListSection header="Optional add-ons">
           {extras.map((l) => (
             <ToggleRow
               key={l.id}
@@ -624,16 +686,15 @@ function OptionSheet({
   onAddBlank: () => void;
 }) {
   const [label, setLabel] = useState(option.label);
-  const [recommended, setRecommended] = useState(option.recommended);
   const [notes, setNotes] = useState(option.notes ?? "");
   const [pending, start] = useTransition();
+  // Label and notes only: Recommended is the ★ next to the option switcher.
   const save = () =>
     start(async () => {
       const ok = report(
         await updateEstimateOption({
           optionId: option.id,
           label,
-          recommended,
           notes: notes || null,
         }),
         "Option saved",
@@ -664,13 +725,6 @@ function OptionSheet({
           maxLength={40}
           onChange={(ev) => setLabel(ev.currentTarget.value)}
         />
-        <ListSection>
-          <ToggleRow
-            title="Recommended"
-            checked={recommended}
-            onChange={(ev) => setRecommended(ev.currentTarget.checked)}
-          />
-        </ListSection>
         <TextArea
           label="Notes for this option"
           value={notes}

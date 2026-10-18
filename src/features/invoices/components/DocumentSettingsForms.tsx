@@ -164,7 +164,7 @@ export function DocumentSettingsForm({ v }: { v: DocSettingsValues }) {
                 label={`Option ${i + 1} label`}
                 name="estimates.option_labels[]"
                 defaultValue={l}
-                placeholder={["Good", "Better", "Best"][i]}
+                placeholder={`Option ${i + 1}`}
                 error={i === 0 ? err("estimates.option_labels") : undefined}
               />
             ))}

@@ -44,7 +44,7 @@ import {
   markEstimateSent,
   recomputeChangeOrder,
 } from "./api";
-import { isEstimateOpen } from "./logic";
+import { isEstimateOpen, MAX_ESTIMATE_OPTIONS, nextOptionLabel } from "./logic";
 
 // Estimate + change-order mutations (SPEC M07). Every action: perm + feature flag
 // ('estimates') + zod + row scope + one transaction with audit/activity/events.
@@ -211,15 +211,15 @@ export const addEstimateOption = action({
       .from(estimateOptions)
       .where(eq(estimateOptions.estimateId, e.id))
       .orderBy(asc(estimateOptions.sort));
-    if (opts.length >= 3)
+    if (opts.length >= MAX_ESTIMATE_OPTIONS)
       throw new ConflictError(
         "max_options",
-        "Up to 3 options (Good, Better, Best).",
+        `Up to ${MAX_ESTIMATE_OPTIONS} options per estimate.`,
       );
-    const labels = (await getSettings()).estimates.option_labels;
-    const used = new Set(opts.map((o) => o.label));
-    const label =
-      labels.find((l) => !used.has(l)) ?? `Option ${opts.length + 1}`;
+    const label = nextOptionLabel(
+      (await getSettings()).estimates.option_labels,
+      opts.map((o) => o.label),
+    );
     const [row] = await tx
       .insert(estimateOptions)
       .values({
@@ -277,13 +277,18 @@ export const addEstimateOption = action({
   revalidate: ({ data }) => estPaths(data.estimateId, data.jobId),
 });
 
+/**
+ * Edit an option. Omitted fields keep their value: the builder's star sends only
+ * `recommended` (one Recommended option per estimate; starring one clears the
+ * others), the option sheet sends `label` + `notes`.
+ */
 export const updateEstimateOption = action({
   perm: "estimates.create",
   feature: F,
   input: z.object({
     optionId: uuid,
-    label: z.string().trim().min(1, "Enter a label.").max(40),
-    recommended: z.boolean(),
+    label: z.string().trim().min(1, "Enter a label.").max(40).optional(),
+    recommended: z.boolean().optional(),
     notes: z.string().trim().max(2000).nullable().optional(),
   }),
   audit: "estimate.option_updated",
@@ -304,9 +309,9 @@ export const updateEstimateOption = action({
     await tx
       .update(estimateOptions)
       .set({
-        label: input.label,
-        recommended: input.recommended,
-        notes: input.notes ?? o.notes,
+        label: input.label ?? o.label,
+        recommended: input.recommended ?? o.recommended,
+        notes: input.notes === undefined ? o.notes : input.notes,
         updatedAt: new Date(),
       })
       .where(eq(estimateOptions.id, o.id));

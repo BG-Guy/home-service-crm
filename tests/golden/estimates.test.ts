@@ -1,5 +1,6 @@
 // Golden tests for estimate rules (SPEC M07): option totals with add-ons, the
-// headline total, cooling-off, the signed snapshot hash and close rate.
+// headline total, option labels, cooling-off, the signed snapshot hash and close
+// rate.
 import { describe, expect, it } from "vitest";
 import { complianceNotes } from "@/features/estimates/compliance";
 import {
@@ -10,8 +11,11 @@ import {
   coolingOffDeadline,
   headlineTotal,
   isEstimateOpen,
+  MAX_ESTIMATE_OPTIONS,
+  nextOptionLabel,
   optionTotals,
 } from "@/features/estimates/logic";
+import { settingsShape } from "@/features/estimates/settings";
 import { sha256Json } from "@/lib/hash";
 
 const L = (
@@ -91,6 +95,34 @@ describe("headline total", () => {
         { recommended: false, totalCents: 900 },
       ]),
     ).toBe(300);
+  });
+});
+
+describe("option labels (1–3 options, one recommended)", () => {
+  const defaults = settingsShape.estimates.parse({}).option_labels;
+  it("default to Option 1 / 2 / 3, at most 3 options", () => {
+    expect(defaults).toEqual(["Option 1", "Option 2", "Option 3"]);
+    expect(MAX_ESTIMATE_OPTIONS).toBe(3);
+  });
+  it("a new option takes the label for its position", () => {
+    expect(nextOptionLabel(defaults, [])).toBe("Option 1");
+    expect(nextOptionLabel(defaults, ["Option 1"])).toBe("Option 2");
+    expect(nextOptionLabel(defaults, ["Option 1", "Option 2"])).toBe(
+      "Option 3",
+    );
+  });
+  it("stored labels win; older estimates keep their own", () => {
+    const gbb = ["Good", "Better", "Best"];
+    expect(nextOptionLabel(gbb, ["Good"])).toBe("Better");
+    // An older "Good" estimate gets a second option under the new defaults.
+    expect(nextOptionLabel(defaults, ["Good"])).toBe("Option 2");
+  });
+  it("falls back to an unused label, then to an unused Option N", () => {
+    // "Option 1" was deleted: the position's label is taken, the free one is used.
+    expect(nextOptionLabel(defaults, ["Option 2"])).toBe("Option 1");
+    expect(nextOptionLabel(["Repair"], ["Repair"])).toBe("Option 2");
+    expect(nextOptionLabel([], ["Option 2", "Custom"])).toBe("Option 3");
+    expect(nextOptionLabel(["", "Replace"], [])).toBe("Replace");
   });
 });
 

@@ -9,8 +9,6 @@ import { loadEstimateDocForViewer } from "@/features/estimates/doc";
 import { isEstimateOpen } from "@/features/estimates/logic";
 import { CameraCaptureButton } from "@/features/media/slots.client";
 import { ActivityTimeline } from "@/features/notify/slots";
-import { getEntityTags } from "@/features/settings/api";
-import { TagEditor } from "@/features/settings/slots.client";
 import { requireUser } from "@/lib/auth/current";
 import { NotFoundError } from "@/lib/errors";
 import { isUuid } from "@/lib/ids";
@@ -28,9 +26,10 @@ import { PageTransition } from "@/ui/motion/PageTransition";
 
 export const metadata: Metadata = { title: "Estimate" };
 
-// Estimate builder (SPEC M07; BUILD_PLAN §9 B3): options, lines, discount within the
-// role limit, deposit preview (B4), cooling-off + compliance warnings, problem
-// photos (S24), send / sign here (S15) / verbal / decline, then the approval record.
+// Estimate builder (SPEC M07; BUILD_PLAN §9 B3): 1–3 options (one starred as
+// Recommended), lines, discount within the role limit, deposit preview (B4),
+// cooling-off + compliance warnings, problem photos (S24), send / sign here (S15) /
+// verbal / decline, then the approval record. Estimates carry no tags.
 export default async function EstimatesIdPage({
   params,
 }: {
@@ -47,11 +46,7 @@ export default async function EstimatesIdPage({
   }
   const doc = await loadEstimateDocForViewer(user, id);
   if (!doc) notFound();
-  const [settings, company, tagMap] = await Promise.all([
-    getSettings(),
-    findCompany(),
-    getEntityTags([{ type: "estimate", id }]).catch(() => ({})),
-  ]);
+  const [settings, company] = await Promise.all([getSettings(), findCompany()]);
   const e = doc.estimate;
   const tz = doc.timezone;
   const open = isEstimateOpen(e.status);
@@ -88,7 +83,9 @@ export default async function EstimatesIdPage({
                 {approvedOption
                   ? `Approved · ${approvedOption.label}`
                   : doc.options.length > 1
-                    ? "Recommended option"
+                    ? doc.options.some((o) => o.recommended)
+                      ? "Recommended option"
+                      : "Highest option"
                     : "Total"}
               </p>
               <MoneyText
@@ -280,16 +277,6 @@ export default async function EstimatesIdPage({
                 )}
               </ListSection>
             ) : null}
-            <ListSection header="Tags">
-              <div className="px-4 py-3">
-                <TagEditor
-                  entityType="estimate"
-                  entityId={e.id}
-                  initial={(tagMap as Record<string, never[]>)[e.id] ?? []}
-                  readOnly={!canCreate}
-                />
-              </div>
-            </ListSection>
             <ActivityTimeline
               entity={{ type: "estimate", id: e.id }}
               limit={15}

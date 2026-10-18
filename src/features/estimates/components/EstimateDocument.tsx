@@ -10,7 +10,9 @@ import { cx } from "@/ui/cx";
 import type { EstimateDoc } from "../doc";
 
 // The estimate as paper (print page, and the read-only body for approved / closed
-// estimates). Every option prints with its own totals; the approved one is marked.
+// estimates). Every option prints with its own totals; the approved one is marked,
+// else the Recommended one when there is a choice (2–3 options). Lines carry no
+// item badges (older optional add-ons read "(add-on)").
 // Policies print in full (SPEC M07 "policies (full text inline)").
 
 const STAMP: Record<string, string> = {
@@ -122,14 +124,14 @@ export function EstimateDocument({
       {shown.map((o) => {
         const dep = doc.deposits[o.id];
         const chosen = o.id === approvedId;
+        const recommended =
+          o.recommended && !approvedId && doc.options.length > 1;
         return (
           <section
             key={o.id}
             className={cx(
               "mt-6 rounded-xl border p-4 print:break-inside-avoid",
-              chosen || (o.recommended && !approvedId)
-                ? "print-box border-accent"
-                : "border-sep",
+              chosen || recommended ? "print-box border-accent" : "border-sep",
             )}
           >
             <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -139,7 +141,7 @@ export function EstimateDocument({
                   <span className="print-strong ml-2 text-footnote font-semibold text-success">
                     ✓ Approved
                   </span>
-                ) : o.recommended && !approvedId ? (
+                ) : recommended ? (
                   <span className="ml-2 text-footnote font-semibold text-accent-text">
                     Recommended
                   </span>
