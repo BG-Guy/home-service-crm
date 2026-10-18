@@ -10,6 +10,7 @@ import {
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { ReactNode } from "react";
 import { HeaderActions } from "@/app/(app)/_components/HeaderActions";
 import { AddReceiptButton } from "@/features/parts/components/LineActions";
 import { NewReceiptButton } from "@/features/parts/components/ReceiptSheet";
@@ -32,6 +33,7 @@ import { EmptyState } from "@/ui/components/EmptyState";
 import { ListRow, ListSection } from "@/ui/components/List";
 import { LargeTitleHeader } from "@/ui/components/NavBar";
 import { Pill } from "@/ui/components/StatusPill";
+import { TextLink } from "@/ui/components/TextLink";
 import { PageTransition } from "@/ui/motion/PageTransition";
 
 export const metadata: Metadata = { title: "Parts & receipts" };
@@ -73,14 +75,39 @@ function statusPill(p: PurchaseListItem) {
   );
 }
 
+/** "Vendor · J-1042 · Oct 3 · Sam": the job number may be a link. */
+function MetaLine({
+  before,
+  job,
+  after,
+}: {
+  before: string | null;
+  job: ReactNode;
+  after: (string | null)[];
+}) {
+  const rest = after.filter(Boolean).join(" · ");
+  return (
+    <span>
+      {before}
+      {before && (job || rest) ? " · " : null}
+      {job}
+      {job && rest ? " · " : null}
+      {rest}
+    </span>
+  );
+}
+
 function PurchaseRows({
   rows,
   showWho,
   canAttach,
+  canOpenJob,
 }: {
   rows: PurchaseListItem[];
   showWho: boolean;
   canAttach: (p: PurchaseListItem) => boolean;
+  /** The viewer may open this receipt's job (its number links to the parts tab). */
+  canOpenJob: (p: PurchaseListItem) => boolean;
 }) {
   return rows.map((p) => (
     <ListRow
@@ -105,16 +132,26 @@ function PurchaseRows({
       }
       subtitle={
         <span className="flex flex-col gap-1">
-          <span>
-            {[
-              p.vendor && p.notes ? p.vendor : null,
-              p.jobNumber,
+          <MetaLine
+            before={p.vendor && p.notes ? p.vendor : null}
+            job={
+              p.jobNumber ? (
+                <TextLink
+                  href={
+                    p.jobId && canOpenJob(p)
+                      ? `/jobs/${p.jobId}?tab=parts`
+                      : null
+                  }
+                >
+                  {p.jobNumber}
+                </TextLink>
+              ) : null
+            }
+            after={[
               p.purchasedOn ? formatDateKey(p.purchasedOn) : null,
               showWho ? p.purchaser : null,
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-          </span>
+            ]}
+          />
           {p.status === "rejected" && p.rejectReason && (
             <span className="text-danger">{p.rejectReason}</span>
           )}
@@ -166,6 +203,10 @@ export default async function PartsPage({
       : "mine";
   const canAttach = (p: PurchaseListItem) =>
     p.purchaserId === user.id || approver;
+  // Anyone's receipt: jobs.view_all; your own: the job you bought it for.
+  const canOpenJob = (p: PurchaseListItem) =>
+    user.perms.has("jobs.view_all") ||
+    (p.purchaserId === user.id && user.perms.has("jobs.view_own"));
   const pickers = user.perms.has("parts.submit_receipt")
     ? await receiptPickers(user)
     : null;
@@ -193,7 +234,12 @@ export default async function PartsPage({
             header="Receipts not billed to a customer"
             footer="Bought (tech or company card) but no matching invoice line."
           >
-            <PurchaseRows rows={f.unbilled} showWho canAttach={canAttach} />
+            <PurchaseRows
+              rows={f.unbilled}
+              showWho
+              canAttach={canAttach}
+              canOpenJob={canOpenJob}
+            />
           </ListSection>
         )}
         {f.noReceipt.length > 0 && (
@@ -216,7 +262,12 @@ export default async function PartsPage({
             header={`Waiting over ${f.staleDays} days ⚖️`}
             footer="Accountable plans require receipts and reimbursements to be settled promptly."
           >
-            <PurchaseRows rows={f.stale} showWho canAttach={canAttach} />
+            <PurchaseRows
+              rows={f.stale}
+              showWho
+              canAttach={canAttach}
+              canOpenJob={canOpenJob}
+            />
           </ListSection>
         )}
         {f.losses.length > 0 && (
@@ -270,6 +321,7 @@ export default async function PartsPage({
               rows={rows}
               showWho={tab !== "mine"}
               canAttach={canAttach}
+              canOpenJob={canOpenJob}
             />
           </ListSection>
         </>

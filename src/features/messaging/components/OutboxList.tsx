@@ -20,6 +20,7 @@ export function OutboxList({
   canSeeAll,
   linkDelimiter,
   renderedAt,
+  linkJobs = false,
 }: {
   cards: OutboxCard[];
   scope: "mine" | "all";
@@ -27,6 +28,8 @@ export function OutboxList({
   linkDelimiter: "auto" | SmsSeparator;
   /** Server render time (ms): the cards' relative times hydrate identically. */
   renderedAt?: number;
+  /** The viewer may open the cards' jobs (job numbers link). */
+  linkJobs?: boolean;
 }) {
   const router = useRouter();
   const [handled, setHandled] = useState<Set<string>>(() => new Set());
@@ -99,6 +102,7 @@ export function OutboxList({
             showAssignee={scope === "all"}
             emphasized
             renderedAt={renderedAt}
+            linkJobs={linkJobs}
           />
         )}
         {live.length > 1 && (
@@ -133,6 +137,7 @@ export function OutboxList({
               onDone={done}
               showAssignee={scope === "all"}
               renderedAt={renderedAt}
+              linkJobs={linkJobs}
             />
           </li>
         ))}

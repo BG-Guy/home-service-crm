@@ -12,6 +12,7 @@ import {
   Wrench,
 } from "lucide-react";
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { ReassignJobsList } from "@/features/jobs/slots";
@@ -33,6 +34,7 @@ import { TimeEntriesSection } from "@/features/time/slots";
 import { ToolCustodyRow } from "@/features/tools/slots";
 import { AssignedVehicleRow } from "@/features/vehicles/slots";
 import { requireUser } from "@/lib/auth/current";
+import { mapsHref } from "@/lib/links";
 import { formatPhoneDisplay } from "@/lib/phone-display";
 import { getCompanyTimezone } from "@/lib/settings";
 import { formatDate, formatDateKey, formatRelative } from "@/lib/time";
@@ -87,6 +89,9 @@ export default async function TeamMemberPage({
         .filter(Boolean)
         .join(", ")
     : "";
+  const homeHref = home
+    ? mapsHref({ full: home }, (await headers()).get("user-agent"))
+    : null;
   const roleOptions = roles.filter(
     (r) =>
       viewer.perms.has("settings.permissions") ||
@@ -412,6 +417,8 @@ export default async function TeamMemberPage({
                     label: "Home base",
                     stacked: true,
                     value: home,
+                    href: homeHref ?? undefined,
+                    external: true,
                   },
                   {
                     key: "tools",

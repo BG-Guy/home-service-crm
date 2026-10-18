@@ -3,12 +3,14 @@ import { Banknote, FileSignature, Landmark, Wallet } from "lucide-react";
 import Link from "next/link";
 import { getJobForUser } from "@/features/jobs/api";
 import { getCurrentUser } from "@/lib/auth/current";
+import { personHref } from "@/lib/links";
 import { formatBps, formatMoney } from "@/lib/money";
 import { isEnabled } from "@/lib/settings";
 import { formatDateKey } from "@/lib/time";
 import { KeyValueList } from "@/ui/components/KeyValueList";
 import { ListRow, ListSection } from "@/ui/components/List";
 import { Pill } from "@/ui/components/StatusPill";
+import { TextLink } from "@/ui/components/TextLink";
 import { getCustodyBalances, getJobFinancials, getPeriodEarnings } from "./api";
 import { CashCountForm } from "./components/CashCountForm";
 import { Trace } from "./components/Trace";
@@ -57,7 +59,14 @@ export async function JobEarningsPanel({ jobId }: JobEarningsPanelProps) {
           icon={<Wallet size={18} aria-hidden />}
           iconTone="green"
           multiline
-          title={full ? e.name : "This job"}
+          // The amount is the "why" button, so only the name is a link.
+          title={
+            full ? (
+              <TextLink href={personHref(user, e.userId)}>{e.name}</TextLink>
+            ) : (
+              "This job"
+            )
+          }
           subtitle={[
             `${formatBps(e.rateBps)}${e.splitBps !== 10000 ? ` × ${formatBps(e.splitBps)} split` : ""}`,
             e.commissionCents ? `commission ${m(e.commissionCents)}` : null,

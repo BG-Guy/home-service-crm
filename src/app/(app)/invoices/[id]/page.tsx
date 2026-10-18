@@ -1,4 +1,6 @@
+import { Briefcase } from "lucide-react";
 import type { Metadata } from "next";
+import { canSeeCustomer } from "@/features/customers/api";
 import { CustomerCard } from "@/features/customers/slots";
 import { defaultTaxBps } from "@/features/invoices/api";
 import {
@@ -25,6 +27,7 @@ import { MoneyText } from "@/ui/components/MoneyText";
 import { NavBar } from "@/ui/components/NavBar";
 import { ActionRailFrame } from "@/ui/components/PageActions";
 import { StatusPill } from "@/ui/components/StatusPill";
+import { TextLink } from "@/ui/components/TextLink";
 import { PageTransition } from "@/ui/motion/PageTransition";
 
 export const metadata: Metadata = { title: "Invoice" };
@@ -77,6 +80,16 @@ export default async function InvoicesIdPage({
   );
   const revisedAfterPayment = doc.revisions.some((r) => r.afterPayment);
   const statusKey = inv.overdue ? "overdue" : inv.status;
+  // App links only: the document itself is shared with print and public pages.
+  const customerHref = (await canSeeCustomer(user, doc.customer.id))
+    ? `/customers/${doc.customer.id}`
+    : null;
+  // Without jobs.view_all the invoice opens only for the job's assignees.
+  const jobHref =
+    doc.job &&
+    (user.perms.has("jobs.view_all") || user.perms.has("jobs.view_own"))
+      ? `/jobs/${doc.job.id}`
+      : null;
 
   return (
     <PageTransition>
@@ -112,7 +125,9 @@ export default async function InvoicesIdPage({
                     className="text-large-title font-bold"
                   />
                   <p className="text-subhead text-label-2">
-                    {doc.customer.displayName}
+                    <TextLink href={customerHref}>
+                      {doc.customer.displayName}
+                    </TextLink>
                     {inv.dueAt && !draft
                       ? ` · due ${formatDate(inv.dueAt, tz)}`
                       : ""}
@@ -210,6 +225,25 @@ export default async function InvoicesIdPage({
                 jobId={doc.job?.id}
                 variant="compact"
               />
+
+              {doc.job && jobHref ? (
+                <ListSection>
+                  <ListRow
+                    icon={<Briefcase size={17} />}
+                    iconTone="orange"
+                    title={`Job ${doc.job.number}`}
+                    subtitle={doc.job.title}
+                    detail={
+                      <StatusPill
+                        kind="job"
+                        status={doc.job.status}
+                        size="sm"
+                      />
+                    }
+                    href={jobHref}
+                  />
+                </ListSection>
+              ) : null}
 
               {doc.job ? <JobPaymentsPanel jobId={doc.job.id} /> : null}
 

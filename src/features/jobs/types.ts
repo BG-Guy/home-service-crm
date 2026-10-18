@@ -148,6 +148,7 @@ export interface JobDetail {
   custom: Record<string, unknown>;
   createdAt: string;
   createdByName: string | null;
+  createdById: string | null;
 }
 
 /** Pre-computed transition checks passed to the action bar (re-checked by the action). */

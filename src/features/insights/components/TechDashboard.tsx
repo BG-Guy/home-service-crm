@@ -8,6 +8,7 @@ import {
 import { MyEarningsCard } from "@/features/payroll/slots";
 import { ToolCustodyRow } from "@/features/tools/slots";
 import { AssignedVehicleRow } from "@/features/vehicles/slots";
+import { isEnabled } from "@/lib/settings";
 import { formatRelative, formatTime, formatTimeRange } from "@/lib/time";
 import type { SessionUser } from "@/lib/types";
 import { ProgressRing } from "@/ui/components/charts";
@@ -27,11 +28,20 @@ export async function TechDashboard({
   period: Period;
   tz: string;
 }) {
-  const [s, prev] = await Promise.all([
+  const [s, prev, reviewsOn] = await Promise.all([
     getTechStats(user, period),
     getTechStats(user, period.prev),
+    isEnabled("reviews"),
   ]);
   const next = s.today.next;
+  // The tiles open the jobs (or review requests) behind each number.
+  const range = `from=${period.fromKey}&to=${period.toKey}`;
+  const jobsOn =
+    user.perms.has("jobs.view_all") || user.perms.has("jobs.view_own");
+  // A tech's job list has an Upcoming/Past switch: open it on Past. The
+  // office list shows the status as its "Completed" chip instead.
+  const done = `${user.perms.has("jobs.view_all") ? "" : "view=past&"}status=completed,closed`;
+  const completedJobs = jobsOn ? `/jobs?mine=1&${done}&${range}` : undefined;
   const progress = s.today.total ? s.today.done / s.today.total : 0;
   const cmp = period.compareLabel;
   const d = (
@@ -106,7 +116,7 @@ export async function TechDashboard({
             label="Jobs completed"
             value={s.completed}
             delta={d(s.completed, prev.completed)}
-            href={`/jobs?mine=1&status=completed,closed&from=${period.fromKey}&to=${period.toKey}`}
+            href={completedJobs}
           />
           <StatCard
             label="Avg ticket"
@@ -118,6 +128,7 @@ export async function TechDashboard({
               )
             }
             delta={d(s.avgTicketCents, prev.avgTicketCents)}
+            href={completedJobs}
           />
           <StatCard
             label="Close rate"
@@ -130,11 +141,20 @@ export async function TechDashboard({
             value={pct(s.callbackRate, 1)}
             delta={d(s.callbackRate, prev.callbackRate, true, "down")}
             footnote={plural(s.callbacks, "callback")}
+            // The rate counts the period's completed callbacks.
+            href={
+              jobsOn ? `/jobs?mine=1&callback=1&${done}&${range}` : undefined
+            }
           />
           <StatCard
             label="Review clicks"
             value={s.reviewClicks}
             footnote={`of ${plural(s.reviewsSent, "request")} sent`}
+            href={
+              reviewsOn && user.perms.has("reviews.view")
+                ? `/reviews?tech=${user.id}&${range}`
+                : undefined
+            }
           />
           {s.periodEarningsCents != null && (
             <StatCard

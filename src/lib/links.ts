@@ -27,6 +27,21 @@ export function personHref(
   return null;
 }
 
+/**
+ * Only the teammate's profile (`/team/<id>`, which needs `users.manage` unless it
+ * is yourself), for places that already have their own drill-down (leaderboard
+ * rows open the tech's jobs). `null` when the viewer can't open it.
+ */
+export function profileHref(
+  viewer: LinkViewer,
+  userId: string | null | undefined,
+): string | null {
+  if (!userId) return null;
+  return userId === viewer.id || viewer.perms.has("users.manage")
+    ? `/team/${userId}`
+    : null;
+}
+
 export interface MapsTarget {
   street?: string | null;
   city?: string | null;

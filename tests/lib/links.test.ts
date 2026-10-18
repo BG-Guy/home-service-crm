@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mapsHref, personHref } from "@/lib/links";
+import { mapsHref, personHref, profileHref } from "@/lib/links";
 
 const viewer = (id: string, ...perms: string[]) => ({
   id,
@@ -26,6 +26,18 @@ describe("personHref", () => {
   it("is null when there's nowhere to go", () => {
     expect(personHref(viewer("t2", "jobs.view_own"), "t1")).toBeNull();
     expect(personHref(viewer("a", "users.manage"), null)).toBeNull();
+  });
+});
+
+describe("profileHref", () => {
+  it("is the profile for team managers and for yourself only", () => {
+    expect(profileHref(viewer("a", "users.manage"), "t1")).toBe("/team/t1");
+    expect(profileHref(viewer("t1"), "t1")).toBe("/team/t1");
+  });
+
+  it("never falls back to the schedule", () => {
+    expect(profileHref(viewer("o", "schedule.view_all"), "t1")).toBeNull();
+    expect(profileHref(viewer("a", "users.manage"), undefined)).toBeNull();
   });
 });
 

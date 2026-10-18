@@ -129,6 +129,13 @@ async function LeadChips({
           {s.name}
         </Chip>
       ))}
+      {/* A turned-off source (linked from its settings page) has no chip of
+          its own: show the filter anyway, so it can be cleared. */}
+      {f.source && !sources.some((s) => s.id === f.source) && (
+        <Chip href={qs(f, { source: undefined })} selected replace>
+          Turned-off source
+        </Chip>
+      )}
     </ChipRow>
   );
 }

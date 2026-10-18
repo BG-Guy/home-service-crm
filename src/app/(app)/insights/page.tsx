@@ -156,7 +156,11 @@ export default async function InsightsPage({
                 <div className="flex flex-col gap-3">
                   {periodBar}
                   {board.length > 0 ? (
-                    <Leaderboard rows={board} rq={rangeQuery(period)} />
+                    <Leaderboard
+                      rows={board}
+                      rq={rangeQuery(period)}
+                      viewer={user}
+                    />
                   ) : (
                     <EmptyState
                       compact

@@ -1,5 +1,6 @@
 import { Star } from "lucide-react";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { HeaderActions } from "@/app/(app)/_components/HeaderActions";
 import { ReceivedButton } from "@/features/reviews/components/ReceivedButton";
@@ -23,6 +24,7 @@ import { ListGroup, ListRow, ListSection } from "@/ui/components/List";
 import { LargeTitleHeader } from "@/ui/components/NavBar";
 import { StatCard } from "@/ui/components/StatCard";
 import { Pill } from "@/ui/components/StatusPill";
+import { TextLink } from "@/ui/components/TextLink";
 import { PageTransition } from "@/ui/motion/PageTransition";
 
 export const metadata: Metadata = { title: "Reviews" };
@@ -47,9 +49,12 @@ export default async function ReviewsPage({
     days?: string;
   }>;
 }) {
-  await requireUser("reviews.view");
+  const user = await requireUser("reviews.view");
   if (!(await isEnabled("reviews"))) notFound();
   const sp = await searchParams;
+  // Rows with the log button are office rows (reviews.send_manual) across techs.
+  const customerLinks = user.perms.has("customers.view_all");
+  const jobLinks = user.perms.has("jobs.view_all");
   const tz = safeTimeZone((await getCompany()).timezone);
   const today = dateKey(new Date(), tz);
   const days = PERIODS.find((p) => p.key === sp.days)?.days ?? 90;
@@ -68,6 +73,12 @@ export default async function ReviewsPage({
   } = await getReviewsPage({ from, to }, sp.tech ?? null);
   const clickRate = o.sent ? Math.round((o.clicked / o.sent) * 100) : 0;
   const custom = isKey(sp.from) || isKey(sp.to);
+  // "Show everyone" keeps the period.
+  const everyone = new URLSearchParams();
+  for (const k of ["days", "from", "to"] as const) {
+    const v = sp[k];
+    if (v) everyone.set(k, v);
+  }
 
   return (
     <PageTransition>
@@ -155,9 +166,14 @@ export default async function ReviewsPage({
             <Banner
               tone="info"
               action={
-                <a className="text-accent-text" href="/reviews">
+                <Link
+                  className="hit-44 text-accent-text"
+                  href={`/reviews${everyone.size ? `?${everyone}` : ""}`}
+                  replace
+                  scroll={false}
+                >
                   Show everyone
-                </a>
+                </Link>
               }
             >
               Showing one technician.
@@ -172,63 +188,81 @@ export default async function ReviewsPage({
             />
           ) : (
             <ListSection header="Recent requests">
-              {list.map((r) => (
-                <ListRow
-                  key={r.id}
-                  title={`${r.customerName} · ${r.jobNumber}`}
-                  subtitle={[
-                    r.techName,
-                    r.firstSentAt
-                      ? `asked ${formatDate(r.firstSentAt, tz)}`
-                      : null,
-                    r.sentCount > 1 ? "reminded" : null,
-                    r.feedback ? `“${r.feedback.slice(0, 60)}”` : null,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
-                  multiline
-                  detail={
-                    <span className="flex items-center gap-2">
-                      {r.rating !== null && (
-                        <Pill
-                          tone={
-                            r.rating >= 4
-                              ? "green"
-                              : r.rating === 3
-                                ? "orange"
-                                : "red"
-                          }
-                          size="sm"
-                        >
-                          {r.rating} ★{r.wantsCallback ? " · call" : ""}
-                        </Pill>
-                      )}
-                      {r.receivedAt ? (
-                        <Pill tone="green" size="sm">
-                          Reviewed
-                        </Pill>
-                      ) : r.clickedAt ? (
-                        <Pill tone="blue" size="sm">
-                          Opened
-                        </Pill>
+              {list.map((r) => {
+                // A row with the log button isn't a link (no nested controls):
+                // its customer and job number link on their own instead.
+                const logButton = canLog && !r.receivedAt && !!r.clickedAt;
+                return (
+                  <ListRow
+                    key={r.id}
+                    title={
+                      logButton ? (
+                        <>
+                          <TextLink
+                            href={
+                              customerLinks
+                                ? `/customers/${r.customerId}`
+                                : null
+                            }
+                          >
+                            {r.customerName}
+                          </TextLink>
+                          {" · "}
+                          <TextLink href={jobLinks ? `/jobs/${r.jobId}` : null}>
+                            {r.jobNumber}
+                          </TextLink>
+                        </>
                       ) : (
-                        <Pill tone="gray" size="sm">
-                          Sent
-                        </Pill>
-                      )}
-                      {canLog && !r.receivedAt && r.clickedAt && (
-                        <ReceivedButton reviewRequestId={r.id} />
-                      )}
-                    </span>
-                  }
-                  // A row with the log button isn't a link (no nested controls).
-                  href={
-                    canLog && !r.receivedAt && r.clickedAt
-                      ? undefined
-                      : `/jobs/${r.jobId}`
-                  }
-                />
-              ))}
+                        `${r.customerName} · ${r.jobNumber}`
+                      )
+                    }
+                    subtitle={[
+                      r.techName,
+                      r.firstSentAt
+                        ? `asked ${formatDate(r.firstSentAt, tz)}`
+                        : null,
+                      r.sentCount > 1 ? "reminded" : null,
+                      r.feedback ? `“${r.feedback.slice(0, 60)}”` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                    multiline
+                    detail={
+                      <span className="flex items-center gap-2">
+                        {r.rating !== null && (
+                          <Pill
+                            tone={
+                              r.rating >= 4
+                                ? "green"
+                                : r.rating === 3
+                                  ? "orange"
+                                  : "red"
+                            }
+                            size="sm"
+                          >
+                            {r.rating} ★{r.wantsCallback ? " · call" : ""}
+                          </Pill>
+                        )}
+                        {r.receivedAt ? (
+                          <Pill tone="green" size="sm">
+                            Reviewed
+                          </Pill>
+                        ) : r.clickedAt ? (
+                          <Pill tone="blue" size="sm">
+                            Opened
+                          </Pill>
+                        ) : (
+                          <Pill tone="gray" size="sm">
+                            Sent
+                          </Pill>
+                        )}
+                        {logButton && <ReceivedButton reviewRequestId={r.id} />}
+                      </span>
+                    }
+                    href={logButton ? undefined : `/jobs/${r.jobId}`}
+                  />
+                );
+              })}
             </ListSection>
           )}
         </ListGroup>

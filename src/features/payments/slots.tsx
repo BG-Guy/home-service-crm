@@ -7,6 +7,7 @@ import { depositRequests, payments } from "@/db/schema";
 import { assertCustomerAccess } from "@/features/customers/api";
 import { assertJobAccess } from "@/features/jobs/api";
 import { getCurrentUser } from "@/lib/auth/current";
+import { type LinkViewer, personHref } from "@/lib/links";
 import { formatMoney } from "@/lib/money";
 import { getCompanyTimezone, isEnabled } from "@/lib/settings";
 import { formatDate, formatDateTime } from "@/lib/time";
@@ -16,6 +17,7 @@ import { EmptyState } from "@/ui/components/EmptyState";
 import { ListRow, ListSection } from "@/ui/components/List";
 import { MoneyText } from "@/ui/components/MoneyText";
 import { Pill, StatusPill } from "@/ui/components/StatusPill";
+import { TextLink } from "@/ui/components/TextLink";
 import {
   DepositActions,
   MarkRefundPaidButton,
@@ -30,6 +32,7 @@ import type {
   PaymentListRow,
 } from "./contracts";
 import { DEPOSIT_JOB_STATUSES } from "./internal";
+import { paymentHref, paymentLinkAccess } from "./links";
 import { getCustomerPayments, getJobPaymentsPanel } from "./queries";
 import { CollectPaymentButton, RecordPaymentButton } from "./slots.client";
 
@@ -74,6 +77,7 @@ function PaymentRow({
   canRefund,
   canVerify,
   cardRefundReady,
+  viewer,
 }: {
   p: PaymentListRow;
   tz: string;
@@ -81,6 +85,8 @@ function PaymentRow({
   canVerify: boolean;
   /** The card processor is connected (else only a promised refund is offered). */
   cardRefundReady: boolean;
+  /** For the collector's link (`personHref`). */
+  viewer: LinkViewer;
 }) {
   const left = p.amountCents + p.tipCents - p.refundedCents;
   const refundable =
@@ -101,7 +107,14 @@ function PaymentRow({
           </p>
           <p className="text-footnote text-label-2">
             {formatDateTime(p.at, tz)}
-            {p.collectedByName ? ` · ${p.collectedByName}` : ""}
+            {p.collectedByName ? (
+              <>
+                {" · "}
+                <TextLink href={personHref(viewer, p.collectedByUserId)}>
+                  {p.collectedByName}
+                </TextLink>
+              </>
+            ) : null}
             {p.reference ? ` · #${p.reference}` : ""}
           </p>
         </div>
@@ -292,6 +305,7 @@ export async function JobPaymentsPanel({ jobId }: JobPaymentsPanelProps) {
               canRefund={canRefund}
               canVerify={canVerify}
               cardRefundReady={cardRefundReady}
+              viewer={user}
             />
           ))
         )}
@@ -356,6 +370,7 @@ export async function CustomerPaymentsPanel({
     getCustomerPayments(customerId),
     getCompanyTimezone(),
   ]);
+  const linkAccess = paymentLinkAccess(user.perms);
   const openBalance = data.openInvoices.reduce((s, i) => s + i.balanceCents, 0);
   return (
     <ListSection
@@ -392,7 +407,10 @@ export async function CustomerPaymentsPanel({
             detail={
               <StatusPill kind="payment" status={paymentStatus(p)} size="sm" />
             }
-            href={p.jobId ? `/jobs/${p.jobId}?tab=invoice` : undefined}
+            // Job → invoice (the customer is this page already).
+            href={
+              paymentHref(p, { ...linkAccess, customers: false }) ?? undefined
+            }
           />
         ))
       )}

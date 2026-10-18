@@ -1,9 +1,15 @@
-import { AlertTriangle, CircleCheck, CreditCard, Undo2 } from "lucide-react";
+import { AlertTriangle, CircleCheck, CreditCard, Undo2, X } from "lucide-react";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { HeaderActions } from "@/app/(app)/_components/HeaderActions";
 import { MarkRefundPaidButton } from "@/features/payments/components/PaymentActions";
 import { UrlTabs } from "@/features/payments/components/UrlTabs";
 import { VerifyList } from "@/features/payments/components/VerifyList";
+import {
+  type PaymentLinkAccess,
+  paymentHref,
+  paymentLinkAccess,
+} from "@/features/payments/links";
 import {
   getPaymentsSummary,
   getReconciliation,
@@ -14,7 +20,13 @@ import {
 import { requireUser } from "@/lib/auth/current";
 import { formatMoney } from "@/lib/money";
 import { getCompanyTimezone, getSettings } from "@/lib/settings";
-import { formatDate, formatDateKey, formatDateTime } from "@/lib/time";
+import {
+  addDaysToKey,
+  dateKey,
+  formatDate,
+  formatDateKey,
+  formatDateTime,
+} from "@/lib/time";
 import { Page } from "@/ui/components/AppShell";
 import { Button } from "@/ui/components/Button";
 import { Chip, ChipRow } from "@/ui/components/Chip";
@@ -57,6 +69,24 @@ function href(sp: SP, patch: Record<string, string | undefined>) {
   return s ? `/payments?${s}` : "/payments";
 }
 
+const shortDay = (key: string) =>
+  formatDateKey(key, "en-US", { month: "short", day: "numeric" });
+
+/** "Today", "Oct 12 – Oct 18", "From Oct 1" … for the date filter chip. */
+function rangeLabel(
+  from: string | undefined,
+  to: string | undefined,
+  today: string,
+): string {
+  if (from && to)
+    return from === to
+      ? from === today
+        ? "Today"
+        : shortDay(from)
+      : `${shortDay(from)} – ${shortDay(to)}`;
+  return from ? `From ${shortDay(from)}` : `Until ${shortDay(to ?? today)}`;
+}
+
 // /payments (SPEC M09, BUILD_PLAN §9 B4): ledger, unverified manual payments with
 // Verify, reconciliation (card settlements vs payouts, flagged items) and refunds.
 export default async function PaymentsPage({
@@ -74,6 +104,25 @@ export default async function PaymentsPage({
     getCompanyTimezone(),
     getSettings(),
   ]);
+  const access = paymentLinkAccess(user.perms);
+  // The tiles open the matching list (company-wide, like their totals); tapping
+  // the active one clears it again.
+  const today = dateKey(new Date(), tz);
+  const tile = (p: { from: string; method?: string }) => {
+    const active =
+      tab === "all" &&
+      one(sp.from) === p.from &&
+      one(sp.to) === today &&
+      method === p.method &&
+      !one(sp.tech) &&
+      !one(sp.customer);
+    const q = new URLSearchParams({ from: p.from, to: today });
+    if (p.method) q.set("method", p.method);
+    return {
+      href: active ? "/payments" : `/payments?${q}`,
+      className: active ? "ring-2 ring-accent" : undefined,
+    };
+  };
 
   return (
     <PageTransition>
@@ -104,10 +153,12 @@ export default async function PaymentsPage({
           <StatCard
             label="Today"
             value={<MoneyText cents={summary.todayCents} compactWhole />}
+            {...tile({ from: today })}
           />
           <StatCard
             label="Last 7 days"
             value={<MoneyText cents={summary.weekCents} compactWhole />}
+            {...tile({ from: addDaysToKey(today, -6) })}
           />
           <StatCard
             label="Unverified"
@@ -117,27 +168,44 @@ export default async function PaymentsPage({
                 ? `${summary.unverifiedStale} older than ${s.payments.unverified_alert_days} days`
                 : "All recent"
             }
-            href="/payments?tab=unverified"
+            href={
+              tab === "unverified" ? "/payments" : "/payments?tab=unverified"
+            }
+            className={tab === "unverified" ? "ring-2 ring-accent" : undefined}
           />
           <StatCard
             label="Card fees this month"
             value={
               <MoneyText cents={summary.cardFeesMonthCents} compactWhole />
             }
+            {...tile({ from: `${today.slice(0, 8)}01`, method: "card" })}
           />
         </div>
 
-        {tab === "all" && <AllTab sp={sp} tz={tz} method={method} />}
+        {tab === "all" && (
+          <AllTab
+            sp={sp}
+            tz={tz}
+            method={method}
+            today={today}
+            access={access}
+          />
+        )}
         {tab === "unverified" && (
           <UnverifiedTab
             tz={tz}
             canVerify={user.perms.has("payments.verify_manual")}
             days={s.payments.unverified_alert_days}
+            access={access}
           />
         )}
         {tab === "reconciliation" && <ReconTab />}
         {tab === "refunds" && (
-          <RefundsTab tz={tz} canRefund={user.perms.has("payments.refund")} />
+          <RefundsTab
+            tz={tz}
+            canRefund={user.perms.has("payments.refund")}
+            access={access}
+          />
         )}
       </Page>
     </PageTransition>
@@ -148,36 +216,98 @@ async function AllTab({
   sp,
   tz,
   method,
+  today,
+  access,
 }: {
   sp: SP;
   tz: string;
   method: string | undefined;
+  today: string;
+  access: PaymentLinkAccess;
 }) {
+  const from = one(sp.from);
+  const to = one(sp.to);
+  const tech = one(sp.tech);
+  const customer = one(sp.customer);
   const { rows, nextCursor } = await listPayments({
     tab: "all",
     method,
-    tech: one(sp.tech),
-    from: one(sp.from),
-    to: one(sp.to),
+    tech,
+    customer,
+    from,
+    to,
     cursor: one(sp.cursor),
   });
+  // Filters that arrive from a tile or another page have no chip of their own:
+  // show each as a selected chip that clears it.
+  const active = [
+    ...(from || to
+      ? [
+          {
+            key: "range",
+            label: rangeLabel(from, to, today),
+            href: href(sp, { from: undefined, to: undefined }),
+          },
+        ]
+      : []),
+    ...(tech
+      ? [
+          {
+            key: "tech",
+            label: `Collected by ${rows[0]?.collectedByName ?? "one person"}`,
+            href: href(sp, { tech: undefined }),
+          },
+        ]
+      : []),
+    ...(customer
+      ? [
+          {
+            key: "customer",
+            label: rows[0]?.customerName ?? "One customer",
+            href: href(sp, { customer: undefined }),
+          },
+        ]
+      : []),
+  ];
   return (
     <>
-      <ChipRow label="Filter by method">
-        <Chip href={href(sp, { method: undefined })} selected={!method} replace>
-          All methods
-        </Chip>
-        {METHODS.map((m) => (
+      <div className="flex flex-col gap-2">
+        {active.length > 0 && (
+          <ChipRow label="Active filters">
+            {active.map((f) => (
+              <Chip
+                key={f.key}
+                href={f.href}
+                selected
+                replace
+                icon={<X size={14} aria-hidden />}
+              >
+                {f.label}
+                <span className="sr-only">, remove filter</span>
+              </Chip>
+            ))}
+          </ChipRow>
+        )}
+        <ChipRow label="Filter by method">
           <Chip
-            key={m}
-            href={href(sp, { method: m })}
-            selected={method === m}
+            href={href(sp, { method: undefined })}
+            selected={!method}
             replace
           >
-            {METHOD_LABEL[m]}
+            All methods
           </Chip>
-        ))}
-      </ChipRow>
+          {METHODS.map((m) => (
+            <Chip
+              key={m}
+              href={href(sp, { method: m })}
+              selected={method === m}
+              replace
+            >
+              {METHOD_LABEL[m]}
+            </Chip>
+          ))}
+        </ChipRow>
+      </div>
       {rows.length === 0 ? (
         <div className="list-card">
           <EmptyState
@@ -186,7 +316,9 @@ async function AllTab({
             message={
               method
                 ? `No ${METHOD_LABEL[method]?.toLowerCase() ?? method} payments in this range.`
-                : "Payments collected in the field and online show up here."
+                : active.length
+                  ? "No payments match these filters."
+                  : "Payments collected in the field and online show up here."
             }
           />
         </div>
@@ -217,7 +349,8 @@ async function AllTab({
                   )}
                 </span>
               }
-              href={p.jobId ? `/jobs/${p.jobId}?tab=invoice` : undefined}
+              // Job → invoice → customer (the collector stays text: the row is the link).
+              href={paymentHref(p, access) ?? undefined}
             />
           ))}
         </ListSection>
@@ -239,10 +372,12 @@ async function UnverifiedTab({
   tz,
   canVerify,
   days,
+  access,
 }: {
   tz: string;
   canVerify: boolean;
   days: number;
+  access: PaymentLinkAccess;
 }) {
   const { rows } = await listPayments({ tab: "unverified" });
   if (rows.length === 0)
@@ -267,6 +402,12 @@ async function UnverifiedTab({
         canVerify={canVerify}
         dates={Object.fromEntries(
           rows.map((r) => [r.id, formatDate(r.at, tz)]),
+        )}
+        hrefs={Object.fromEntries(
+          rows.flatMap((r) => {
+            const to = paymentHref(r, access);
+            return to ? [[r.id, to]] : [];
+          }),
         )}
       />
     </section>
@@ -337,9 +478,11 @@ async function ReconTab() {
 async function RefundsTab({
   tz,
   canRefund,
+  access,
 }: {
   tz: string;
   canRefund: boolean;
+  access: PaymentLinkAccess;
 }) {
   const rows = await listRefunds();
   if (rows.length === 0)
@@ -354,34 +497,60 @@ async function RefundsTab({
     );
   const open = rows.filter((r) => ["scheduled", "pending"].includes(r.status));
   const done = rows.filter((r) => !["scheduled", "pending"].includes(r.status));
-  const row = (r: (typeof rows)[number]) => (
-    <div key={r.id} className="list-row flex items-center gap-3 px-4 py-3">
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-body">
-          {r.customerName}
-          {r.jobNumber ? ` · ${r.jobNumber}` : ""}
-        </p>
-        <p className="truncate text-footnote text-label-2">
-          {r.reason === "dispute_lost" ? "Lost dispute" : r.reason} ·{" "}
-          {r.methodLabel}
-          {r.dueAt
-            ? ` · ${r.overdue ? "was due" : "due"} ${formatDate(r.dueAt, tz)}`
-            : ` · ${formatDate(r.completedAt ?? r.createdAt, tz)}`}
-        </p>
-      </div>
-      <div className="flex shrink-0 flex-col items-end gap-1">
-        <MoneyText cents={r.amountCents} className="font-semibold" />
-        {r.overdue ? (
-          <StatusPill kind="refund" status="failed" label="Overdue" size="sm" />
+  const row = (r: (typeof rows)[number]) => {
+    const to = paymentHref(r, access);
+    const body = (
+      <>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-body">
+            {r.customerName}
+            {r.jobNumber ? ` · ${r.jobNumber}` : ""}
+          </p>
+          <p className="truncate text-footnote text-label-2">
+            {r.reason === "dispute_lost" ? "Lost dispute" : r.reason} ·{" "}
+            {r.methodLabel}
+            {r.dueAt
+              ? ` · ${r.overdue ? "was due" : "due"} ${formatDate(r.dueAt, tz)}`
+              : ` · ${formatDate(r.completedAt ?? r.createdAt, tz)}`}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <MoneyText cents={r.amountCents} className="font-semibold" />
+          {r.overdue ? (
+            <StatusPill
+              kind="refund"
+              status="failed"
+              label="Overdue"
+              size="sm"
+            />
+          ) : (
+            <StatusPill kind="refund" status={r.status} size="sm" />
+          )}
+        </div>
+      </>
+    );
+    const left = "flex min-w-0 flex-1 items-center gap-3 py-3 pl-4";
+    // The text opens the job's invoice (or the invoice, or the customer); Mark
+    // paid stays a sibling button, never inside the link.
+    return (
+      <div key={r.id} className="list-row flex items-center gap-3 pr-4">
+        {to ? (
+          <Link
+            href={to}
+            transitionTypes={["nav-forward"]}
+            className={`${left} row-press outline-offset-[-2px]`}
+          >
+            {body}
+          </Link>
         ) : (
-          <StatusPill kind="refund" status={r.status} size="sm" />
+          <div className={left}>{body}</div>
+        )}
+        {canRefund && ["scheduled", "pending"].includes(r.status) && (
+          <MarkRefundPaidButton refundId={r.id} />
         )}
       </div>
-      {canRefund && ["scheduled", "pending"].includes(r.status) && (
-        <MarkRefundPaidButton refundId={r.id} />
-      )}
-    </div>
-  );
+    );
+  };
   return (
     <>
       {open.length > 0 && (

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { type ReactNode, Suspense } from "react";
@@ -28,6 +29,7 @@ import {
 import { TagEditor } from "@/features/settings/slots.client";
 import { requireUser } from "@/lib/auth/current";
 import { NotFoundError } from "@/lib/errors";
+import { mapsHref, personHref } from "@/lib/links";
 import { getCompanyTimezone, getSettings, isEnabled } from "@/lib/settings";
 import { formatDateKey, formatDateTime } from "@/lib/time";
 import { Page, SplitView } from "@/ui/components/AppShell";
@@ -122,6 +124,13 @@ export default async function LeadDetailPage({
     ? `${addr.street}${addr.unit ? ` ${addr.unit}` : ""}, ${[addr.city, addr.state].filter(Boolean).join(", ")} ${addr.zip ?? ""}`.trim()
     : ((lead.extra._address_text as string) ?? null);
   const filter = leadFilterFrom(sp);
+  const ua = (await headers()).get("user-agent");
+  const assignedHref = personHref(user, lead.assignedUserId);
+  const assignedPill = lead.assignedName ? (
+    <Pill tone="blue" dot={false} size="sm">
+      {lead.assignedUserId === user.id ? "Yours" : lead.assignedName}
+    </Pill>
+  ) : null;
 
   const detail = (
     <ActionRailFrame compact enabled={canEdit || p.has("leads.convert")}>
@@ -193,12 +202,17 @@ export default async function LeadDetailPage({
                   Outside service area
                 </Pill>
               )}
-              {lead.assignedName && (
-                <Pill tone="blue" dot={false} size="sm">
-                  {lead.assignedUserId === user.id
-                    ? "Yours"
-                    : lead.assignedName}
-                </Pill>
+              {assignedPill && assignedHref ? (
+                <Link
+                  href={assignedHref}
+                  transitionTypes={["nav-forward"]}
+                  className="pressable hit-44 rounded-pill"
+                >
+                  <span className="sr-only">Assigned: </span>
+                  {assignedPill}
+                </Link>
+              ) : (
+                assignedPill
               )}
             </div>
             <LeadActions
@@ -275,6 +289,9 @@ export default async function LeadDetailPage({
                 title="Address"
                 subtitle={addressText}
                 multiline
+                // Leads are office-only (leads.view), so the address isn't masked.
+                href={mapsHref({ full: addressText }, ua) ?? undefined}
+                external
                 detail={
                   lead.inServiceArea === true
                     ? "In area"

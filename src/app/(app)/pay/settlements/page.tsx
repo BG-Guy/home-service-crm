@@ -23,6 +23,7 @@ import {
   listSettlementsForAdmin,
 } from "@/features/payroll/queries";
 import { requireUser } from "@/lib/auth/current";
+import { personHref } from "@/lib/links";
 import { formatMoney } from "@/lib/money";
 import { getCompanyTimezone, getSettings, isEnabled } from "@/lib/settings";
 import { dateKey, formatDateKey, formatDateTime } from "@/lib/time";
@@ -34,6 +35,7 @@ import { ListRow, ListSection } from "@/ui/components/List";
 import { LargeTitleHeader } from "@/ui/components/NavBar";
 import { StatCard } from "@/ui/components/StatCard";
 import { Pill, StatusPill } from "@/ui/components/StatusPill";
+import { TextLink } from "@/ui/components/TextLink";
 import { PageTransition } from "@/ui/motion/PageTransition";
 
 export const metadata: Metadata = { title: "Payroll" };
@@ -284,6 +286,7 @@ export default async function SettlementsPage({
                         {m(c.heldCents ?? 0)}
                       </span>
                     }
+                    href={personHref(user, c.userId) ?? undefined}
                   />
                 );
               })
@@ -296,7 +299,15 @@ export default async function SettlementsPage({
               rep.pendingRemits.map((r) => (
                 <ListRow
                   key={r.id}
-                  title={`${r.name} · ${m(r.amount)}`}
+                  // The confirm buttons are the accessory: only the name links.
+                  title={
+                    <>
+                      <TextLink href={personHref(user, r.userId)}>
+                        {r.name}
+                      </TextLink>
+                      {` · ${m(r.amount)}`}
+                    </>
+                  }
                   subtitle={`${r.method === "bank_deposit" ? "Bank deposit" : "Handed in"} · ${formatDateTime(r.createdAt, tz)}${r.proof ? " · slip attached" : ""}`}
                   accessory={
                     user.perms.has("cash.receive") ? (
@@ -343,6 +354,7 @@ export default async function SettlementsPage({
                 title={t.name}
                 subtitle={`${t.workerType === "w2" ? "W-2" : "1099"} · reimbursed ${m(t.reimbursementsCents)} · paid ${m(t.paidCents)}`}
                 detail={<span className="num">{m(t.wagesCents)}</span>}
+                href={personHref(user, t.userId) ?? undefined}
               />
             ))}
           </ListSection>
@@ -358,6 +370,7 @@ export default async function SettlementsPage({
                   key={t.userId}
                   title={t.name}
                   detail={<span className="num">{m(t.wagesCents)}</span>}
+                  href={personHref(user, t.userId) ?? undefined}
                 />
               ))
             )}

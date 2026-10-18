@@ -11,6 +11,7 @@ import { Button } from "@/ui/components/Button";
 import { TextArea } from "@/ui/components/Field";
 import { Pill } from "@/ui/components/StatusPill";
 import { SwipeActions } from "@/ui/components/SwipeActions";
+import { TextLink } from "@/ui/components/TextLink";
 import { toast } from "@/ui/components/Toast";
 import { Toggle } from "@/ui/components/Toggle";
 import { cx } from "@/ui/cx";
@@ -33,6 +34,7 @@ export function NotesClient({
   canEditAll,
   allowCustomerVisible,
   renderedAt,
+  authorHrefs = {},
 }: {
   entity: { type: "job" | "customer" | "lead"; id: string };
   notes: NoteView[];
@@ -41,6 +43,8 @@ export function NotesClient({
   allowCustomerVisible: boolean;
   /** Server render time (ms): relative times match on hydration (QA T1-13). */
   renderedAt: number;
+  /** Where each author's name leads (by user id), computed on the server. */
+  authorHrefs?: Record<string, string>;
 }) {
   const [now] = useNow(renderedAt);
   const key = `note:${entity.type}:${entity.id}`;
@@ -173,6 +177,8 @@ export function NotesClient({
           {list.map((n) => {
             const editable =
               !n.queued && (n.authorId === viewerId || canEditAll);
+            const authorHref =
+              !n.queued && n.authorId ? authorHrefs[n.authorId] : undefined;
             const row = (
               <div className="list-row flex gap-3 bg-card px-4 py-3">
                 <Avatar
@@ -182,9 +188,15 @@ export function NotesClient({
                 />
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-1.5 text-footnote text-label-2">
-                    <span className="font-semibold text-label">
-                      {n.authorName ?? "Someone"}
-                    </span>
+                    {authorHref ? (
+                      <TextLink href={authorHref} className="font-semibold">
+                        {n.authorName ?? "Someone"}
+                      </TextLink>
+                    ) : (
+                      <span className="font-semibold text-label">
+                        {n.authorName ?? "Someone"}
+                      </span>
+                    )}
                     <span>
                       · {formatRelative(atOrBefore(n.createdAt, now), now)}
                     </span>

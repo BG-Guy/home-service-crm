@@ -23,6 +23,7 @@ import {
 import { BLOCK_LABEL, checkoutBlock, dueState } from "@/features/tools/rules";
 import { ActionButton } from "@/features/vehicles/components/ActionButton";
 import { requireAnyPerm } from "@/lib/auth/current";
+import { personHref } from "@/lib/links";
 import { getCompanyTimezone, getSettings, isEnabled } from "@/lib/settings";
 import { formatDateKey, formatDateTime } from "@/lib/time";
 import { Page } from "@/ui/components/AppShell";
@@ -34,6 +35,7 @@ import { MoneyText } from "@/ui/components/MoneyText";
 import { NavBar } from "@/ui/components/NavBar";
 import { PhotoGrid } from "@/ui/components/PhotoGrid";
 import { Pill, StatusPill } from "@/ui/components/StatusPill";
+import { TextLink } from "@/ui/components/TextLink";
 import { PageTransition } from "@/ui/motion/PageTransition";
 
 export const metadata: Metadata = { title: "Tool" };
@@ -78,7 +80,7 @@ export default async function ToolPage({
   const manage = user.perms.has("tools.manage");
   const custodian = t.currentUserId === user.id;
   const owner = t.ownerUserId === user.id;
-  const [history, settings, tz, today, custodians, defs, tags] =
+  const [history, settings, tz, today, custodians, defs, tags, vehiclesOn] =
     await Promise.all([
       getToolHistory(id),
       getSettings(),
@@ -87,6 +89,7 @@ export default async function ToolPage({
       manage ? listCustodians() : Promise.resolve({ users: [], vehicles: [] }),
       manage || owner ? getCustomFieldDefs("tool") : Promise.resolve([]),
       getEntityTags([{ type: "tool", id }]),
+      isEnabled("vehicles"),
     ]);
   const ts = settings.tools;
   const warn = ts.maintenance_warning_days;
@@ -125,6 +128,16 @@ export default async function ToolPage({
     ),
   };
   const lost = t.status === "lost" || t.status === "stolen";
+  // People and vans named on the page open where the viewer may go.
+  const vehicleHref = (vehicleId: string | null) =>
+    vehicleId && vehiclesOn && user.perms.has("vehicles.view_all")
+      ? `/vehicles/${vehicleId}`
+      : null;
+  const withHref = holderName
+    ? personHref(user, t.currentUserId)
+    : vehicleName
+      ? vehicleHref(t.currentVehicleId)
+      : null;
 
   return (
     <PageTransition>
@@ -309,7 +322,17 @@ export default async function ToolPage({
                     holderName ??
                     vehicleName ??
                     (t.status === "available" ? "In stock" : "—"),
+                  href: withHref ?? undefined,
                 },
+                ...(t.owner === "tech_owned" && ownerName
+                  ? [
+                      {
+                        label: "Owner",
+                        value: ownerName,
+                        href: personHref(user, t.ownerUserId) ?? undefined,
+                      },
+                    ]
+                  : []),
                 ...(kitName ? [{ label: "Kit", value: kitName }] : []),
                 { label: "Category", value: t.category ?? "—" },
                 { label: "Purchased", value: day(t.purchaseDate) },
@@ -383,7 +406,15 @@ export default async function ToolPage({
                   multiline
                   title={
                     <span className="flex flex-wrap items-center gap-1.5">
-                      {a.to}
+                      <TextLink
+                        href={
+                          a.userId
+                            ? personHref(user, a.userId)
+                            : vehicleHref(a.vehicleId)
+                        }
+                      >
+                        {a.to}
+                      </TextLink>
                       {!a.inAt && (
                         <Pill tone="blue" size="sm">
                           Current

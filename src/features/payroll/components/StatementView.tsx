@@ -3,6 +3,7 @@ import { formatDateKey, formatDateTime } from "@/lib/time";
 import { KeyValueList } from "@/ui/components/KeyValueList";
 import { ListRow, ListSection } from "@/ui/components/List";
 import { Pill, StatusPill } from "@/ui/components/StatusPill";
+import { TextLink } from "@/ui/components/TextLink";
 import type { getStatement } from "../queries";
 import { LEDGER_TYPE_LABEL } from "../queries";
 import { PAYOUT_METHOD_LABEL } from "../server/payouts";
@@ -28,18 +29,33 @@ const METHOD: Record<string, string> = {
   other: "Other",
 };
 
+/** Where the stub's names lead in the app (printing shows them as plain text). */
+export interface StatementLinks {
+  /** The tech (`personHref`). */
+  tech?: string | null;
+  /** The viewer may open the statement's jobs. */
+  jobs?: boolean;
+}
+
+// Links read as text on paper.
+const PRINT_TEXT = "print:text-label print:no-underline";
+
 /** Pay stub / statement (SPEC M16): printable; used by /pay/statements/[id] and /pay/settlements/[id]. */
 export function StatementView({
   st,
   companyName,
   tz,
   admin,
+  links = {},
 }: {
   st: Statement;
   companyName: string;
   tz: string;
   admin: boolean;
+  links?: StatementLinks;
 }) {
+  const jobHref = (id: string | null | undefined) =>
+    links.jobs && id ? `/jobs/${id}` : null;
   const inReview = st.status === "tech_review" || st.status === "draft";
   const canFlag = st.viewerIsOwner && inReview;
   const t = st.totals;
@@ -63,7 +79,11 @@ export function StatementView({
             <p className="text-footnote font-semibold uppercase tracking-wide text-label-2">
               {companyName} · Pay statement
             </p>
-            <h2 className="text-title2 font-semibold">{st.tech.name}</h2>
+            <h2 className="text-title2 font-semibold">
+              <TextLink href={links.tech} className={PRINT_TEXT}>
+                {st.tech.name}
+              </TextLink>
+            </h2>
             <p className="text-subhead text-label-2">
               {formatDateKey(st.period.startsOn)} –{" "}
               {formatDateKey(st.period.endsOn)} ·{" "}
@@ -116,9 +136,15 @@ export function StatementView({
             <ListRow
               key={j.jobId}
               multiline
+              // The amount is the "why" button: only the job number links.
               title={
                 <span className="flex flex-wrap items-baseline gap-x-2">
-                  <span className="font-medium">{j.jobNumber}</span>
+                  <TextLink
+                    href={jobHref(j.jobId)}
+                    className={`font-medium ${PRINT_TEXT}`}
+                  >
+                    {j.jobNumber}
+                  </TextLink>
                   <span className="text-subhead text-label-2">
                     {j.completedAt
                       ? formatDateTime(j.completedAt, tz).split(",")[0]
@@ -197,6 +223,7 @@ export function StatementView({
               l={l}
               canFlag={canFlag}
               settlementId={st.settlement.id}
+              jobHref={jobHref(l.jobId)}
             />
           ))}
         </ListSection>
@@ -209,6 +236,7 @@ export function StatementView({
               l={l}
               canFlag={canFlag}
               settlementId={st.settlement.id}
+              jobHref={jobHref(l.jobId)}
             />
           ))}
         </ListSection>
@@ -414,15 +442,29 @@ function LedgerRow({
   l,
   canFlag,
   settlementId,
+  jobHref,
 }: {
   l: Statement["otherLines"][number];
   canFlag: boolean;
   settlementId: string;
+  jobHref: string | null;
 }) {
   return (
     <ListRow
       title={l.memo ?? LEDGER_TYPE_LABEL[l.type] ?? l.type}
-      subtitle={`${LEDGER_TYPE_LABEL[l.type] ?? l.type} · ${formatDateKey(l.effectiveDate)}${l.jobNumber ? ` · ${l.jobNumber}` : ""}`}
+      subtitle={
+        <>
+          {`${LEDGER_TYPE_LABEL[l.type] ?? l.type} · ${formatDateKey(l.effectiveDate)}`}
+          {l.jobNumber ? (
+            <>
+              {" · "}
+              <TextLink href={jobHref} className={PRINT_TEXT}>
+                {l.jobNumber}
+              </TextLink>
+            </>
+          ) : null}
+        </>
+      }
       detail={
         <span className="flex items-center gap-1">
           <span className={`num ${l.amountCents < 0 ? "text-danger" : ""}`}>

@@ -202,6 +202,7 @@ export async function fetchActivity(
       entityId: activity.entityId,
       jobId: activity.jobId,
       customerId: activity.customerId,
+      vehicleId: sql<string | null>`${activity.data}->>'vehicle_id'`,
       actor: users.name,
     })
     .from(activity)
@@ -216,6 +217,7 @@ export async function fetchActivity(
     .orderBy(desc(activity.id))
     .limit(limit + 1);
   const page = rows.slice(0, limit);
+  const canOpenTeam = has(viewer, "users.manage");
   return {
     items: page.map((r) => ({
       id: Number(r.id),
@@ -226,11 +228,15 @@ export async function fetchActivity(
       href:
         // Don't link a row back to the page it is shown on.
         (scope.jobId && r.entityType === "job") ||
-        (scope.customerId && r.entityType === "customer")
+        (scope.customerId && r.entityType === "customer") ||
+        (scope.entity?.type === r.entityType && scope.entity.id === r.entityId)
           ? null
           : (activityHref(r.entityType, r.entityId, {
               jobId: r.jobId,
               customerId: r.customerId,
+              vehicleId: r.vehicleId,
+              canOpenTeam,
+              viewerId: viewer.id,
             }) ?? null),
     })),
     nextBefore: rows.length > limit ? Number(page[page.length - 1]?.id) : null,

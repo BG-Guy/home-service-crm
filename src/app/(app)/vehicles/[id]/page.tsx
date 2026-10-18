@@ -32,6 +32,7 @@ import {
   type VehiclePolicies,
 } from "@/features/vehicles/rules";
 import { requireAnyPerm } from "@/lib/auth/current";
+import { personHref } from "@/lib/links";
 import { getCompanyTimezone, getSettings, isEnabled } from "@/lib/settings";
 import { dateKey } from "@/lib/time";
 import { Page } from "@/ui/components/AppShell";
@@ -39,6 +40,7 @@ import { NavBar } from "@/ui/components/NavBar";
 import { ActionRailFrame } from "@/ui/components/PageActions";
 import { SkeletonList } from "@/ui/components/Skeleton";
 import { StatusPill } from "@/ui/components/StatusPill";
+import { TextLink } from "@/ui/components/TextLink";
 import { PageTransition } from "@/ui/motion/PageTransition";
 
 export const metadata: Metadata = { title: "Vehicle" };
@@ -173,9 +175,15 @@ export default async function VehiclePage({
               <div className="flex min-w-0 flex-1 flex-col gap-1">
                 <h1 className="truncate text-title2 font-bold">{v.nickname}</h1>
                 <p className="truncate text-subhead text-label-2">
-                  {[description, v.plate, assigneeName ?? "Unassigned"]
-                    .filter(Boolean)
-                    .join(" · ")}
+                  {[description, v.plate].filter(Boolean).join(" · ")}
+                  {description || v.plate ? " · " : ""}
+                  {assigneeName ? (
+                    <TextLink href={personHref(user, v.assignedUserId)}>
+                      {assigneeName}
+                    </TextLink>
+                  ) : (
+                    "Unassigned"
+                  )}
                 </p>
                 <div className="flex flex-wrap items-center gap-2">
                   <StatusPill kind="vehicle" status={v.status} size="sm" />

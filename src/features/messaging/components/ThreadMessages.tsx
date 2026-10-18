@@ -126,7 +126,21 @@ export function ThreadMessages({
                         : `${formatDayShort(m.at, tz)} at ${formatTime(m.at, tz)}`}
                     {" · "}
                     {channelLabel(m.channel)}
-                    {m.jobNumber ? ` · ${m.jobNumber}` : ""}
+                    {m.jobNumber ? (
+                      <>
+                        {" · "}
+                        {showJobLinks && m.jobId ? (
+                          <Link
+                            href={`/jobs/${m.jobId}`}
+                            className="text-accent-text underline-offset-2 hover:underline"
+                          >
+                            {m.jobNumber}
+                          </Link>
+                        ) : (
+                          m.jobNumber
+                        )}
+                      </>
+                    ) : null}
                   </p>
                 </div>
                 {m.cancellable && (

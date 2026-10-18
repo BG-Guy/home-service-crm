@@ -12,6 +12,7 @@ import {
 import { ActivityTimeline } from "@/features/notify/slots";
 import { getEntityTags } from "@/features/settings/api";
 import { TagEditor } from "@/features/settings/slots.client";
+import { personHref } from "@/lib/links";
 import { getCompanyTimezone, getSettings } from "@/lib/settings";
 import { formatDate, formatDateKey, formatDateTime } from "@/lib/time";
 import type { SessionUser } from "@/lib/types";
@@ -282,7 +283,13 @@ export async function OverviewTab({
       >
         <KeyValueList
           items={[
-            { label: "Assigned to", value: assigneeName ?? "Unassigned" },
+            {
+              label: "Assigned to",
+              value: assigneeName ?? "Unassigned",
+              href: assigneeName
+                ? (personHref(user, v.assignedUserId) ?? undefined)
+                : undefined,
+            },
             {
               label: "Odometer",
               value:

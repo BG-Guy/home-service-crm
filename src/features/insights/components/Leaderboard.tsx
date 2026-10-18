@@ -1,23 +1,57 @@
+import { UserRound } from "lucide-react";
 import Link from "next/link";
+import { type LinkViewer, profileHref } from "@/lib/links";
 import { Avatar } from "@/ui/components/Avatar";
 import { MoneyText } from "@/ui/components/MoneyText";
 import type { TechRow } from "../kpis";
 import { DASH, pct } from "./bits";
 
+function ProfileLink({
+  href,
+  name,
+  className,
+}: {
+  href: string | null;
+  name: string;
+  className: string;
+}) {
+  if (!href) return null;
+  return (
+    <Link
+      href={href}
+      transitionTypes={["nav-forward"]}
+      aria-label={`${name}'s profile`}
+      title={`${name}'s profile`}
+      className={`pressable flex shrink-0 items-center justify-center rounded-full text-label-2 hover:bg-fill-2 hover:text-accent-text ${className}`}
+    >
+      <UserRound size={16} aria-hidden />
+    </Link>
+  );
+}
+
 /**
  * Tech leaderboard (SPEC M20): table on wide screens, stacked cards on phones.
- * Each row drills into that tech's jobs for the period.
+ * Each row drills into that tech's jobs for the period; a person icon beside it
+ * opens their profile for viewers who may (managers, or the tech themself).
  */
-export function Leaderboard({ rows, rq }: { rows: TechRow[]; rq: string }) {
+export function Leaderboard({
+  rows,
+  rq,
+  viewer,
+}: {
+  rows: TechRow[];
+  rq: string;
+  viewer: LinkViewer;
+}) {
   return (
     <>
       {/* Phones: one card per tech */}
       <ol className="flex flex-col gap-2 md:hidden">
         {rows.map((t, i) => (
-          <li key={t.userId}>
+          <li key={t.userId} className="flex items-center rounded-card bg-card">
             <Link
               href={`/jobs?tech=${t.userId}&status=completed,closed&${rq}`}
-              className="pressable row-press flex items-center gap-3 rounded-card bg-card p-3"
+              className="pressable row-press flex min-w-0 flex-1 items-center gap-3 rounded-card p-3"
             >
               <span className="num w-5 text-center text-subhead font-semibold text-label-2">
                 {i + 1}
@@ -45,6 +79,11 @@ export function Leaderboard({ rows, rq }: { rows: TechRow[]; rq: string }) {
                 <MoneyText cents={t.revenueCents} compactWhole />
               </span>
             </Link>
+            <ProfileLink
+              href={profileHref(viewer, t.userId)}
+              name={t.name}
+              className="mr-1 size-11"
+            />
           </li>
         ))}
       </ol>
@@ -87,13 +126,20 @@ export function Leaderboard({ rows, rq }: { rows: TechRow[]; rq: string }) {
             {rows.map((t) => (
               <tr key={t.userId} className="hairline-b last:shadow-none">
                 <th scope="row" className="px-4 py-2.5 font-medium">
-                  <Link
-                    href={`/jobs?tech=${t.userId}&status=completed,closed&${rq}`}
-                    className="flex items-center gap-2 hover:underline"
-                  >
-                    <Avatar name={t.name} seed={t.userId} size={28} />
-                    {t.name}
-                  </Link>
+                  <span className="flex items-center gap-1.5">
+                    <Link
+                      href={`/jobs?tech=${t.userId}&status=completed,closed&${rq}`}
+                      className="flex min-w-0 items-center gap-2 hover:underline"
+                    >
+                      <Avatar name={t.name} seed={t.userId} size={28} />
+                      {t.name}
+                    </Link>
+                    <ProfileLink
+                      href={profileHref(viewer, t.userId)}
+                      name={t.name}
+                      className="hit-44 size-7"
+                    />
+                  </span>
                 </th>
                 <td className="px-2 text-right">{t.completed}</td>
                 <td className="px-2 text-right">

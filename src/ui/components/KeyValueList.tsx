@@ -7,6 +7,8 @@ export interface KeyValueItem {
   value: ReactNode;
   /** Link the value (tel:, mailto:, maps, or an app route). */
   href?: string;
+  /** Open `href` in a new tab (maps and other sites). */
+  external?: boolean;
   /** Stack label above value (long text such as addresses and notes). */
   stacked?: boolean;
   /** Use tabular numbers for the value. */
@@ -35,6 +37,15 @@ export function KeyValueList({
         const empty = it.value == null || it.value === "" || it.value === false;
         const value = empty ? (
           <span className="text-label-3">—</span>
+        ) : it.href && it.external ? (
+          <a
+            href={it.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-accent-text hover:underline"
+          >
+            {it.value}
+          </a>
         ) : it.href ? (
           <Link href={it.href} className="text-accent-text hover:underline">
             {it.value}

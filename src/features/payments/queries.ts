@@ -34,6 +34,7 @@ import { assertInvoiceAccess } from "@/features/invoices/api";
 import { assertJobAccess } from "@/features/jobs/api";
 import { requireUser } from "@/lib/auth/current";
 import { ForbiddenError, NotFoundError } from "@/lib/errors";
+import { isUuid } from "@/lib/ids";
 import { getSettings, isEnabled } from "@/lib/settings";
 import {
   addDaysToKey,
@@ -78,6 +79,8 @@ export interface PaymentFilters {
   tab: PaymentsTab;
   method?: string;
   tech?: string;
+  /** One customer's payments (the customer page's Lifetime tile). */
+  customer?: string;
   from?: string;
   to?: string;
   cursor?: string;
@@ -118,6 +121,7 @@ function rowOf(
     invoiceId: p.invoiceId,
     invoiceNumber: r.invoiceNumber,
     collectedByName: r.collector,
+    collectedByUserId: r.collector != null ? p.collectedByUserId : null,
     reference: p.reference,
     entryMode: p.entryMode,
     verifiedAt: p.verifiedAt?.toISOString() ?? null,
@@ -167,7 +171,8 @@ export const listPayments = cache(
         inArray(payments.status, [...PAID_STATUSES]),
       );
     if (f.method) conds.push(eq(payments.method, f.method));
-    if (f.tech) conds.push(eq(payments.collectedByUserId, f.tech));
+    if (isUuid(f.tech)) conds.push(eq(payments.collectedByUserId, f.tech));
+    if (isUuid(f.customer)) conds.push(eq(payments.customerId, f.customer));
     if (b.from) conds.push(gte(payments.createdAt, b.from));
     if (b.to) conds.push(lt(payments.createdAt, b.to));
     if (f.cursor && !Number.isNaN(Date.parse(f.cursor)))
@@ -461,9 +466,11 @@ export const listRefunds = cache(async (): Promise<RefundListRow[]> => {
       r.dueAt.getTime() < now,
     createdAt: r.createdAt.toISOString(),
     completedAt: r.completedAt?.toISOString() ?? null,
+    customerId: p.customerId,
     customerName: customerName ?? "Customer",
     jobId: p.jobId,
     jobNumber,
+    invoiceId: p.invoiceId,
     methodLabel: methodLabel(p),
     provider: p.provider,
     createdByName: creator,

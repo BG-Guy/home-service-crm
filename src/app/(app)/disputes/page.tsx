@@ -13,6 +13,7 @@ import {
 } from "@/features/disputes/queries";
 import { UrlTabs } from "@/features/payments/components/UrlTabs";
 import { requireUser } from "@/lib/auth/current";
+import { type LinkViewer, personHref } from "@/lib/links";
 import { getCompanyTimezone, isEnabled } from "@/lib/settings";
 import { formatDate } from "@/lib/time";
 import { Page } from "@/ui/components/AppShell";
@@ -63,7 +64,7 @@ export default async function DisputesPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  await requireUser("disputes.view");
+  const user = await requireUser("disputes.view");
   if (!(await isEnabled("chargeback_protection"))) notFound();
   const sp = await searchParams;
   const raw = Array.isArray(sp.status) ? sp.status[0] : sp.status;
@@ -143,7 +144,7 @@ export default async function DisputesPage({
               </ListSection>
             )}
           </div>
-          <Analytics a={a} />
+          <Analytics a={a} viewer={user} />
         </div>
       </Page>
     </PageTransition>
@@ -208,7 +209,16 @@ function RateMeter({ a }: { a: DisputeAnalytics }) {
   );
 }
 
-function Breakdown({ title, cells }: { title: string; cells: RateCell[] }) {
+function Breakdown({
+  title,
+  cells,
+  hrefFor,
+}: {
+  title: string;
+  cells: RateCell[];
+  /** Where a cell leads (by its key); null keeps it plain. */
+  hrefFor?: (key: string) => string | null;
+}) {
   const top = cells.filter((c) => c.payments > 0).slice(0, 5);
   if (top.length === 0) return null;
   return (
@@ -219,13 +229,14 @@ function Breakdown({ title, cells }: { title: string; cells: RateCell[] }) {
           title={c.label}
           subtitle={`${c.disputes} dispute${c.disputes === 1 ? "" : "s"} · ${c.payments} payments`}
           detail={pct(c.rateBps)}
+          href={hrefFor?.(c.key) ?? undefined}
         />
       ))}
     </ListSection>
   );
 }
 
-function Analytics({ a }: { a: DisputeAnalytics }) {
+function Analytics({ a, viewer }: { a: DisputeAnalytics; viewer: LinkViewer }) {
   return (
     <aside
       aria-label="Dispute analytics"
@@ -252,7 +263,12 @@ function Analytics({ a }: { a: DisputeAnalytics }) {
           ))}
         </ListSection>
       )}
-      <Breakdown title="By tech" cells={a.byTech} />
+      <Breakdown
+        title="By tech"
+        cells={a.byTech}
+        // "none" groups online payments and jobs without a lead tech.
+        hrefFor={(key) => (key === "none" ? null : personHref(viewer, key))}
+      />
       <Breakdown title="By entry mode" cells={a.byEntryMode} />
       <Breakdown title="By service" cells={a.byService} />
       <Breakdown title="By lead source" cells={a.bySource} />

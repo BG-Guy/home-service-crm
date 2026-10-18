@@ -6,6 +6,7 @@ import {
   Wrench,
 } from "lucide-react";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { aiProviderName } from "@/adapters/ai";
 import { createItemsFor } from "@/app/(app)/_components/create-items";
@@ -235,26 +236,34 @@ export default async function ToolsPage({
               {incidents.map((i) => (
                 <div
                   key={i.id}
-                  className="list-row flex items-center gap-3 px-4 py-3"
+                  className="list-row flex items-center gap-3 pr-4"
                 >
-                  <ShieldAlert
-                    aria-hidden
-                    size={20}
-                    className="shrink-0 text-danger"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-body">
-                      {i.toolName}{" "}
-                      <Pill tone="red" size="sm">
-                        {i.kind}
-                      </Pill>
-                    </p>
-                    <p className="truncate text-footnote text-label-2">
-                      {[i.reportedBy, i.description]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </p>
-                  </div>
+                  {/* The tool opens from the text; deciding stays a sibling
+                      button (reviewers here see every tool). */}
+                  <Link
+                    href={`/tools/${i.toolId}`}
+                    transitionTypes={["nav-forward"]}
+                    className="row-press flex min-w-0 flex-1 items-center gap-3 py-3 pl-4 outline-offset-[-2px]"
+                  >
+                    <ShieldAlert
+                      aria-hidden
+                      size={20}
+                      className="shrink-0 text-danger"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-body">
+                        {i.toolName}{" "}
+                        <Pill tone="red" size="sm">
+                          {i.kind}
+                        </Pill>
+                      </span>
+                      <span className="block truncate text-footnote text-label-2">
+                        {[i.reportedBy, i.description]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </span>
+                    </span>
+                  </Link>
                   <DecideIncidentButton
                     incidentId={i.id}
                     defaultAmountCents={

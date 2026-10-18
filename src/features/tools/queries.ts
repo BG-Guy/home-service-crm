@@ -337,6 +337,7 @@ export async function getToolHistory(toolId: string) {
           ? (vmap.get(a.vehicleId) ?? "Vehicle")
           : "—",
       userId: a.userId,
+      vehicleId: a.vehicleId,
       by: a.byUserId ? (who.get(a.byUserId) ?? null) : null,
       outAt: a.checkedOutAt.toISOString(),
       inAt: a.checkedInAt?.toISOString() ?? null,
@@ -480,6 +481,8 @@ export async function getAudit(id: string) {
       serial: tools.serial,
       tag: tools.assetTag,
       condition: tools.condition,
+      currentUserId: tools.currentUserId,
+      ownerUserId: tools.ownerUserId,
     })
     .from(toolAuditItems)
     .innerJoin(tools, eq(tools.id, toolAuditItems.toolId))
@@ -516,6 +519,8 @@ export async function getAudit(id: string) {
       mediaId: r.i.mediaId,
       photoUrl: r.i.mediaId ? (thumbs[r.i.mediaId] ?? null) : null,
       toolPhotoUrl: photos[r.i.toolId] ?? null,
+      /** The viewer may open the tool's page (custody may have moved since). */
+      canOpen: canViewTool(user, r),
     })),
   };
 }

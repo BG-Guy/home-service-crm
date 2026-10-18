@@ -4,11 +4,13 @@ import "server-only";
 import { Briefcase, Plus } from "lucide-react";
 import { assertCustomerAccess } from "@/features/customers/api";
 import { getCurrentUser } from "@/lib/auth/current";
+import { personHref } from "@/lib/links";
 import { getCompanyTimezone } from "@/lib/settings";
 import type { SessionUser } from "@/lib/types";
 import { Button } from "@/ui/components/Button";
 import { EmptyState } from "@/ui/components/EmptyState";
 import { ListSection } from "@/ui/components/List";
+import { PushLink } from "@/ui/motion/PageTransition";
 import { getJobForUser } from "./api";
 import { JobRow } from "./components/JobRow";
 import { NotesClient } from "./components/NotesClient";
@@ -73,12 +75,12 @@ export async function CustomerJobsPanel({
           trailing={upcoming.length === 0 ? newJob : undefined}
           footer={
             past.length >= limit ? (
-              <a
-                className="text-accent"
+              <PushLink
+                className="hit-44 text-accent-text"
                 href={`/jobs?q=${encodeURIComponent(past[0]?.customerName ?? "")}`}
               >
                 See all jobs
-              </a>
+              </PushLink>
             ) : undefined
           }
         >
@@ -131,6 +133,12 @@ export async function NotesPanel({
   const access = await noteAccess(user, entity);
   if (!access) return null;
   const notes = await listNotes(entity);
+  // Author names link where the viewer may go (profile, or their schedule day).
+  const authorHrefs: Record<string, string> = {};
+  for (const n of notes) {
+    const href = n.authorId ? personHref(user, n.authorId) : null;
+    if (n.authorId && href) authorHrefs[n.authorId] = href;
+  }
   return (
     <ListSection header="Notes" id="notes">
       <NotesClient
@@ -140,6 +148,7 @@ export async function NotesPanel({
         canEditAll={access.canEditAll}
         allowCustomerVisible={allowCustomerVisible}
         renderedAt={Date.now()}
+        authorHrefs={authorHrefs}
       />
     </ListSection>
   );

@@ -6,12 +6,14 @@ import { AuditChecklist } from "@/features/tools/components/AuditChecklist";
 import { getAudit } from "@/features/tools/queries";
 import { ActionButton } from "@/features/vehicles/components/ActionButton";
 import { requireAnyPerm } from "@/lib/auth/current";
+import { personHref } from "@/lib/links";
 import { isEnabled } from "@/lib/settings";
 import { formatDateKey } from "@/lib/time";
 import { Page } from "@/ui/components/AppShell";
 import { ListRow, ListSection } from "@/ui/components/List";
 import { NavBar } from "@/ui/components/NavBar";
 import { Pill, StatusPill } from "@/ui/components/StatusPill";
+import { TextLink } from "@/ui/components/TextLink";
 import { PageTransition } from "@/ui/motion/PageTransition";
 
 export const metadata: Metadata = { title: "Tool check" };
@@ -21,7 +23,10 @@ export default async function ToolAuditPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireAnyPerm(["tools.audit_submit", "tools.audit_review"]);
+  const user = await requireAnyPerm([
+    "tools.audit_submit",
+    "tools.audit_review",
+  ]);
   if (!(await isEnabled("tools"))) notFound();
   const { id } = await params;
   const { audit, items, mine } = await getAudit(id);
@@ -48,7 +53,13 @@ export default async function ToolAuditPage({
         <div className="flex flex-col gap-[var(--section-gap)]">
           <section className="list-card flex flex-col gap-1 p-4">
             <p className="text-headline">
-              {mine ? "Your tool check" : audit.userName}
+              {mine ? (
+                "Your tool check"
+              ) : (
+                <TextLink href={personHref(user, audit.userId)}>
+                  {audit.userName}
+                </TextLink>
+              )}
             </p>
             <p className="text-subhead text-label-2">
               Due{" "}
@@ -72,6 +83,7 @@ export default async function ToolAuditPage({
                 <ListRow
                   key={i.id}
                   multiline
+                  href={i.canOpen ? `/tools/${i.toolId}` : undefined}
                   leading={
                     i.photoUrl ? (
                       // biome-ignore lint/performance/noImgElement: signed storage thumbnail

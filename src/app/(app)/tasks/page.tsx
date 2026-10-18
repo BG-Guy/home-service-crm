@@ -48,6 +48,7 @@ export default async function TasksPage({
   const user = await requireUser();
   const sp = await searchParams;
   const viewAll = user.perms.has("tasks.view_all");
+  const canOpenCustomers = user.perms.has("customers.view_all");
   const scope = viewAll && one(sp.scope) === "all" ? "all" : "mine";
   const kind = KINDS.some((k) => k.key === one(sp.kind)) ? one(sp.kind) : "";
   const [open, closed, users, tz] = await Promise.all([
@@ -102,6 +103,7 @@ export default async function TasksPage({
                 viewerId={user.id}
                 users={users}
                 canAssign={viewAll}
+                canOpenCustomers={canOpenCustomers}
               />
             </ListSection>
           )}
@@ -119,6 +121,7 @@ export default async function TasksPage({
               viewerId={user.id}
               users={users}
               canAssign={viewAll}
+              canOpenCustomers={canOpenCustomers}
               allowCreate
               emptyText={
                 kind ? "No open tasks of this type." : "You're all caught up."
@@ -136,6 +139,7 @@ export default async function TasksPage({
                 viewerId={user.id}
                 users={users}
                 canAssign={viewAll}
+                canOpenCustomers={canOpenCustomers}
                 compact
               />
             </ListSection>

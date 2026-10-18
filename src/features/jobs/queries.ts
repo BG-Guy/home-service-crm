@@ -476,6 +476,7 @@ export const getJobDetail = cache(
       custom,
       createdAt: j.createdAt.toISOString(),
       createdByName: r.createdByName ?? null,
+      createdById: r.createdByName != null ? j.createdBy : null,
     };
   },
 );

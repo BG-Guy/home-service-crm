@@ -100,6 +100,7 @@ export default async function LeadSourcePage({
   );
   const cpl = roi.leads ? Math.round(roi.spendCents / roi.leads) : null;
   const cpb = roi.booked ? Math.round(roi.spendCents / roi.booked) : null;
+  const canLeads = user.perms.has("leads.view");
 
   return (
     <Screen
@@ -207,9 +208,20 @@ export default async function LeadSourcePage({
         </Section>
 
         <Section title="Last 3 months">
+          {/* The source's leads and invoices, newest first (Spend is below). */}
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <StatCard label="Leads" value={roi.leads} />
-            <StatCard label="Booked" value={roi.booked} />
+            <StatCard
+              label="Leads"
+              value={roi.leads}
+              href={canLeads ? `/leads?view=all&source=${src.id}` : undefined}
+            />
+            <StatCard
+              label="Booked"
+              value={roi.booked}
+              href={
+                canLeads ? `/leads?view=booked&source=${src.id}` : undefined
+              }
+            />
             <StatCard
               label="Spend"
               value={<MoneyText cents={roi.spendCents} compactWhole />}
@@ -217,6 +229,11 @@ export default async function LeadSourcePage({
             <StatCard
               label="Revenue"
               value={<MoneyText cents={roi.revenueCents} compactWhole />}
+              href={
+                user.perms.has("invoices.view")
+                  ? `/invoices?source=${src.id}`
+                  : undefined
+              }
             />
           </div>
           {(cpl != null || cpb != null) && roi.spendCents > 0 && (
