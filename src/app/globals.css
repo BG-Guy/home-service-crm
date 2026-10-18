@@ -1,0 +1,1296 @@
+@import "tailwindcss";
+
+/* ==========================================================================
+   iOS design tokens — docs/SPEC.md §12.1 (colors/type/radii) + §12.2 (motion)
+   Light is the default; dark follows the system unless <html data-theme="light">,
+   and <html data-theme="dark"> forces dark.
+   ========================================================================== */
+
+:root {
+  color-scheme: light dark;
+
+  /* System colors (iOS 26) */
+  --sys-blue: #0088ff;
+  --sys-green: #34c759;
+  --sys-red: #ff383c;
+  --sys-orange: #ff8d28;
+  --sys-yellow: #ffcc00;
+  --sys-teal: #00c3d0;
+  --sys-indigo: #6155f5;
+  --sys-purple: #cb30e0;
+  --sys-pink: #ff2d55;
+  --sys-brown: #ac7f5e;
+  --sys-gray: #8e8e93;
+
+  /* Surfaces & labels */
+  --bg: #f2f2f7;
+  --card: #ffffff;
+  --card-2: #f2f2f7;
+  --fill: rgb(120 120 128 / 0.2);
+  --fill-2: rgb(120 120 128 / 0.12);
+  --label: #000;
+  --label-2: rgb(60 60 67 / 0.6);
+  --label-3: rgb(60 60 67 / 0.3);
+  --sep: rgb(60 60 67 / 0.29);
+  --bar: rgb(249 249 249 / 0.78);
+  --accent: var(--sys-blue);
+  --accent-text: #0066e0;
+  --on-accent: #fff;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04);
+  --shadow-float: 0 8px 32px rgb(0 0 0 / 0.12), 0 2px 8px rgb(0 0 0 / 0.06);
+  --scrim: rgb(0 0 0 / 0.4);
+
+  /* Motion (§12.2) — Apple spring curves as CSS linear() */
+  --ease-spring: linear(
+    0,
+    0.003 1%,
+    0.019 2.5%,
+    0.08 5.5%,
+    0.163 8.5%,
+    0.45 18%,
+    0.543 21.5%,
+    0.625 25%,
+    0.695 28.5%,
+    0.753 32%,
+    0.802 35.5%,
+    0.847 39.5%,
+    0.886 44%,
+    0.919 49%,
+    0.944 54.5%,
+    0.965 61%,
+    0.988 75.5%,
+    1
+  );
+  --ease-spring-snappy: linear(
+    0,
+    0.007 1.5%,
+    0.026 3%,
+    0.054 4.5%,
+    0.102 6.5%,
+    0.19 9.5%,
+    0.511 19.5%,
+    0.609 23%,
+    0.683 26%,
+    0.747 29%,
+    0.809 32.5%,
+    0.86 36%,
+    0.901 39.5%,
+    0.936 43.5%,
+    0.963 48%,
+    0.984 53%,
+    0.997 58.5%,
+    1.006 72%,
+    1
+  );
+  --ease-spring-bouncy: linear(
+    0,
+    0.009 1.5%,
+    0.033 3%,
+    0.07 4.5%,
+    0.116 6%,
+    0.227 9%,
+    0.476 15%,
+    0.594 18%,
+    0.699 21%,
+    0.776 23.5%,
+    0.841 26%,
+    0.905 29%,
+    0.955 32%,
+    0.992 35%,
+    1.031 40.5%,
+    1.046 47.5%,
+    1.004 77%,
+    1
+  );
+  --dur-press: 340ms;
+  --dur-snappy: 515ms;
+  --dur-push: 675ms;
+  --dur-bouncy: 730ms;
+
+  /* Layout */
+  --gutter: 16px;
+  --section-gap: 35px;
+  --row-min: 44px;
+  --sidebar-w: 260px;
+  --content-max: 1100px;
+
+  /* Z-index scale (§12.1) */
+  --z-content: 0;
+  --z-sticky: 10;
+  --z-bar: 40;
+  --z-sheet: 50;
+  --z-toast: 60;
+}
+
+@media (min-width: 744px) {
+  :root {
+    --gutter: 20px;
+  }
+}
+
+/* Dark: follows the system unless the user forced light */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --sys-blue: #0091ff;
+    --sys-green: #30d158;
+    --sys-red: #ff4245;
+    --sys-orange: #ff9230;
+    --sys-yellow: #ffd600;
+    --sys-teal: #00d2e0;
+    --sys-indigo: #6d7cff;
+    --sys-purple: #db34f2;
+    --sys-pink: #ff375f;
+    --sys-brown: #b78a66;
+    --bg: #000;
+    --card: #1c1c1e;
+    --card-2: #2c2c2e;
+    --fill: rgb(120 120 128 / 0.36);
+    --fill-2: rgb(120 120 128 / 0.24);
+    --label: #fff;
+    --label-2: rgb(235 235 245 / 0.6);
+    --label-3: rgb(235 235 245 / 0.3);
+    --sep: rgb(84 84 88 / 0.6);
+    --bar: rgb(29 29 31 / 0.72);
+    --accent-text: #0091ff;
+    --shadow-card: none;
+    --shadow-float: 0 8px 32px rgb(0 0 0 / 0.5);
+    --scrim: rgb(0 0 0 / 0.6);
+  }
+}
+
+/* Dark: explicit override from Settings → Appearance (same values as above) */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --sys-blue: #0091ff;
+  --sys-green: #30d158;
+  --sys-red: #ff4245;
+  --sys-orange: #ff9230;
+  --sys-yellow: #ffd600;
+  --sys-teal: #00d2e0;
+  --sys-indigo: #6d7cff;
+  --sys-purple: #db34f2;
+  --sys-pink: #ff375f;
+  --sys-brown: #b78a66;
+  --bg: #000;
+  --card: #1c1c1e;
+  --card-2: #2c2c2e;
+  --fill: rgb(120 120 128 / 0.36);
+  --fill-2: rgb(120 120 128 / 0.24);
+  --label: #fff;
+  --label-2: rgb(235 235 245 / 0.6);
+  --label-3: rgb(235 235 245 / 0.3);
+  --sep: rgb(84 84 88 / 0.6);
+  --bar: rgb(29 29 31 / 0.72);
+  --accent-text: #0091ff;
+  --shadow-card: none;
+  --shadow-float: 0 8px 32px rgb(0 0 0 / 0.5);
+  --scrim: rgb(0 0 0 / 0.6);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+/* Tailwind `dark:` variant honors both the system setting and the data-theme override */
+@custom-variant dark {
+  @media (prefers-color-scheme: dark) {
+    &:where(:not([data-theme="light"], [data-theme="light"] *)) {
+      @slot;
+    }
+  }
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
+}
+
+@theme inline {
+  --color-accent: var(--accent);
+  --color-accent-text: var(--accent-text);
+  --color-on-accent: var(--on-accent);
+  --color-success: var(--sys-green);
+  --color-danger: var(--sys-red);
+  --color-warning: var(--sys-orange);
+  --color-bg: var(--bg);
+  --color-card: var(--card);
+  --color-card-2: var(--card-2);
+  --color-fill: var(--fill);
+  --color-fill-2: var(--fill-2);
+  --color-label: var(--label);
+  --color-label-2: var(--label-2);
+  --color-label-3: var(--label-3);
+  --color-sep: var(--sep);
+  --color-bar: var(--bar);
+  --color-scrim: var(--scrim);
+  --color-sys-blue: var(--sys-blue);
+  --color-sys-green: var(--sys-green);
+  --color-sys-red: var(--sys-red);
+  --color-sys-orange: var(--sys-orange);
+  --color-sys-yellow: var(--sys-yellow);
+  --color-sys-teal: var(--sys-teal);
+  --color-sys-indigo: var(--sys-indigo);
+  --color-sys-purple: var(--sys-purple);
+  --color-sys-pink: var(--sys-pink);
+  --color-sys-brown: var(--sys-brown);
+  --color-sys-gray: var(--sys-gray);
+
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-rounded: ui-rounded, system-ui, sans-serif;
+
+  --text-large-title: 34px;
+  --text-large-title--line-height: 41px;
+  --text-large-title--font-weight: 700;
+  --text-title1: 28px;
+  --text-title1--line-height: 34px;
+  --text-title2: 22px;
+  --text-title2--line-height: 28px;
+  --text-title3: 20px;
+  --text-title3--line-height: 25px;
+  --text-headline: 17px;
+  --text-headline--line-height: 22px;
+  --text-headline--font-weight: 600;
+  --text-body: 17px;
+  --text-body--line-height: 22px;
+  --text-callout: 16px;
+  --text-callout--line-height: 21px;
+  --text-subhead: 15px;
+  --text-subhead--line-height: 20px;
+  --text-footnote: 13px;
+  --text-footnote--line-height: 18px;
+  --text-caption: 12px;
+  --text-caption--line-height: 16px;
+
+  --radius-control: 10px;
+  --radius-card: 12px;
+  --radius-tile: 16px;
+  --radius-sheet: 28px;
+  --radius-pill: 9999px;
+
+  --shadow-card: var(--shadow-card);
+  --shadow-float: var(--shadow-float);
+
+  --ease-spring: var(--ease-spring);
+  --ease-spring-snappy: var(--ease-spring-snappy);
+  --ease-spring-bouncy: var(--ease-spring-bouncy);
+
+  --spacing: 4px; /* Tailwind scale = 4px grid: p-2=8, p-4=16, p-11=44 */
+}
+
+/* ==========================================================================
+   Base
+   ========================================================================== */
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+    background: var(--bg);
+  }
+
+  body {
+    min-height: 100dvh;
+    background: var(--bg);
+    color: var(--label);
+    font-family: var(--font-sans);
+    font-size: 17px;
+    line-height: 22px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    overscroll-behavior-y: none;
+  }
+
+  /* iOS zooms on focus when inputs are < 16px */
+  input,
+  select,
+  textarea {
+    font-size: max(16px, 1em);
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+}
+
+/* ==========================================================================
+   Utilities from the spec
+   ========================================================================== */
+
+.material {
+  background: var(--bar);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+}
+@supports not (
+    (backdrop-filter: blur(1px)) or
+    (-webkit-backdrop-filter: blur(1px))
+  ) {
+  .material {
+    background: var(--card);
+  }
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.scroller {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pressable {
+  transition: transform var(--dur-press) var(--ease-spring);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  user-select: none;
+}
+.pressable:active {
+  transform: scale(0.97);
+  transition: transform 90ms ease-out;
+}
+
+/* ==========================================================================
+   View transitions (push / pop) — §12.2
+   ========================================================================== */
+
+::view-transition {
+  pointer-events: none;
+}
+/* PageTransition's box: opaque and at least a screen tall, so a snapshot covers the
+   page underneath it. It also covers the strip under the floating tab bar (main's
+   bottom padding), or during a pop the old page shows through under the bar (QA2
+   NEW-16); the negative margin hands that padding back, so page heights and
+   scroll ranges don't change. */
+.vt-page {
+  min-height: 100dvh;
+  padding-bottom: var(--tabbar-space, 0px);
+  margin-bottom: calc(-1 * var(--tabbar-space, 0px));
+  background: var(--bg);
+}
+@media print {
+  .vt-page {
+    min-height: 0;
+    padding-bottom: 0;
+    margin-bottom: 0;
+  }
+}
+::view-transition-old(.push) {
+  animation: var(--dur-push) var(--ease-spring) both push-out;
+}
+::view-transition-new(.push) {
+  animation: var(--dur-push) var(--ease-spring) both push-in;
+}
+::view-transition-old(.pop) {
+  animation: var(--dur-push) var(--ease-spring) both pop-out;
+  z-index: 1;
+}
+::view-transition-new(.pop) {
+  animation: var(--dur-push) var(--ease-spring) both pop-in;
+}
+@keyframes push-out {
+  to {
+    translate: -30% 0;
+    filter: brightness(0.92);
+  }
+}
+@keyframes push-in {
+  from {
+    translate: 100% 0;
+  }
+}
+@keyframes pop-out {
+  to {
+    translate: 100% 0;
+  }
+}
+@keyframes pop-in {
+  from {
+    translate: -30% 0;
+    filter: brightness(0.92);
+  }
+}
+::view-transition-group(tabbar),
+::view-transition-new(tabbar) {
+  animation: none;
+  z-index: 100;
+}
+::view-transition-old(tabbar) {
+  display: none;
+}
+@keyframes vt-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: 150ms ease both vt-fade !important;
+  }
+  ::view-transition-old(*) {
+    animation-direction: reverse !important;
+  }
+  .pressable:active {
+    transform: none;
+    opacity: 0.6;
+  }
+}
+
+/* ==========================================================================
+   UI kit component styles (src/ui/components/*) — F3
+   Only transform / opacity / filter animate (SPEC §12.2). Interaction states that
+   CSS can express (switch, segmented thumb, dialogs, popovers, skeletons) live here
+   so those components ship little or no JS.
+   ========================================================================== */
+
+@layer components {
+  :root {
+    --seg-thumb: #fff;
+    --sheet-bg: var(--bg);
+    --row-highlight: rgb(209 209 214 / 0.7);
+    --alert-bg: rgb(242 242 242 / 0.85);
+    --tabbar-h: 62px;
+    /* Bottom padding so content clears the floating tab bar (mobile). */
+    --tabbar-space: calc(
+      var(--tabbar-h) +
+      max(env(safe-area-inset-bottom), 12px) +
+      16px
+    );
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --seg-thumb: #636366;
+      --sheet-bg: #1c1c1e;
+      --row-highlight: rgb(58 58 60 / 0.9);
+      --alert-bg: rgb(37 37 37 / 0.85);
+    }
+  }
+  :root[data-theme="dark"] {
+    --seg-thumb: #636366;
+    --sheet-bg: #1c1c1e;
+    --row-highlight: rgb(58 58 60 / 0.9);
+    --alert-bg: rgb(37 37 37 / 0.85);
+  }
+  @media (min-width: 1024px) {
+    :root {
+      --tabbar-space: 0px;
+    }
+  }
+
+  /* ---------- Tones: set --tone (see src/ui/tone.ts) ---------- */
+  .tone-fg {
+    color: var(--tone);
+  }
+  .tone-bg {
+    background-color: var(--tone);
+    color: #fff;
+  }
+  /* Tinted surface + darkened/lightened text that stays readable in both modes */
+  .tint-bg {
+    background-color: color-mix(in srgb, var(--tone) 15%, transparent);
+  }
+  .tint-fg {
+    color: color-mix(in oklab, var(--tone) 60%, var(--label));
+  }
+
+  /* ---------- 44 pt hit area for small controls (QA T4-22) ----------
+     `.hit-44` on a small link/button, or `.hit-44-kids` on a wrapper of them: an
+     invisible ::before grows the tap target to at least 44 × 44 around its center. */
+  .hit-44,
+  .hit-44-kids :is(a, button) {
+    position: relative;
+  }
+  .hit-44::before,
+  .hit-44-kids :is(a, button)::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    transform: translate(-50%, -50%);
+  }
+
+  /* ---------- Grouped lists (§12.4) ---------- */
+  .list-card {
+    background: var(--card);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+    overflow: hidden;
+  }
+  .list-row {
+    position: relative;
+    --sep-inset: 16px;
+  }
+  .list-row[data-icon] {
+    --sep-inset: 60px;
+  }
+  .list-card > :not(:last-child) .list-row::after,
+  .list-card > .list-row:not(:last-child)::after {
+    content: "";
+    position: absolute;
+    left: var(--sep-inset);
+    right: 0;
+    bottom: 0;
+    height: 0.5px;
+    background: var(--sep);
+    pointer-events: none;
+  }
+  @media (max-resolution: 1.5dppx) {
+    .list-card > :not(:last-child) .list-row::after,
+    .list-card > .list-row:not(:last-child)::after {
+      height: 1px;
+    }
+  }
+  .row-press {
+    transition: background-color 350ms ease-out;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .row-press:active {
+    background-color: var(--row-highlight);
+    transition: none;
+  }
+  @media (hover: hover) {
+    .row-press:hover {
+      background-color: var(--fill-2);
+    }
+  }
+
+  /* ---------- Hairlines ---------- */
+  .hairline-b {
+    box-shadow: inset 0 -0.5px 0 var(--sep);
+  }
+  .hairline-t {
+    box-shadow: inset 0 0.5px 0 var(--sep);
+  }
+
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* ---------- Activity indicator (iOS 8-spoke spinner) ---------- */
+  .spinner {
+    animation: ios-spin 0.8s steps(8, end) infinite;
+  }
+  @keyframes ios-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  /* ---------- Skeleton: shimmer-free pulse ---------- */
+  .skeleton {
+    background: var(--fill-2);
+    border-radius: 6px;
+    animation: sk-pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes sk-pulse {
+    50% {
+      opacity: 0.45;
+    }
+  }
+
+  /* ---------- Toggle: 51×31 iOS switch (no JS) ---------- */
+  .ios-switch {
+    appearance: none;
+    -webkit-appearance: none;
+    position: relative;
+    flex: none;
+    width: 51px;
+    height: 31px;
+    margin: 0;
+    border-radius: 9999px;
+    background: var(--fill);
+    cursor: pointer;
+    transition: background-color 250ms ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .ios-switch::before {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 27px;
+    height: 27px;
+    border-radius: 9999px;
+    background: #fff;
+    box-shadow:
+      0 3px 8px rgb(0 0 0 / 0.15),
+      0 3px 1px rgb(0 0 0 / 0.06);
+    transform-origin: left center;
+    transition: transform var(--dur-snappy) var(--ease-spring-snappy);
+  }
+  .ios-switch:checked {
+    background: var(--sys-green);
+  }
+  .ios-switch:checked::before {
+    transform: translateX(20px);
+    transform-origin: right center;
+  }
+  .ios-switch:active::before {
+    transform: scaleX(1.15);
+  }
+  .ios-switch:checked:active::before {
+    transform: translateX(20px) scaleX(1.15);
+  }
+  .ios-switch:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+  /* Native switch (haptics hack) keeps the system look */
+  .ios-switch[switch] {
+    appearance: auto;
+    -webkit-appearance: auto;
+  }
+  .ios-switch[switch]::before {
+    content: none;
+  }
+
+  /* ---------- Segmented control: sliding thumb ---------- */
+  .seg {
+    position: relative;
+    display: grid;
+    grid-auto-columns: minmax(0, 1fr);
+    grid-auto-flow: column;
+    padding: 2px;
+    border-radius: 9px;
+    background: var(--fill-2);
+    isolation: isolate;
+  }
+  /* Desktop: don't stretch across a wide page (QA T4-29); `lg:max-w-none` opts out. */
+  @media (min-width: 1024px) {
+    .seg {
+      max-width: 420px;
+    }
+  }
+  .seg-thumb {
+    position: absolute;
+    top: 2px;
+    bottom: 2px;
+    left: 2px;
+    z-index: -1;
+    width: calc((100% - 4px) / var(--n));
+    transform: translateX(calc(var(--i) * 100%));
+    border-radius: 7px;
+    background: var(--seg-thumb);
+    box-shadow:
+      0 3px 8px rgb(0 0 0 / 0.12),
+      0 3px 1px rgb(0 0 0 / 0.04);
+    transition: transform var(--dur-snappy) var(--ease-spring-snappy);
+  }
+  .seg[data-pressed] .seg-thumb {
+    transform: translateX(calc(var(--i) * 100%)) scale(0.95);
+  }
+  .seg-item {
+    position: relative;
+    display: flex;
+    min-height: 28px;
+    align-items: center;
+    justify-content: center;
+    padding: 0 8px;
+    border-radius: 7px;
+    font-size: 13px;
+    line-height: 18px;
+    font-weight: 500;
+    color: var(--label);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    transition: opacity 200ms;
+  }
+  /* 44px hit target without growing the visual control */
+  .seg-item::after {
+    content: "";
+    position: absolute;
+    inset: -8px 0;
+  }
+  .seg-item:has(input:checked) {
+    font-weight: 600;
+  }
+  .seg-item:has(input:focus-visible) {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  .seg-item:active:not(:has(input:checked)) {
+    opacity: 0.5;
+  }
+  .seg-item:has(input:disabled) {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  /* ---------- Large title header (§12.4): collapses on scroll ---------- */
+  /* No box of its own: the sticky bar's containing block is the page, so the bar
+     stays pinned after the large title scrolls away. */
+  [data-lt] {
+    display: contents;
+  }
+  .lt-bar {
+    position: sticky;
+    top: 0;
+    z-index: var(--z-bar);
+  }
+  .lt-bar::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: var(--bar);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    backdrop-filter: saturate(180%) blur(20px);
+    box-shadow: inset 0 -0.5px 0 var(--sep);
+    opacity: 0;
+  }
+  .lt-inline {
+    opacity: 0;
+  }
+  @supports (animation-timeline: scroll()) {
+    .lt-bar::before,
+    .lt-inline {
+      animation: lt-reveal linear both;
+      animation-timeline: scroll();
+      animation-range: 0px 52px;
+    }
+  }
+  @keyframes lt-reveal {
+    to {
+      opacity: 1;
+    }
+  }
+  /* IntersectionObserver fallback sets data-scrolled on the header */
+  [data-scrolled] > .lt-bar::before,
+  [data-scrolled] > .lt-bar .lt-inline {
+    opacity: 1;
+    transition: opacity 200ms ease;
+  }
+
+  /* ---------- Swipe actions: scroll-snap row ---------- */
+  .swipe {
+    display: flex;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+  .swipe::-webkit-scrollbar {
+    display: none;
+  }
+  .swipe > * {
+    flex: none;
+  }
+  .swipe-leading {
+    scroll-snap-align: start;
+  }
+  .swipe:not([data-ready]) > .swipe-leading {
+    display: none;
+  }
+  .swipe-content {
+    width: 100%;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+  }
+  .swipe-trailing {
+    scroll-snap-align: end;
+  }
+
+  /* ---------- Sheets (<dialog>.showModal) ---------- */
+  dialog.sheet {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--label);
+    overflow: hidden;
+    /* clip (not hidden): focus-into-view must never scroll the dialog, or the
+       scroll offset cancels the panel's translateY */
+    overflow: clip;
+    outline: none;
+  }
+  dialog.sheet::backdrop {
+    background: transparent;
+  }
+  .sheet-scrim {
+    position: absolute;
+    inset: 0;
+    background: var(--scrim);
+    opacity: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .sheet-panel {
+    --large-h: calc(
+      var(--vvh, 100dvh) -
+      max(env(safe-area-inset-top), 12px) -
+      10px
+    );
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: var(--kb, 0px);
+    display: flex;
+    height: var(--large-h);
+    flex-direction: column;
+    border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
+    background: var(--sheet-bg);
+    box-shadow: var(--shadow-float);
+    transform: translate3d(0, 110%, 0);
+    will-change: transform;
+    overflow: hidden;
+  }
+  .sheet-panel[data-fit] {
+    height: auto;
+    max-height: var(--large-h);
+  }
+  .sheet-panel[data-bare] {
+    background: transparent;
+    box-shadow: none;
+    border-radius: 0;
+    overflow: visible;
+  }
+  /* Dark: the sheet is an elevated surface, so cards inside sit one step lighter */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .sheet-panel:not([data-bare]) {
+      --card: #2c2c2e;
+      --bg: #1c1c1e;
+    }
+  }
+  :root[data-theme="dark"] .sheet-panel:not([data-bare]) {
+    --card: #2c2c2e;
+    --bg: #1c1c1e;
+  }
+  .sheet-grab {
+    touch-action: none;
+    cursor: grab;
+  }
+  .sheet-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: calc(env(safe-area-inset-bottom) + 16px);
+  }
+  /* Desktop: sheets become centered modals or right-side panels (§12.4) */
+  @media (min-width: 1024px) {
+    .sheet-panel:not([data-bare]) {
+      inset: 0;
+      width: min(560px, calc(100% - 48px));
+      height: fit-content;
+      max-height: min(85dvh, 820px);
+      margin: auto;
+      border-radius: 16px;
+    }
+    .sheet-panel[data-desktop="panel"]:not([data-bare]) {
+      inset: 0 0 0 auto;
+      width: min(440px, 100%);
+      height: 100%;
+      max-height: none;
+      margin: 0;
+      border-radius: 0;
+    }
+    .sheet-panel[data-bare] {
+      left: 50%;
+      right: auto;
+      width: 400px;
+      margin-left: -200px;
+      bottom: 24px;
+    }
+  }
+
+  /* ---------- Alerts (<dialog>) ---------- */
+  dialog.alert {
+    width: 270px;
+    max-width: calc(100% - 48px);
+    margin: auto;
+    padding: 0;
+    border: 0;
+    border-radius: 14px;
+    background: var(--alert-bg);
+    -webkit-backdrop-filter: saturate(180%) blur(30px);
+    backdrop-filter: saturate(180%) blur(30px);
+    color: var(--label);
+    box-shadow: var(--shadow-float);
+    opacity: 0;
+    transform: scale(1.1);
+    transition:
+      opacity 200ms ease,
+      transform var(--dur-snappy) var(--ease-spring-snappy),
+      overlay 200ms allow-discrete,
+      display 200ms allow-discrete;
+  }
+  dialog.alert[open] {
+    opacity: 1;
+    transform: none;
+  }
+  dialog.alert::backdrop {
+    background: rgb(0 0 0 / 0);
+    transition:
+      background-color 200ms ease,
+      overlay 200ms allow-discrete,
+      display 200ms allow-discrete;
+  }
+  dialog.alert[open]::backdrop {
+    background: var(--scrim);
+  }
+  @starting-style {
+    dialog.alert[open] {
+      opacity: 0;
+      transform: scale(1.1);
+    }
+    dialog.alert[open]::backdrop {
+      background: rgb(0 0 0 / 0);
+    }
+  }
+
+  /* ---------- Context menu (popover) ---------- */
+  .ctx-menu {
+    position: fixed;
+    inset: auto;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    min-width: 220px;
+    max-width: min(280px, calc(100vw - 32px));
+    border-radius: 14px;
+    background: var(--alert-bg);
+    -webkit-backdrop-filter: saturate(180%) blur(30px);
+    backdrop-filter: saturate(180%) blur(30px);
+    color: var(--label);
+    box-shadow: var(--shadow-float);
+    overflow: hidden;
+    opacity: 0;
+    transform: scale(0.6);
+    transition:
+      opacity 180ms ease,
+      transform var(--dur-snappy) var(--ease-spring-snappy),
+      overlay 180ms allow-discrete,
+      display 180ms allow-discrete;
+  }
+  .ctx-menu:popover-open {
+    opacity: 1;
+    transform: none;
+  }
+  @starting-style {
+    .ctx-menu:popover-open {
+      opacity: 0;
+      transform: scale(0.6);
+    }
+  }
+  .ctx-target {
+    -webkit-touch-callout: none;
+    transition: transform var(--dur-press) var(--ease-spring);
+  }
+  .ctx-target[data-pressing] {
+    transform: scale(0.97);
+    transition-duration: 450ms;
+  }
+
+  /* ---------- Native date/time inputs: left-aligned like other fields ---------- */
+  input[type="date"]::-webkit-date-and-time-value,
+  input[type="time"]::-webkit-date-and-time-value {
+    text-align: left;
+    min-height: 22px;
+  }
+
+  /* ---------- Toasts ---------- */
+  .toast-region {
+    position: fixed;
+    top: calc(env(safe-area-inset-top) + 8px);
+    left: 50%;
+    z-index: var(--z-toast);
+    width: min(420px, calc(100% - 2 * var(--gutter)));
+    translate: -50% 0;
+    pointer-events: none;
+  }
+
+  /* ---------- Photo lightbox ---------- */
+  dialog.lightbox {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: #000;
+    color: #fff;
+    opacity: 0;
+    transition:
+      opacity 250ms ease,
+      overlay 250ms allow-discrete,
+      display 250ms allow-discrete;
+  }
+  dialog.lightbox[open] {
+    opacity: 1;
+  }
+  @starting-style {
+    dialog.lightbox[open] {
+      opacity: 0;
+    }
+  }
+  .lightbox-track {
+    display: flex;
+    height: 100%;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+  }
+  .lightbox-track::-webkit-scrollbar {
+    display: none;
+  }
+  .lightbox-track > * {
+    flex: none;
+    width: 100%;
+    scroll-snap-align: center;
+    scroll-snap-stop: always;
+  }
+
+  /* ---------- Before/after compare ---------- */
+  .compare-range {
+    appearance: none;
+    -webkit-appearance: none;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    background: transparent;
+    cursor: ew-resize;
+    opacity: 0;
+  }
+  .compare-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 48px;
+    height: 100vh;
+  }
+  .compare-range::-moz-range-thumb {
+    width: 48px;
+    height: 100vh;
+    border: 0;
+  }
+
+  /* ---------- Leaflet in dark mode: invert raster tiles ---------- */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .map-view .leaflet-tile-pane {
+      filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.9);
+    }
+  }
+  :root[data-theme="dark"] .map-view .leaflet-tile-pane {
+    filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.9);
+  }
+  .map-view .leaflet-container {
+    background: var(--card-2);
+    font: inherit;
+  }
+  .map-pin {
+    background: none;
+    border: 0;
+  }
+
+  /* ---------- Entrance animations (CSS-only, cheap) ---------- */
+  .enter-fade-up {
+    animation: enter-fade-up var(--dur-snappy) var(--ease-spring) both;
+  }
+  @keyframes enter-fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+  }
+  .enter-toast {
+    animation: enter-toast var(--dur-bouncy) var(--ease-spring-snappy) backwards;
+  }
+  @keyframes enter-toast {
+    from {
+      opacity: 0;
+      transform: translateY(-110%) scale(0.9);
+    }
+  }
+  .enter-pop {
+    animation: enter-pop var(--dur-bouncy) var(--ease-spring-bouncy) both;
+  }
+  @keyframes enter-pop {
+    from {
+      opacity: 0;
+      transform: scale(0.6);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .skeleton,
+    .enter-fade-up,
+    .enter-toast,
+    .enter-pop {
+      animation: none;
+    }
+    .spinner {
+      animation-duration: 1.6s;
+    }
+    .ios-switch::before,
+    .seg-thumb,
+    .ctx-target,
+    dialog.alert,
+    .ctx-menu {
+      transition-duration: 0.01ms;
+    }
+    dialog.alert,
+    .ctx-menu {
+      transform: none;
+    }
+  }
+}
+
+/* ==========================================================================
+   Print — §12.5 (invoices, receipts, estimates, statements, evidence pack)
+   Mark app chrome with [data-chrome] or .print-hide; .print-only shows only on paper.
+   ========================================================================== */
+
+.print-only {
+  display: none;
+}
+
+@page {
+  size: Letter;
+  margin: 12mm;
+}
+
+@media print {
+  :root {
+    color-scheme: light;
+    --bg: #fff;
+    --card: #fff;
+    --card-2: #fff;
+    --label: #000;
+    --label-2: #333;
+    --label-3: #666;
+    --sep: #999;
+    --shadow-card: none;
+    --shadow-float: none;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+    font-size: 12pt;
+    line-height: 1.35;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  [data-chrome],
+  .print-hide,
+  nav,
+  dialog,
+  [role="navigation"],
+  [role="toolbar"] {
+    display: none !important;
+  }
+
+  /* The shell's sidebar column is hidden: let the content take the full width
+     (QA2 NEW-14). */
+  .app-shell {
+    display: block !important;
+    min-height: 0;
+  }
+  .app-shell main {
+    padding-bottom: 0 !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  .material {
+    background: none !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  * {
+    box-shadow: none !important;
+    animation: none !important;
+    transition: none !important;
+  }
+
+  small,
+  .text-caption,
+  .text-footnote {
+    font-size: 12pt !important;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  thead {
+    display: table-header-group;
+  }
+  tfoot {
+    display: table-footer-group;
+  }
+  tr,
+  figure,
+  img {
+    break-inside: avoid;
+  }
+
+  /* Never rely on color alone: status and totals use bold + boxes */
+  .print-box {
+    border: 1px solid #000;
+    padding: 2mm 3mm;
+  }
+  .print-strong {
+    font-weight: 700;
+  }
+
+  .print-photos {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 4mm;
+  }
+  .print-photos figure {
+    margin: 0;
+  }
+  .print-photos img {
+    width: 100%;
+    height: auto;
+  }
+  .print-photos figcaption {
+    font-size: 12pt;
+    margin-top: 1mm;
+  }
+
+  .print-section {
+    break-before: page;
+  }
+  .print-section:first-of-type {
+    break-before: auto;
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "name": "crm",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "biome check",
+    "format": "biome format --write",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio",
+    "seed:demo": "tsx --conditions=react-server scripts/seed.ts",
+    "demo:businesses": "bash scripts/demo-businesses.sh",
+    "build:embed": "tsx scripts/build-embed.ts",
+    "export": "tsx --conditions=react-server scripts/export.ts",
+    "import:csv": "tsx --conditions=react-server scripts/import-csv.ts",
+    "restore": "tsx --conditions=react-server scripts/restore.ts",
+    "gen:vapid": "tsx scripts/gen-vapid.ts",
+    "analyze": "next analyze"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "0.5.10",
+    "@vercel/functions": "3.10.1",
+    "aws4fetch": "1.0.20",
+    "drizzle-orm": "0.45.4",
+    "leaflet": "1.9.4",
+    "libphonenumber-js": "1.13.15",
+    "lucide-react": "1.57.0",
+    "motion": "14.2.0",
+    "next": "16.4.1",
+    "pg": "8.23.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "server-only": "0.0.1",
+    "web-push": "3.6.7",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.4.2",
+    "@tailwindcss/turbopack": "^4",
+    "@types/leaflet": "1.9.22",
+    "@types/node": "^24",
+    "@types/pg": "8.23.1",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/web-push": "3.6.4",
+    "drizzle-kit": "0.31.11",
+    "tailwindcss": "^4",
+    "tsx": "4.23.15",
+    "typescript": "^5",
+    "vitest": "5.0.4"
+  }
+}
