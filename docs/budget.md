@@ -8,9 +8,9 @@ Previous measurement (2026-10-15 integration) in brackets.
 
 | Budget | Limit | Measured | Status |
 |---|---|---|---|
-| Shell JS (framework + root and `(app)` layouts) | ≤ 150 KB gz | 149.9 KB gz [149.4] | ok (0.1 KB headroom) |
+| Shell JS (framework + root and `(app)` layouts) | ≤ 150 KB gz | 148.6 KB gz after the UX round [149.9 QA2] | ok (1.4 KB headroom) |
 | Route-specific client JS | ≤ 30 KB gz per route (map excluded) | most routes 3–28 KB; 12 app/public routes over (below) | **over** on 12 routes |
-| CSS | ≤ 25 KB gz | 17.2 KB + 2.6 KB gz [16.9 + 2.6] | ok |
+| CSS | ≤ 25 KB gz | app CSS 19.0 KB gz after the UX round [17.2–17.4] + 2.6 KB | ok |
 | `public/embed.js` | ≤ 3 KB gz | 3,783 B raw, 1.8 KB gz | ok |
 | `public/sw.js` | ~3 KB | 1.4 KB gz | ok |
 | `/map` (excluded from the route budget) | — | 22.7 KB + Leaflet ~43 KB in a lazy `ssr:false` chunk | ok |
@@ -33,6 +33,27 @@ left: the next shell addition must pay for itself (see "Ship the remaining app s
 | `/customers/[id]` | 218.5 KB | 149.9 KB | 68.6 KB |
 | `/insights` | 176.0 KB | 149.9 KB | 26.2 KB |
 | `/login` (`(auth)` layouts) | 142.0 KB | 135.1 KB | 6.9 KB |
+
+### UX round (2026-10-18)
+
+Same method, the QA2 commit rebuilt as the baseline (its numbers match the table above within
+0.3 KB). The new pickers, address autocomplete and links cost JS where they are used:
+
+| Route | Route JS before → after | Why |
+|---|---|---|
+| Shell | 149.6 → **148.6 KB** | NavBar left the shell: `NavTitlesProvider` and `SkeletonPage` got their own modules (the layout reached NavBar through them); `HistoryTracker` (+0.7 KB) is the only addition. |
+| `/jobs`, `/customers`, `/settings`, `/more` | +1.8 to +2.9 KB (first load +0.8 to +2.0) | History breadcrumbs in every nav bar. The long-press trail menu and the "…" popover load on first use. |
+| `/map` | +3.0 KB | Breadcrumbs; Enter/Space on pins. |
+| `/schedule` | 18.7 → 26.9 KB | The date jump (calendar window) and the map layout's loader. The map itself is a lazy chunk. |
+| `/today` | 44.3 → 57.3 KB | Date and time pickers in the task sheet, the route card's loader (Leaflet stays lazy), clickable rows. |
+| `/customers/new`, `/settings/company` | 11.7 → 27.9, 10.5 → 29.1 KB | Address autocomplete plus the calendar (custom date fields) or the time wheels (business hours). |
+| Detail pages (`/jobs/[id]`, `/customers/[id]`, `/team/[id]`, `/tools/[id]`…) | +7 to +14 KB | Pickers in their sheets, `TextLink`s, maps links, breadcrumbs. |
+
+Replacing the native inputs costs about 10 KB gz on a route that has both pickers (Calendar
+~5 KB, time wheels and segments ~5 KB, plus the Sheet when the route had none). Pages import
+`DateField`/`TimeField` from their own modules (not `Field`), so a form without dates pays
+nothing. Next candidates: lazy-load the task sheet on `/today`, and the calendar's month grid
+behind first open (keep a cached chunk for offline techs first).
 
 ### Routes over 30 KB gz (QA/perf follow-up)
 
