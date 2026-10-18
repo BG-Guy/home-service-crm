@@ -168,7 +168,10 @@ export default async function PaymentsPage({
                 ? `${summary.unverifiedStale} older than ${s.payments.unverified_alert_days} days`
                 : "All recent"
             }
-            href="/payments?tab=unverified"
+            href={
+              tab === "unverified" ? "/payments" : "/payments?tab=unverified"
+            }
+            className={tab === "unverified" ? "ring-2 ring-accent" : undefined}
           />
           <StatCard
             label="Card fees this month"
@@ -268,37 +271,43 @@ async function AllTab({
   ];
   return (
     <>
-      {active.length > 0 && (
-        <ChipRow label="Active filters">
-          {active.map((f) => (
+      <div className="flex flex-col gap-2">
+        {active.length > 0 && (
+          <ChipRow label="Active filters">
+            {active.map((f) => (
+              <Chip
+                key={f.key}
+                href={f.href}
+                selected
+                replace
+                icon={<X size={14} aria-hidden />}
+              >
+                {f.label}
+                <span className="sr-only">, remove filter</span>
+              </Chip>
+            ))}
+          </ChipRow>
+        )}
+        <ChipRow label="Filter by method">
+          <Chip
+            href={href(sp, { method: undefined })}
+            selected={!method}
+            replace
+          >
+            All methods
+          </Chip>
+          {METHODS.map((m) => (
             <Chip
-              key={f.key}
-              href={f.href}
-              selected
+              key={m}
+              href={href(sp, { method: m })}
+              selected={method === m}
               replace
-              icon={<X size={14} aria-hidden />}
             >
-              {f.label}
-              <span className="sr-only">, remove filter</span>
+              {METHOD_LABEL[m]}
             </Chip>
           ))}
         </ChipRow>
-      )}
-      <ChipRow label="Filter by method">
-        <Chip href={href(sp, { method: undefined })} selected={!method} replace>
-          All methods
-        </Chip>
-        {METHODS.map((m) => (
-          <Chip
-            key={m}
-            href={href(sp, { method: m })}
-            selected={method === m}
-            replace
-          >
-            {METHOD_LABEL[m]}
-          </Chip>
-        ))}
-      </ChipRow>
+      </div>
       {rows.length === 0 ? (
         <div className="list-card">
           <EmptyState

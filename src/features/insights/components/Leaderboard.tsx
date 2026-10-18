@@ -21,6 +21,7 @@ function ProfileLink({
       href={href}
       transitionTypes={["nav-forward"]}
       aria-label={`${name}'s profile`}
+      title={`${name}'s profile`}
       className={`pressable flex shrink-0 items-center justify-center rounded-full text-label-2 hover:bg-fill-2 hover:text-accent-text ${className}`}
     >
       <UserRound size={16} aria-hidden />

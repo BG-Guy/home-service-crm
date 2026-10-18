@@ -36,7 +36,11 @@ export async function TechDashboard({
   const next = s.today.next;
   // The tiles open the jobs (or review requests) behind each number.
   const range = `from=${period.fromKey}&to=${period.toKey}`;
-  const completedJobs = `/jobs?mine=1&status=completed,closed&${range}`;
+  const jobsOn =
+    user.perms.has("jobs.view_all") || user.perms.has("jobs.view_own");
+  const completedJobs = jobsOn
+    ? `/jobs?mine=1&status=completed,closed&${range}`
+    : undefined;
   const progress = s.today.total ? s.today.done / s.today.total : 0;
   const cmp = period.compareLabel;
   const d = (
@@ -137,7 +141,9 @@ export async function TechDashboard({
             delta={d(s.callbackRate, prev.callbackRate, true, "down")}
             footnote={plural(s.callbacks, "callback")}
             // Past and upcoming callback visits on your jobs in the period.
-            href={`/jobs?mine=1&callback=1&view=all&${range}`}
+            href={
+              jobsOn ? `/jobs?mine=1&callback=1&view=all&${range}` : undefined
+            }
           />
           <StatCard
             label="Review clicks"
