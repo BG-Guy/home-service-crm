@@ -95,8 +95,18 @@ export default async function SettingsAuditPage({
           name="entityId"
           defaultValue={sp.entityId ?? ""}
         />
-        <DateField label="From" name="from" defaultValue={sp.from ?? ""} />
-        <DateField label="To" name="to" defaultValue={sp.to ?? ""} />
+        <DateField
+          label="From"
+          name="from"
+          placeholder="Any"
+          defaultValue={sp.from ?? ""}
+        />
+        <DateField
+          label="To"
+          name="to"
+          placeholder="Any"
+          defaultValue={sp.to ?? ""}
+        />
         <div className="col-span-full flex gap-2">
           <button
             type="submit"
