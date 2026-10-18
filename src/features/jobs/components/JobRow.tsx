@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { formatInTz } from "@/lib/time";
 import { Avatar } from "@/ui/components/Avatar";
 import { Pill, StatusPill } from "@/ui/components/StatusPill";
@@ -11,11 +12,14 @@ export function JobRow({
   tz,
   showDate = true,
   href,
+  marker,
 }: {
   job: JobListItem;
   tz: string;
   showDate?: boolean;
   href?: string;
+  /** Leading badge, e.g. the route stop number that matches a map pin. */
+  marker?: ReactNode;
 }) {
   const start = job.windowStart;
   return (
@@ -25,6 +29,7 @@ export function JobRow({
       transitionTypes={["nav-forward"]}
       className="list-row row-press flex min-h-[68px] w-full items-center gap-3 pl-4 pr-3 text-left outline-offset-[-2px]"
     >
+      {marker}
       <span className="flex w-14 shrink-0 flex-col items-start py-2.5">
         {start ? (
           <>

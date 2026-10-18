@@ -9,9 +9,20 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, Suspense } from "react";
+import { getMapConfig } from "@/adapters/maps";
 import { CustomerCard, PropertyCard } from "@/features/customers/slots";
 import { JobRow } from "@/features/jobs/components/JobRow";
+import { RouteMapCard } from "@/features/jobs/components/schedule/RouteMapCard";
+import { StopBadge } from "@/features/jobs/components/schedule/StopBadge";
 import { listMyDay } from "@/features/jobs/queries";
+import {
+  isDoneStatus,
+  isLocated,
+  routeLayers,
+  singleRoute,
+  techColor,
+} from "@/features/jobs/route-plan";
+import type { JobListItem } from "@/features/jobs/types";
 import { OutboxCountBadge } from "@/features/messaging/slots";
 import { CashOnHandPill, MyEarningsCard } from "@/features/payroll/slots";
 import { TaskList } from "@/features/tasks/components/TaskList";
@@ -41,6 +52,64 @@ const DONE = new Set(["completed", "closed", "cancelled"]);
 
 function Slot({ children }: { children: ReactNode }) {
   return <Suspense fallback={<SkeletonCard lines={2} />}>{children}</Suspense>;
+}
+
+/** "Stop 3" / "Stops 3 and 4" / "Stops 2, 3 and 5". */
+function stopList(ns: number[]): string {
+  if (ns.length === 1) return `Stop ${ns[0]}`;
+  return `Stops ${ns.slice(0, -1).join(", ")} and ${ns[ns.length - 1]}`;
+}
+
+/**
+ * Today's stops as map layers, numbered in route order. Only jobs whose address the
+ * tech may see right now get a pin (`lat`/`lng` are null outside the contact window).
+ */
+function todaysRoute(user: SessionUser, today: JobListItem[]) {
+  const mine = today
+    .flatMap((j) => j.assignees)
+    .find((a) => a.userId === user.id);
+  const color = techColor(mine?.color, user.id);
+  const plan = singleRoute(
+    user.id,
+    today.map((j) => ({
+      id: j.id,
+      number: j.number,
+      title: j.title,
+      status: j.status,
+      start: j.windowStart,
+      techIds: [user.id],
+      lat: j.lat ?? null,
+      lng: j.lng ?? null,
+    })),
+  );
+  const { pins, lines } = routeLayers(plan, {
+    color: () => color,
+    name: () => "",
+  });
+  const masked = today.flatMap((j, i) =>
+    !isLocated(j) && j.addressMasked ? [i + 1] : [],
+  );
+  const unlocated = today.flatMap((j, i) =>
+    !isLocated(j) && !j.addressMasked ? [i + 1] : [],
+  );
+  // No pin yet (early in the day): say why there's no map instead of nothing.
+  if (pins.length === 0)
+    return {
+      color,
+      pins,
+      lines,
+      note: masked.length ? "Stops show on the map 2 h before each visit." : "",
+    };
+  const notes: string[] = [];
+  if (masked.length)
+    notes.push(
+      `${stopList(masked)} ${masked.length === 1 ? "shows" : "show"} on the map 2 h before the visit.`,
+    );
+  if (unlocated.length)
+    notes.push(
+      `${stopList(unlocated)} ${unlocated.length === 1 ? "isn’t" : "aren’t"} on the map: the address couldn’t be located.`,
+    );
+  return { color, pins, lines, note: notes.join(" ") };
 }
 
 export async function MyDay({
@@ -82,6 +151,8 @@ export async function MyDay({
   const odometerHint = requireOdo
     ? await odometerApprovalHint(user)
     : undefined;
+  const route = todaysRoute(user, today);
+  const tiles = getMapConfig();
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)]">
@@ -198,22 +269,59 @@ export async function MyDay({
       )}
 
       {today.length > 0 && (
-        <ListSection
-          header={
-            <span className="flex items-center gap-1.5">
+        // The route map (lazy, numbered pins + a dashed line in visit order) sits
+        // between the header and the list; the list rows carry the same numbers.
+        <section aria-labelledby="todays-route-h">
+          <div className="flex items-end justify-between gap-3 px-4 pb-1.5">
+            <h2
+              id="todays-route-h"
+              className="flex items-center gap-1.5 text-footnote uppercase text-label-2"
+            >
               <Route size={13} aria-hidden /> Today's route
-            </span>
-          }
-          trailing={
+            </h2>
             <span className="num text-footnote text-label-2">
               {doneCount} of {counted} done
             </span>
-          }
-        >
-          {today.map((j) => (
-            <JobRow key={j.id} job={j} tz={tz} showDate={false} />
-          ))}
-        </ListSection>
+          </div>
+          {route.pins.length > 0 && (
+            <RouteMapCard
+              pins={route.pins}
+              lines={route.lines}
+              tileUrl={tiles.tileUrl}
+              attribution={tiles.attribution}
+              canSetup={user.perms.has("settings.manage")}
+              label={`Map of today's route: ${route.pins.length} ${route.pins.length === 1 ? "stop" : "stops"}, numbered as in the list below`}
+              className="mb-2 h-48"
+            />
+          )}
+          <ul className="list-card">
+            {today.map((j, i) => (
+              <li key={j.id}>
+                <JobRow
+                  job={j}
+                  tz={tz}
+                  showDate={false}
+                  marker={
+                    route.pins.length > 0 ? (
+                      <StopBadge
+                        label={String(i + 1)}
+                        color={route.color}
+                        offMap={!isLocated(j)}
+                        done={isDoneStatus(j.status)}
+                        size={24}
+                      />
+                    ) : undefined
+                  }
+                />
+              </li>
+            ))}
+          </ul>
+          {route.note && (
+            <p className="px-4 pt-1.5 text-footnote text-label-2">
+              {route.note}
+            </p>
+          )}
+        </section>
       )}
       {carryOver.length > 0 && (
         <ListSection

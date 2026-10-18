@@ -50,6 +50,11 @@ export interface BoardJob {
   customerName: string;
   addressShort: string;
   zip: string;
+  /** The property's geocode (map layout); null when not located or the address is masked. */
+  lat: number | null;
+  lng: number | null;
+  /** Street masked for this viewer outside the job's contact window (so no pin either). */
+  addressMasked?: boolean;
   start: string | null;
   end: string | null;
   dayKey: string | null;
@@ -201,6 +206,8 @@ function toBoardJob(
     customerName: r.customerName,
     addressShort: r.unit ? `${r.street} ${r.unit}` : r.street,
     zip: r.zip,
+    lat: r.lat,
+    lng: r.lng,
     start: isoOrNull(start),
     end: isoOrNull(
       end ?? (start ? new Date(start.getTime() + 3600_000) : null),
@@ -229,7 +236,7 @@ function toBoardJob(
 
 /** Annotate conflicts + travel hints in place (per tech, per day, time order). */
 export function annotateConflicts(
-  list: (BoardJob & { lat?: number | null; lng?: number | null })[],
+  list: BoardJob[],
   techs: BoardTech[],
   todayKey: string,
 ): void {
@@ -362,10 +369,11 @@ export async function loadBoard(params: {
     );
     const job = toBoardJob(r, a, tz, deposits[r.j.id] ?? null);
     return reveal
-      ? { ...job, lat: r.lat, lng: r.lng }
+      ? job
       : {
           ...job,
           addressShort: maskStreetLine(r.street),
+          addressMasked: true,
           lat: null,
           lng: null,
         };
@@ -376,8 +384,6 @@ export async function loadBoard(params: {
       j.techIds.includes(params.tech as string),
     );
   annotateConflicts(rangeJobs, techs, todayKey);
-  const strip = ({ lat: _a, lng: _b, ...j }: ReturnType<typeof mk>): BoardJob =>
-    j;
   return {
     view,
     date,
@@ -387,9 +393,9 @@ export async function loadBoard(params: {
     startHour: settings.jobs.board_start_hour,
     endHour: settings.jobs.board_end_hour,
     techs: params.tech ? techs.filter((t) => t.id === params.tech) : techs,
-    jobs: rangeJobs.map(strip),
-    unscheduled: unsched.map(mk).map(strip),
-    onHold: onHold.map(mk).map(strip),
-    unconfirmedTomorrow: unconf.map(mk).map(strip),
+    jobs: rangeJobs,
+    unscheduled: unsched.map(mk),
+    onHold: onHold.map(mk),
+    unconfirmedTomorrow: unconf.map(mk),
   };
 }
