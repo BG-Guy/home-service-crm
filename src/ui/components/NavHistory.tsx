@@ -3,7 +3,15 @@
 import { ChevronLeft, ChevronRight, Ellipsis } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  lazy,
+  type RefObject,
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import {
   type Crumb,
   crumbsBefore,
@@ -14,8 +22,8 @@ import {
   titleOf,
 } from "@/client/nav-history";
 import { NAV_BACK } from "../motion/PageTransition";
-import { AnchoredPopover } from "./AnchoredPopover";
-import { ContextMenu } from "./ContextMenu";
+import type { AnchoredPopover as AnchoredPopoverType } from "./AnchoredPopover";
+import type { ContextMenu as ContextMenuType } from "./ContextMenu";
 import { backForPath, type NavTitle, titleForPath } from "./nav-titles";
 import { useNavTitles } from "./nav-titles-context";
 
@@ -28,6 +36,25 @@ import { useNavTitles } from "./nav-titles-context";
  *   on desktop a back chevron plus the trail of earlier pages. Without a trail
  *   (a fresh tab, a shared link) it falls back to the page's static parent.
  */
+
+// Every page has a nav bar, so the trail's two menus (long-press on the phone back
+// button, "…" for the earlier crumbs) load on first use instead of with every page.
+// If their chunk can't load (offline, never fetched), the back button stays plain
+// and the "…" opens nothing.
+const Passthrough: typeof ContextMenuType = ({ children }) => <>{children}</>;
+const TrailMenu = lazy(() =>
+  import("./ContextMenu").then(
+    (m) => ({ default: m.ContextMenu }),
+    () => ({ default: Passthrough }),
+  ),
+);
+const NoPopover: typeof AnchoredPopoverType = () => null;
+const loadPopover = () =>
+  import("./AnchoredPopover").then(
+    (m) => ({ default: m.AnchoredPopover }),
+    () => ({ default: NoPopover }),
+  );
+const CrumbsPopover = lazy(loadPopover);
 
 export interface BackTarget {
   href: string;
@@ -117,16 +144,20 @@ export function HistoryBack({
       {!root && prev && (
         <span className="flex min-w-0 lg:hidden">
           {older.length > 0 ? (
-            <ContextMenu
-              label="Go back to"
-              actions={older.map((c) => ({
-                label: c.label,
-                onSelect: () =>
-                  router.push(c.href, { transitionTypes: NAV_BACK }),
-              }))}
+            <Suspense
+              fallback={<BackButton href={prev.href} label={prev.label} />}
             >
-              <BackButton href={prev.href} label={prev.label} />
-            </ContextMenu>
+              <TrailMenu
+                label="Go back to"
+                actions={older.map((c) => ({
+                  label: c.label,
+                  onSelect: () =>
+                    router.push(c.href, { transitionTypes: NAV_BACK }),
+                }))}
+              >
+                <BackButton href={prev.href} label={prev.label} />
+              </TrailMenu>
+            </Suspense>
           ) : (
             <BackButton href={prev.href} label={prev.label} />
           )}
@@ -207,6 +238,8 @@ function OlderCrumbs({
   crumbs: readonly { href: string; label: string }[];
 }) {
   const [open, setOpen] = useState(false);
+  // The popover's chunk is requested on hover/focus and mounted on first open.
+  const [used, setUsed] = useState(false);
   const ref = useRef<HTMLButtonElement>(null);
   return (
     <>
@@ -217,33 +250,63 @@ function OlderCrumbs({
         title="Earlier pages"
         aria-haspopup="dialog"
         aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
+        onPointerEnter={loadPopover}
+        onFocus={loadPopover}
+        onClick={() => {
+          setUsed(true);
+          setOpen((o) => !o);
+        }}
         className="flex h-7 items-center rounded-[6px] px-1.5 text-label-2 outline-offset-0 hover:bg-fill-2"
       >
         <Ellipsis aria-hidden size={18} />
       </button>
-      <AnchoredPopover
-        open={open}
-        onClose={() => setOpen(false)}
-        anchorRef={ref}
-        label="Earlier pages"
-        className="w-64 p-1.5"
-      >
-        <ul className="flex flex-col">
-          {crumbs.map((c) => (
-            <li key={c.href}>
-              <Link
-                href={c.href}
-                transitionTypes={NAV_BACK}
-                onClick={() => setOpen(false)}
-                className="flex min-h-10 items-center truncate rounded-control px-3 text-body text-label outline-offset-[-2px] hover:bg-fill-2"
-              >
-                {c.label}
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </AnchoredPopover>
+      {used && (
+        <Suspense fallback={null}>
+          <EarlierPages
+            open={open}
+            onClose={() => setOpen(false)}
+            anchorRef={ref}
+            crumbs={crumbs}
+          />
+        </Suspense>
+      )}
     </>
+  );
+}
+
+function EarlierPages({
+  open,
+  onClose,
+  anchorRef,
+  crumbs,
+}: {
+  open: boolean;
+  onClose: () => void;
+  anchorRef: RefObject<HTMLButtonElement | null>;
+  crumbs: readonly { href: string; label: string }[];
+}) {
+  return (
+    <CrumbsPopover
+      open={open}
+      onClose={onClose}
+      anchorRef={anchorRef}
+      label="Earlier pages"
+      className="w-64 p-1.5"
+    >
+      <ul className="flex flex-col">
+        {crumbs.map((c) => (
+          <li key={c.href}>
+            <Link
+              href={c.href}
+              transitionTypes={NAV_BACK}
+              onClick={onClose}
+              className="flex min-h-10 items-center truncate rounded-control px-3 text-body text-label outline-offset-[-2px] hover:bg-fill-2"
+            >
+              {c.label}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </CrumbsPopover>
   );
 }

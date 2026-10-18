@@ -256,8 +256,10 @@ export default async function JobsPage({
           </div>
         ) : (
           <div className="flex flex-col gap-[var(--section-gap)]">
-            {groups.map((g) => (
-              <ListSection key={g.key} header={g.label}>
+            {groups.map((g, i) => (
+              // A day can come back later in the list (e.g. "No date" between
+              // dated jobs), so the key includes the position.
+              <ListSection key={`${g.key}:${i}`} header={g.label}>
                 {g.items.map((j) => (
                   <JobRow
                     key={j.id}
