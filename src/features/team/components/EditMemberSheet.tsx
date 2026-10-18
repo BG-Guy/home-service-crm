@@ -12,6 +12,7 @@ import {
 } from "@/features/settings/components/form";
 import { ImageUpload } from "@/features/settings/components/ImageUpload";
 import { SWATCHES } from "@/features/settings/options";
+import { AddressAutocomplete } from "@/ui/components/AddressAutocomplete";
 import { Button } from "@/ui/components/Button";
 import { IconButton } from "@/ui/components/IconButton";
 import { ListSection } from "@/ui/components/List";
@@ -269,11 +270,12 @@ function EditMemberSheet({
           </FieldCard>
 
           <FieldCard header="Home base" footer="Used for drive-distance hints.">
-            <FText
+            <AddressAutocomplete
               name="home.street"
               label="Street"
               defaultValue={member.homeBase?.street ?? ""}
-              autoComplete="off"
+              error={f.errors?.["home.street"]}
+              fill={{ city: "home.city", state: "home.state", zip: "home.zip" }}
             />
             <div className="grid grid-cols-[1fr_72px_96px] gap-3">
               <FText

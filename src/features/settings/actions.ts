@@ -1432,11 +1432,12 @@ export const sendTestMessageAction = action({
 });
 
 /**
- * Provider health checks (storage round-trip, geocoder lookup). Not a mutation, and it
- * calls providers, so it runs outside action()'s transaction (PGlite has one connection).
+ * Provider health checks (storage round-trip, geocoder and address autocomplete
+ * lookups). Not a mutation, and it calls providers, so it runs outside action()'s
+ * transaction (PGlite has one connection).
  */
 export async function testProviderAction(input: {
-  kind: "storage" | "geocode";
+  kind: "storage" | "geocode" | "places";
 }): Promise<ActionResult<{ message: string }>> {
   await requireUser("settings.integrations");
   try {
@@ -1471,6 +1472,27 @@ export async function testProviderAction(input: {
             },
           }
         : { ok: false, error: `${g.id} found no match for the test address.` };
+    }
+    if (input?.kind === "places") {
+      // Straight to the provider (not the cached lookup) so errors surface here.
+      const { getPlacesProvider } = await import("@/adapters/places");
+      const p = getPlacesProvider();
+      if (p.id === "none")
+        return {
+          ok: false,
+          error:
+            "Address autocomplete is off (ADDRESS_AUTOCOMPLETE, GEOAPIFY_API_KEY).",
+        };
+      const [first] = await p.suggest({
+        query: "1600 Pennsylvania Ave, Washington",
+        limit: 1,
+      });
+      return first
+        ? { ok: true, data: { message: `${p.id}: ${first.label}` } }
+        : {
+            ok: false,
+            error: `${p.id} suggested nothing for the test address.`,
+          };
     }
     return { ok: false, error: "Unknown test." };
   } catch (e) {

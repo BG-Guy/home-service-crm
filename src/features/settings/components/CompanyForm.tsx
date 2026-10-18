@@ -2,6 +2,7 @@
 
 import { Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { AddressAutocomplete } from "@/ui/components/AddressAutocomplete";
 import { Button } from "@/ui/components/Button";
 import { TimeField } from "@/ui/components/Field";
 import { ListSection } from "@/ui/components/List";
@@ -109,11 +110,17 @@ export function CompanyForm({ initial }: { initial: CompanyFormValues }) {
         </FieldCard>
 
         <FieldCard header="Address">
-          <FText
+          <AddressAutocomplete
             name="address.street"
             label="Street"
             defaultValue={initial.address.street}
-            autoComplete="address-line1"
+            error={f.errors?.["address.street"]}
+            fill={{
+              city: "address.city",
+              state: "address.state",
+              zip: "address.zip",
+            }}
+            focusAfter="address.unit"
           />
           <div className="grid gap-4 sm:grid-cols-[1fr_8rem]">
             <FText
