@@ -159,7 +159,7 @@ Components (`src/ui/components/`, import each file directly): Button, IconButton
 MoneyText, Score (ReadinessRing/RiskChip), Toggle, SegmentedControl, Stepper, Field
 (TextField/TextArea/Select), DatePicker (DateField/Calendar/CalendarWindow/DatePickerButton),
 TimePicker (TimeField), AddressAutocomplete, MoneyField, PhoneField, SearchField,
-SubmitButton, Sheet, ActionSheet, Alert (useConfirm), ConfirmTyped, ContextMenu, AnchoredPopover,
+SubmitButton, TextLink, Sheet, ActionSheet, Alert (useConfirm), ConfirmTyped, ContextMenu, AnchoredPopover,
 SwipeActions, AddMenu, NavBar (LargeTitleHeader/BackButton), NavHistory (history breadcrumbs),
 PageActions (ActionRailFrame/usePageActions), TabBar, Sidebar, AppShell
 (Page/SplitView), Toast, Banner, EmptyState, Skeleton, Spinner, OfflineBanner,
@@ -190,8 +190,10 @@ Conventions from the UX round (2026-10-18):
   fallback. A list pane beside a detail pane passes `history={false}`. New pass-through screens (create forms,
   print views) belong in `isTransient()`.
 - People, places and records render as links where the viewer can open them: `personHref()` for teammates
-  (profile for managers and yourself, else their day on the schedule) and `mapsHref()` for addresses that
-  aren't masked (`@/lib/links`). Never nest a link inside a row that is already a link.
+  (profile for managers and yourself, else their day on the schedule; `profileHref()` when the row already has
+  its own drill-down) and `mapsHref()` for addresses that aren't masked (`@/lib/links`); payment rows use
+  `paymentHref()` (`@/features/payments/links`). Inline names and numbers use `TextLink`, which renders plain
+  text when the href is null. Never nest a link inside a row that is already a link.
 - Street inputs on staff pages are `AddressAutocomplete` (`fill` names the city/state/ZIP fields a pick fills,
   `pick="label"` for one-line addresses). It calls `/api/places/autocomplete` (signed-in only), so never use it
   on public pages.

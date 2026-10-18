@@ -33,6 +33,34 @@
   and per user.
 - **Worker profile.** The profile row in the sidebar and More opens your worker profile,
   with your work (schedule, jobs, pay, time) one tap away.
+- **Clickable everything.** Names, records, job numbers, addresses and stat tiles open the
+  place that makes sense. A link only appears when the viewer may open its destination
+  (`personHref` / `profileHref` / `mapsHref` in `@/lib/links`, `paymentHref`, and
+  `TextLink`, which renders plain text when there's no href).
+  - **People:**
+    - On a job: assignees, the creator, note authors and the earnings panel name.
+    - Money: payment "collected by", settlements (cash, YTD, 1099), statements, disputes
+      "By tech", leaderboard profiles.
+    - Vehicles and tools: vehicle and tool custody.
+    - Elsewhere: lead assignee, permission-override header, `/time` subtitle.
+
+    They open the teammate's profile for managers and for yourself, else their schedule
+    day.
+  - **Customers:** the job, invoice, estimate and change-order heroes, payment and refund
+    rows (job invoice tab → invoice → customer), verify rows, task chips and review
+    rows.
+  - **Addresses** open maps (never when masked): job header, lead, teammate home base.
+  - **Job numbers:** statement lines and the tech's pay, the estimate/invoice side
+    columns, parts receipts, outbox cards and upcoming messages.
+  - **Stat tiles** open filtered lists:
+    - `/payments`: Today / 7 days / Card fees, shown as removable chips.
+    - Customer page: Lifetime → `/payments?customer=`.
+    - Tech dashboard tiles.
+    - Lead-source tiles.
+  - **Activity rows** link change orders, settlements, tool checks, tasks, part purchases,
+    money (job invoice tab), vehicle records and teammates.
+  - Held cash on the admin dashboard no longer links a profile without checking the
+    permission.
 - **Schedule on a map (free).** `/schedule?layout=map` shows routes on a map, with a
   Calendar | Map toggle beside Day / 3 days / Week. Paging, Today, the tech filter and the
   per-tech deep link `&tech=<id>` all keep working in both layouts.
@@ -60,6 +88,7 @@
 - Bundle: pages now import `DateField`/`TimeField` from their own modules. Forms without
   dates don't ship the pickers, and the breadcrumb UI stays out of the app shell.
 - Fixed: the assign sheet re-queried conflicts every ~250 ms while open once edited.
+- Fixed: the jobs list gave two "No date" sections the same React key.
 
 ### Trade demo profiles (2026-10-18)
 - `npm run seed:demo -- --profile=<handyman|locksmith|chimney>` (with `--reset` as usual)
