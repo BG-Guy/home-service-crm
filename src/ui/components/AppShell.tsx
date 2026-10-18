@@ -1,7 +1,8 @@
-import type { ReactNode } from "react";
+import { type ReactNode, Suspense } from "react";
 import { cx } from "../cx";
 import { iconFor } from "../icons";
 import { Avatar } from "./Avatar";
+import { HistoryTracker } from "./NavHistory";
 import { NavTitlesProvider } from "./NavTitles";
 import { type NavTitle, uniqueTitles } from "./nav-titles";
 import { Sidebar } from "./Sidebar";
@@ -150,6 +151,10 @@ export function AppShell({
           >
             {children}
           </NavTitlesProvider>
+          {/* The pages this tab visits, for the history breadcrumbs. */}
+          <Suspense fallback={null}>
+            <HistoryTracker userId={user.id} />
+          </Suspense>
         </main>
       </div>
       <TabBar

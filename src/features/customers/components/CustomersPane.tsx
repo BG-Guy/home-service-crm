@@ -21,6 +21,7 @@ export function CustomersPane({
   return (
     <>
       <LargeTitleHeader
+        history={false}
         title="Customers"
         trailing={
           <>

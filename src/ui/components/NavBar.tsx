@@ -1,40 +1,17 @@
-import { ChevronLeft } from "lucide-react";
-import Link from "next/link";
 import type { ReactNode } from "react";
 import { cx } from "../cx";
+import { type BackTarget, CrumbTitle, HistoryBack } from "./NavHistory";
 import { ScrollSentinel } from "./ScrollSentinel";
 
-export interface BackTarget {
-  href: string;
-  /** Previous screen's title (iOS shows it next to the chevron). Default "Back". */
-  label?: string;
-}
-
-/**
- * iOS back button: chevron + previous title, `nav-back` pop transition.
- * Always render one on pushed screens — standalone iOS PWAs may lack swipe-back.
- */
-export function BackButton({ href, label = "Back" }: BackTarget) {
-  return (
-    <Link
-      href={href}
-      transitionTypes={["nav-back"]}
-      className="pressable -ml-2 flex min-h-11 max-w-[40vw] items-center gap-0.5 rounded-control pr-2 text-body text-accent-text outline-offset-0"
-    >
-      <ChevronLeft
-        aria-hidden
-        size={28}
-        strokeWidth={2.4}
-        className="-mr-0.5 shrink-0"
-      />
-      <span className="truncate">{label}</span>
-    </Link>
-  );
-}
+export type { BackTarget } from "./NavHistory";
+// The iOS back button lives with the history breadcrumbs (NavHistory.tsx).
+export { BackButton } from "./NavHistory";
 
 function BarRow({
   back,
   leading,
+  root,
+  history = true,
   title,
   trailing,
   titleClassName,
@@ -42,6 +19,10 @@ function BarRow({
 }: {
   back?: BackTarget;
   leading?: ReactNode;
+  /** A top-level screen: no back button on phones (breadcrumbs on desktop). */
+  root?: boolean;
+  /** `false`: no history back button / breadcrumbs (narrow list panes). */
+  history?: boolean;
   title?: ReactNode;
   trailing?: ReactNode;
   titleClassName?: string;
@@ -50,7 +31,11 @@ function BarRow({
   return (
     <div className="mx-auto grid h-11 max-w-[var(--content-max)] grid-cols-[1fr_auto_1fr] items-center gap-2 px-[var(--gutter)]">
       <div className="flex min-w-0 items-center justify-start">
-        {back ? <BackButton {...back} /> : leading}
+        {back ? (
+          <HistoryBack fallback={back} />
+        ) : (
+          (leading ?? (history ? <HistoryBack root={root} /> : null))
+        )}
       </div>
       <div
         aria-hidden={titleHidden || undefined}
@@ -100,6 +85,7 @@ export function NavBar({
         trailing={trailing}
         title={<h1 className="truncate text-headline">{title}</h1>}
       />
+      {typeof title === "string" && <CrumbTitle title={title} />}
     </header>
   );
 }
@@ -122,6 +108,7 @@ export function LargeTitleHeader({
   leading,
   trailing,
   search,
+  history = true,
   children,
   className,
 }: {
@@ -133,6 +120,11 @@ export function LargeTitleHeader({
   trailing?: ReactNode;
   /** Search field under the title (`searchable`). */
   search?: ReactNode;
+  /**
+   * Show the history breadcrumbs (desktop). `false` for list panes that sit next
+   * to a detail pane, which shows them instead.
+   */
+  history?: boolean;
   /** Extra content under the title (segmented control, chips). */
   children?: ReactNode;
   /** Visibility only (e.g. `lg:hidden`): the wrapper is `display: contents`. */
@@ -147,12 +139,15 @@ export function LargeTitleHeader({
         <BarRow
           back={back}
           leading={leading}
+          root
+          history={history}
           trailing={trailing}
           title={title}
           titleClassName="lt-inline"
           titleHidden
         />
       </div>
+      {typeof title === "string" && <CrumbTitle title={title} />}
       <header className="mx-auto max-w-[var(--content-max)] px-[var(--gutter)] pb-2">
         <h1 className="text-large-title tracking-tight">{title}</h1>
         {subtitle && (

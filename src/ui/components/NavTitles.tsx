@@ -1,11 +1,10 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { createContext, type ReactNode, use } from "react";
+import type { ReactNode } from "react";
 import { type BackTarget, LargeTitleHeader, NavBar } from "./NavBar";
 import { backForPath, type NavTitle, titleForPath } from "./nav-titles";
-
-const NavTitlesContext = createContext<readonly NavTitle[]>([]);
+import { NavTitlesContext, useNavTitles } from "./nav-titles-context";
 
 // The `.skeleton` block (Skeleton.tsx imports this file, so no import back).
 function Block({
@@ -56,7 +55,7 @@ export function SkeletonHeader({
   search?: boolean;
   segments?: boolean;
 }) {
-  const titles = use(NavTitlesContext);
+  const titles = useNavTitles();
   const pathname = usePathname() ?? "/";
   if (bar) {
     const parent = back ?? backForPath(titles, pathname);

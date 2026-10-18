@@ -228,6 +228,7 @@ export function LeadsPane({
   return (
     <>
       <LargeTitleHeader
+        history={false}
         title="Leads"
         // "New lead" lives in the shell's + menu (first on /leads), so no second + here (T4-11).
         trailing={<HeaderActions />}
