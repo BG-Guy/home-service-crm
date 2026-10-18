@@ -1,14 +1,12 @@
 import type { CSSProperties } from "react";
 import { cx } from "../cx";
-import { PageTransition } from "../motion/PageTransition";
-import { Page } from "./AppShell";
-import type { BackTarget } from "./NavBar";
-import { SkeletonHeader } from "./NavTitles";
 
 /*
  * Loading placeholders for `loading.tsx` files (SPEC §12.6): shimmer-free
  * opacity pulse that stops under reduced motion. Each variant matches the
  * geometry of the real component so content doesn't jump when it arrives.
+ * The full-page placeholder is `SkeletonPage.tsx` (it pulls in the nav bars, so
+ * it stays out of the shell, which imports these primitives).
  */
 
 /** A single block. Give it a size with className or width/height. */
@@ -147,57 +145,5 @@ export function SkeletonStat({ className }: { className?: string }) {
       <Skeleton height={28} width="70%" className="mt-2.5" />
       <Skeleton height={12} width="40%" className="mt-2.5" />
     </div>
-  );
-}
-
-/**
- * A full-page placeholder for `loading.tsx`: the real header (large title, or an
- * inline bar with a working back button when `bar`), a stat row and a list.
- * The title and back target default to the nav manifests' label for the path.
- * Wrapped in `PageTransition`, so a push slides the skeleton in (QA T4-03).
- * Announces "Loading" once for screen readers.
- */
-export function SkeletonPage({
-  stats = 0,
-  rows = 6,
-  bar,
-  title,
-  back,
-  search,
-  segments,
-}: {
-  stats?: number;
-  rows?: number;
-  /** Pushed/detail screen: inline NavBar + back instead of a large title. */
-  bar?: boolean;
-  title?: string;
-  back?: BackTarget;
-  /** Show a search-field placeholder under the large title. */
-  search?: boolean;
-  /** Show a segmented-control placeholder under the large title. */
-  segments?: boolean;
-}) {
-  return (
-    <PageTransition>
-      <output className="sr-only">Loading</output>
-      <SkeletonHeader
-        bar={bar}
-        title={title}
-        back={back}
-        search={search}
-        segments={segments}
-      />
-      <Page className={bar ? "pt-4" : "pt-2"}>
-        {stats > 0 && (
-          <div className="mb-[var(--section-gap)] grid grid-cols-2 gap-3 md:grid-cols-4">
-            {Array.from({ length: stats }, (_, i) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: static placeholder list
-              <SkeletonStat key={i} />
-            ))}
-          </div>
-        )}
-        <SkeletonList rows={rows} />
-      </Page>
-    </PageTransition>
   );
 }

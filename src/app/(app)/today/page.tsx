@@ -11,7 +11,7 @@ import { dateKey, formatDateKey, zonedParts } from "@/lib/time";
 import { Page } from "@/ui/components/AppShell";
 import { ListSection } from "@/ui/components/List";
 import { LargeTitleHeader } from "@/ui/components/NavBar";
-import { SkeletonPage } from "@/ui/components/Skeleton";
+import { SkeletonPage } from "@/ui/components/SkeletonPage";
 import { PageTransition } from "@/ui/motion/PageTransition";
 
 export const metadata: Metadata = { title: "Today" };

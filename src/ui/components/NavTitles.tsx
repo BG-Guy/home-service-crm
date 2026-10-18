@@ -1,12 +1,11 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
 import { type BackTarget, LargeTitleHeader, NavBar } from "./NavBar";
-import { backForPath, type NavTitle, titleForPath } from "./nav-titles";
-import { NavTitlesContext, useNavTitles } from "./nav-titles-context";
+import { backForPath, titleForPath } from "./nav-titles";
+import { useNavTitles } from "./nav-titles-context";
 
-// The `.skeleton` block (Skeleton.tsx imports this file, so no import back).
+// The `.skeleton` block (SkeletonPage.tsx imports this file, so no import back).
 function Block({
   className,
   h,
@@ -23,17 +22,6 @@ function Block({
       style={{ height: h, width: w }}
     />
   );
-}
-
-/** Mounted once by AppShell: the screen titles the skeletons can show. */
-export function NavTitlesProvider({
-  titles,
-  children,
-}: {
-  titles: readonly NavTitle[];
-  children: ReactNode;
-}) {
-  return <NavTitlesContext value={titles}>{children}</NavTitlesContext>;
 }
 
 /**

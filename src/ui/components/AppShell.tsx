@@ -3,7 +3,7 @@ import { cx } from "../cx";
 import { iconFor } from "../icons";
 import { Avatar } from "./Avatar";
 import { HistoryTracker } from "./HistoryTracker";
-import { NavTitlesProvider } from "./NavTitles";
+import { NavTitlesProvider } from "./NavTitlesProvider";
 import { type NavTitle, uniqueTitles } from "./nav-titles";
 import { Sidebar } from "./Sidebar";
 import { TabBar, type TabItem } from "./TabBar";

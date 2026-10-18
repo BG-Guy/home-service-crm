@@ -1,4 +1,4 @@
-import { SkeletonPage } from "@/ui/components/Skeleton";
+import { SkeletonPage } from "@/ui/components/SkeletonPage";
 
 // Settings pages: header + grouped list placeholder while the page loads.
 export default function Loading() {

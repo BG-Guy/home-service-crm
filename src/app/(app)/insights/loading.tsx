@@ -1,4 +1,4 @@
-import { SkeletonPage } from "@/ui/components/Skeleton";
+import { SkeletonPage } from "@/ui/components/SkeletonPage";
 
 // Dashboard skeleton: KPI tiles first, then the list sections.
 export default function Loading() {

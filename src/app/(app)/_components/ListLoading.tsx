@@ -1,5 +1,5 @@
 import type { BackTarget } from "@/ui/components/NavBar";
-import { SkeletonPage } from "@/ui/components/Skeleton";
+import { SkeletonPage } from "@/ui/components/SkeletonPage";
 
 // Shared `loading.tsx` bodies. Without props the title (list) or the back target
 // (detail) comes from the nav manifests for the current path; pass them when the
