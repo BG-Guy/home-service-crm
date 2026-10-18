@@ -25,7 +25,7 @@ import {
   FieldError,
   FieldShell,
   inputResetClass,
-} from "./Field";
+} from "./field-chrome";
 import { Spinner } from "./Spinner";
 
 type FillKey = Exclude<keyof AddressSuggestion, "id">;
