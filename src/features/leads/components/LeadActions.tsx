@@ -1,10 +1,14 @@
 "use client";
 
 import {
+  BadgeCheck,
+  Ban,
   CalendarPlus,
+  CircleSlash,
   Ellipsis,
   FileSignature,
   MessageSquare,
+  RotateCcw,
   ShieldCheck,
   UserCheck,
 } from "lucide-react";
@@ -12,6 +16,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { ActionSheet, type ActionSheetItem } from "@/ui/components/ActionSheet";
 import { Button } from "@/ui/components/Button";
+import { type PageAction, usePageActions } from "@/ui/components/PageActions";
 import { toast } from "@/ui/components/Toast";
 import {
   claimLead,
@@ -27,6 +32,7 @@ import { LostSheet } from "./LostSheet";
 /** Detail action bar: Call, Text, Claim, Convert (job / estimate) and More. */
 export function LeadActions({
   leadId,
+  name,
   status,
   hasPhone,
   phone,
@@ -40,6 +46,8 @@ export function LeadActions({
   lostReasons,
 }: {
   leadId: string;
+  /** The lead's name (desktop action rail header). */
+  name?: string;
   status: LeadStatus;
   hasPhone: boolean;
   phone: string | null;
@@ -80,10 +88,13 @@ export function LeadActions({
     router.push(r.data.href);
   };
 
-  const more: ActionSheetItem[] = [];
+  const statusActions: PageAction[] = [];
+  const danger: PageAction[] = [];
   if (canEdit && open && status !== "qualified")
-    more.push({
+    statusActions.push({
       label: "Mark qualified",
+      short: "Qualified",
+      icon: <BadgeCheck />,
       onSelect: () =>
         run(
           () => setLeadStatus({ leadId, status: "qualified" }),
@@ -91,8 +102,9 @@ export function LeadActions({
         ),
     });
   if (canEdit && (status === "lost" || status === "spam"))
-    more.push({
+    statusActions.push({
       label: "Reopen",
+      icon: <RotateCcw />,
       onSelect: () =>
         run(
           () =>
@@ -103,13 +115,58 @@ export function LeadActions({
         ),
     });
   if (canEdit && open)
-    more.push({ label: "Mark lost…", onSelect: () => setLostOpen(true) });
+    statusActions.push({
+      label: "Mark lost…",
+      short: "Lost",
+      icon: <CircleSlash />,
+      onSelect: () => setLostOpen(true),
+    });
   if (canEdit && status !== "spam" && status !== "booked")
-    more.push({
+    danger.push({
       label: "Mark as spam",
+      short: "Spam",
+      icon: <Ban />,
       destructive: true,
       onSelect: () => run(() => markLeadSpam({ leadId }), "Marked as spam"),
     });
+  const more: ActionSheetItem[] = [...statusActions, ...danger].map((a) => ({
+    label: a.label,
+    destructive: a.destructive,
+    onSelect: a.onSelect,
+  }));
+  // Desktop rail: converting plus the "More" items.
+  const inRail = usePageActions({
+    title: name,
+    subtitle: "Lead actions",
+    groups: [
+      {
+        title: "Convert",
+        actions:
+          canConvert && open
+            ? [
+                {
+                  label: "Book a job",
+                  short: "Book job",
+                  icon: <CalendarPlus />,
+                  onSelect: () => convert("job"),
+                },
+                ...(estimatesOn
+                  ? [
+                      {
+                        label: "Send an estimate",
+                        short: "Estimate",
+                        icon: <FileSignature />,
+                        onSelect: () => convert("estimate"),
+                      },
+                    ]
+                  : []),
+              ]
+            : [],
+      },
+      { title: "Status", actions: statusActions },
+      { actions: danger },
+    ],
+  });
 
   return (
     <div className="flex flex-wrap gap-2">
@@ -171,6 +228,7 @@ export function LeadActions({
           size="md"
           aria-label="More actions"
           icon={<Ellipsis size={18} aria-hidden />}
+          className={inRail ? "lg:hidden" : undefined}
           onClick={() => setMoreOpen(true)}
         >
           More

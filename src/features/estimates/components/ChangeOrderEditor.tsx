@@ -1,6 +1,12 @@
 "use client";
 
-import { Ellipsis, PenLine, Send } from "lucide-react";
+import {
+  Ellipsis,
+  MessageSquareQuote,
+  PenLine,
+  Send,
+  XCircle,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import {
@@ -14,6 +20,7 @@ import { Button } from "@/ui/components/Button";
 import { TextArea } from "@/ui/components/Field";
 import { IconButton } from "@/ui/components/IconButton";
 import { ListSection } from "@/ui/components/List";
+import { usePageActions } from "@/ui/components/PageActions";
 import { toast } from "@/ui/components/Toast";
 import {
   approveChangeOrderVerbal,
@@ -92,6 +99,35 @@ export function ChangeOrderEditor({
         ]
       : []),
   ];
+  // Desktop: the "…" items live in the action rail.
+  const inRail = usePageActions({
+    title: co.number,
+    subtitle: "Change order",
+    groups: [
+      {
+        title: "Approval",
+        actions: more
+          .filter((m) => !m.destructive)
+          .map((m) => ({
+            label: m.label,
+            short: "Verbal OK",
+            icon: <MessageSquareQuote />,
+            onSelect: m.onSelect,
+          })),
+      },
+      {
+        actions: more
+          .filter((m) => m.destructive)
+          .map((m) => ({
+            label: m.label,
+            short: "Declined",
+            icon: <XCircle />,
+            destructive: true,
+            onSelect: m.onSelect,
+          })),
+      },
+    ],
+  });
   return (
     <>
       {open ? (
@@ -123,6 +159,7 @@ export function ChangeOrderEditor({
             <IconButton
               label="More actions"
               variant="gray"
+              className={inRail ? "lg:hidden" : undefined}
               onClick={() => setSheet("more")}
             >
               <Ellipsis size={20} />

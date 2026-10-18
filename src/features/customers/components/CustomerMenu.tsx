@@ -1,6 +1,13 @@
 "use client";
 
-import { Ellipsis } from "lucide-react";
+import {
+  Archive,
+  ArchiveRestore,
+  Ellipsis,
+  Merge,
+  PencilLine,
+  UserX,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { CustomFieldDef } from "@/features/settings/contracts";
@@ -9,13 +16,18 @@ import { useConfirm } from "@/ui/components/Alert";
 import { Button } from "@/ui/components/Button";
 import { ConfirmTyped } from "@/ui/components/ConfirmTyped";
 import { IconButton } from "@/ui/components/IconButton";
+import { type PageAction, usePageActions } from "@/ui/components/PageActions";
 import { Sheet } from "@/ui/components/Sheet";
 import { toast } from "@/ui/components/Toast";
 import { anonymizeCustomer, deleteCustomer } from "../actions";
 import type { CustomerEditable } from "../contracts";
 import { CustomerForm } from "./CustomerForm";
 
-/** Detail nav-bar actions: Edit (sheet) and the "…" menu (merge, archive, anonymize). */
+/**
+ * Detail nav-bar actions: Edit (sheet) and the "…" menu (merge, archive,
+ * anonymize). On desktop they fill the action rail, with the page's `shortcuts`
+ * (new job, estimate, statement) on top.
+ */
 export function CustomerMenu({
   customer,
   customDefs,
@@ -24,6 +36,8 @@ export function CustomerMenu({
   canDelete,
   archived,
   anonymized,
+  title,
+  shortcuts = [],
 }: {
   customer: CustomerEditable | null;
   customDefs: CustomFieldDef[];
@@ -32,6 +46,10 @@ export function CustomerMenu({
   canDelete: boolean;
   archived: boolean;
   anonymized: boolean;
+  /** Rail header (the customer's name). */
+  title?: string;
+  /** Link-only actions shown first in the rail. */
+  shortcuts?: PageAction[];
 }) {
   const router = useRouter();
   const [edit, setEdit] = useState(false);
@@ -40,15 +58,27 @@ export function CustomerMenu({
   const [confirm, confirmEl] = useConfirm();
   const id = customer?.id;
 
-  const items: ActionSheetItem[] = [];
+  const manage: PageAction[] = [];
+  const danger: PageAction[] = [];
+  if (canEdit && customer && !anonymized)
+    manage.push({
+      label: "Edit customer",
+      short: "Edit",
+      icon: <PencilLine />,
+      onSelect: () => setEdit(true),
+    });
   if (canMerge && id && !anonymized)
-    items.push({
+    manage.push({
       label: "Merge with another customer…",
+      short: "Merge",
+      icon: <Merge />,
       href: `/customers/${id}/merge`,
     });
   if (canDelete && id) {
-    items.push({
+    const archive: PageAction = {
       label: archived ? "Restore customer" : "Archive customer",
+      short: archived ? "Restore" : "Archive",
+      icon: archived ? <ArchiveRestore /> : <Archive />,
       destructive: !archived,
       onSelect: async () => {
         if (
@@ -67,14 +97,35 @@ export function CustomerMenu({
           toast.success(archived ? "Customer restored" : "Customer archived");
         else toast.error(r.error);
       },
-    });
+    };
+    (archived ? manage : danger).push(archive);
     if (!anonymized)
-      items.push({
+      danger.push({
         label: "Anonymize (privacy request)…",
+        short: "Anonymize",
+        icon: <UserX />,
         destructive: true,
         onSelect: () => setAnon(true),
       });
   }
+  const inRail = usePageActions({
+    title,
+    subtitle: "Customer actions",
+    groups: [
+      { title: "Create", actions: shortcuts },
+      { title: "Customer", actions: manage },
+      { actions: danger },
+    ],
+  });
+  // The "…" sheet: everything except Edit, which has its own nav-bar button.
+  const items: ActionSheetItem[] = [...manage, ...danger]
+    .filter((a) => a.label !== "Edit customer")
+    .map((a) => ({
+      label: a.label,
+      href: a.href,
+      destructive: a.destructive,
+      onSelect: a.onSelect,
+    }));
 
   return (
     <>
@@ -84,7 +135,11 @@ export function CustomerMenu({
         </Button>
       )}
       {items.length > 0 && (
-        <IconButton label="More actions" onClick={() => setMenu(true)}>
+        <IconButton
+          label="More actions"
+          className={inRail ? "lg:hidden" : undefined}
+          onClick={() => setMenu(true)}
+        >
           <Ellipsis size={22} />
         </IconButton>
       )}

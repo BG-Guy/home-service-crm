@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Ban,
   Car,
   CircleCheck,
   ClipboardCheck,
@@ -11,6 +12,7 @@ import {
   MessageCircle,
   Navigation,
   NotebookPen,
+  Pause,
   Phone,
   Play,
   Receipt,
@@ -31,6 +33,7 @@ import { SignatureSheet } from "@/features/signatures/slots.client";
 import { formatMoney } from "@/lib/money";
 import { ActionSheet, type ActionSheetItem } from "@/ui/components/ActionSheet";
 import { Button } from "@/ui/components/Button";
+import { usePageActions } from "@/ui/components/PageActions";
 import { toast } from "@/ui/components/Toast";
 import { cx } from "@/ui/cx";
 import { haptic } from "@/ui/motion/haptics";
@@ -58,6 +61,17 @@ const RequirementsSheet = dynamic(() => import("./sheets/RequirementsSheet"), {
 });
 const HoldSheet = dynamic(() => import("./sheets/HoldSheet"), { ssr: false });
 const VisitSheet = dynamic(() => import("./sheets/VisitSheet"), { ssr: false });
+
+// Icons and short labels for the dock's overflow when it sits in the action rail.
+const RAIL_ITEM: Record<string, { icon: ReactNode; short: string }> = {
+  "I'm already here (Arrived)": { icon: <MapPinCheck />, short: "Arrived" },
+  "Running late": { icon: <Clock />, short: "Running late" },
+  "Put on hold": { icon: <Pause />, short: "Put on hold" },
+  "Estimate or change order": { icon: <FileText />, short: "Estimate" },
+  Notes: { icon: <NotebookPen />, short: "Notes" },
+  "Resume work now": { icon: <Play />, short: "Resume" },
+  "Cancel job": { icon: <Ban />, short: "Cancel job" },
+};
 const CancelSheet = dynamic(() => import("./sheets/CancelSheet"), {
   ssr: false,
 });
@@ -140,12 +154,14 @@ function Tool({
   onClick,
   href,
   external,
+  className,
 }: {
   icon: ReactNode;
   label: string;
   onClick?: () => void;
   href?: string;
   external?: boolean;
+  className?: string;
 }) {
   const body = (
     <>
@@ -159,7 +175,7 @@ function Tool({
         href={href}
         target="_blank"
         rel="noopener noreferrer"
-        className={TILE}
+        className={cx(TILE, className)}
         onClick={onClick}
       >
         {body}
@@ -167,12 +183,12 @@ function Tool({
     );
   if (href)
     return (
-      <Link href={href} className={TILE} onClick={onClick}>
+      <Link href={href} className={cx(TILE, className)} onClick={onClick}>
         {body}
       </Link>
     );
   return (
-    <button type="button" className={TILE} onClick={onClick}>
+    <button type="button" className={cx(TILE, className)} onClick={onClick}>
       {body}
     </button>
   );
@@ -635,12 +651,33 @@ export function ActionBar(p: ActionBarProps) {
       destructive: true,
       onSelect: () => setSheet("cancel"),
     });
+  // Desktop: the overflow joins the page's action rail instead of a "More" tile.
+  const inRail = usePageActions(
+    more.length
+      ? {
+          groups: [
+            {
+              title: "On site",
+              actions: more.map((m) => ({
+                label: m.label,
+                short: RAIL_ITEM[m.label]?.short,
+                icon: RAIL_ITEM[m.label]?.icon,
+                href: m.href,
+                destructive: m.destructive,
+                onSelect: m.onSelect,
+              })),
+            },
+          ],
+        }
+      : null,
+  );
   if (more.length)
     tools.push(
       <Tool
         key="more"
         icon={<Ellipsis size={18} aria-hidden />}
         label="More"
+        className={inRail ? "lg:hidden" : undefined}
         onClick={() => setSheet("more")}
       />,
     );
@@ -676,7 +713,8 @@ export function ActionBar(p: ActionBarProps) {
       <div
         data-chrome
         className={cx(
-          "fixed inset-x-0 z-[var(--z-bar)] px-[var(--gutter)] transition-[bottom] duration-300 ease-[var(--ease-spring)] lg:left-[260px] print:hidden",
+          // Desktop: centered over the content, clear of the sidebar and any action rail.
+          "fixed inset-x-0 z-[var(--z-bar)] px-[var(--gutter)] transition-[bottom] duration-300 ease-[var(--ease-spring)] lg:left-[calc(var(--sidebar-w)+var(--rail-w,0px))] print:hidden",
           bannerUp
             ? "bottom-[calc(var(--tabbar-space)+52px)] lg:bottom-[68px]"
             : "bottom-[calc(var(--tabbar-space)+4px)] lg:bottom-4",

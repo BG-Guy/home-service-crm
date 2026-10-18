@@ -35,8 +35,10 @@ import { Banner } from "@/ui/components/Banner";
 import { ListGroup, ListRow, ListSection } from "@/ui/components/List";
 import { MoneyText } from "@/ui/components/MoneyText";
 import { NavBar } from "@/ui/components/NavBar";
+import { ActionRailFrame, type PageAction } from "@/ui/components/PageActions";
 import { SkeletonCard } from "@/ui/components/Skeleton";
 import { StatCard } from "@/ui/components/StatCard";
+import { cx } from "@/ui/cx";
 import { PageTransition } from "@/ui/motion/PageTransition";
 
 export async function generateMetadata({
@@ -129,8 +131,47 @@ export default async function CustomerDetailPage({
     : "/customers";
   const firstTouch = c.firstTouch as Record<string, string> | null;
 
+  // Desktop: the quick actions and the "…" items share the action rail.
+  const shortcuts: PageAction[] = anonymized
+    ? []
+    : [
+        ...(p.has("jobs.create")
+          ? [
+              {
+                label: "New job",
+                icon: <CalendarPlus />,
+                href: `/jobs/new?customerId=${c.id}`,
+              },
+            ]
+          : []),
+        ...(estimatesOn && p.has("estimates.create")
+          ? [
+              {
+                label: "New estimate",
+                short: "Estimate",
+                icon: <FileSignature />,
+                href: `/estimates/new?customerId=${c.id}`,
+              },
+            ]
+          : []),
+        ...(p.has("invoices.view")
+          ? [
+              {
+                label: "Statement",
+                icon: <FileText />,
+                href: `/invoices/statement/${c.id}`,
+              },
+            ]
+          : []),
+      ];
+  const railOn =
+    shortcuts.length > 0 ||
+    canEdit ||
+    p.has("customers.merge") ||
+    p.has("customers.delete");
+
   const detail = (
-    <>
+    <ActionRailFrame compact enabled={railOn}>
       <NavBar
         back={{ href: backHref, label: "Customers" }}
         title={c.displayName}
@@ -143,6 +184,8 @@ export default async function CustomerDetailPage({
             canDelete={p.has("customers.delete")}
             archived={!!c.deletedAt}
             anonymized={anonymized}
+            title={c.displayName}
+            shortcuts={shortcuts}
           />
         }
       />
@@ -176,7 +219,12 @@ export default async function CustomerDetailPage({
           />
 
           {!anonymized && (
-            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+            <div
+              className={cx(
+                "grid grid-cols-3 gap-2 sm:grid-cols-4",
+                railOn && "lg:hidden",
+              )}
+            >
               {p.has("jobs.create") && (
                 <QuickAction
                   href={`/jobs/new?customerId=${c.id}`}
@@ -402,7 +450,7 @@ export default async function CustomerDetailPage({
           )}
         </ListGroup>
       </Page>
-    </>
+    </ActionRailFrame>
   );
 
   return (

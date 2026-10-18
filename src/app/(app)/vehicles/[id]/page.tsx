@@ -36,6 +36,7 @@ import { getCompanyTimezone, getSettings, isEnabled } from "@/lib/settings";
 import { dateKey } from "@/lib/time";
 import { Page } from "@/ui/components/AppShell";
 import { NavBar } from "@/ui/components/NavBar";
+import { ActionRailFrame } from "@/ui/components/PageActions";
 import { SkeletonList } from "@/ui/components/Skeleton";
 import { StatusPill } from "@/ui/components/StatusPill";
 import { PageTransition } from "@/ui/motion/PageTransition";
@@ -131,122 +132,131 @@ export default async function VehiclePage({
 
   return (
     <PageTransition>
-      <NavBar
-        title={v.nickname}
-        back={back}
-        trailing={
-          manage ? (
-            <VehicleFormButton
-              mode="edit"
-              initial={initial}
-              users={users.map((u) => ({ id: u.id, name: u.name }))}
-              customDefs={defs}
-            />
-          ) : undefined
-        }
-      />
-      <Page wide className="pt-4">
-        <div className="flex flex-col gap-[var(--section-gap)]">
-          <section
-            className="list-card flex items-center gap-4 p-4"
-            aria-label="Vehicle"
-          >
-            {hero?.thumbUrl ? (
-              // biome-ignore lint/performance/noImgElement: signed storage thumbnail
-              <img
-                src={hero.thumbUrl}
-                alt=""
-                width={72}
-                height={72}
-                className="size-[72px] shrink-0 rounded-[14px] object-cover"
+      <ActionRailFrame enabled={allowed.length > 0}>
+        <NavBar
+          title={v.nickname}
+          back={back}
+          trailing={
+            manage ? (
+              <VehicleFormButton
+                mode="edit"
+                initial={initial}
+                users={users.map((u) => ({ id: u.id, name: u.name }))}
+                customDefs={defs}
               />
-            ) : (
-              <span
-                aria-hidden
-                className="flex size-[72px] shrink-0 items-center justify-center rounded-[14px] bg-fill-2 text-label-2"
-              >
-                <Truck size={34} />
-              </span>
-            )}
-            <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <h1 className="truncate text-title2 font-bold">{v.nickname}</h1>
-              <p className="truncate text-subhead text-label-2">
-                {[description, v.plate, assigneeName ?? "Unassigned"]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </p>
-              <div className="flex flex-wrap items-center gap-2">
-                <StatusPill kind="vehicle" status={v.status} size="sm" />
-                <span className="num text-headline">
-                  {v.odometerCached != null
-                    ? `${num.format(v.odometerCached)} mi`
-                    : "No reading yet"}
-                </span>
-              </div>
-            </div>
-            {manage && !retired && (
-              <div className="hidden sm:block">
-                <ActionButton
-                  action={setVehicleStatus}
-                  input={{
-                    vehicleId: v.id,
-                    status: v.status === "in_shop" ? "active" : "in_shop",
-                  }}
-                  success={
-                    v.status === "in_shop"
-                      ? "Back in service"
-                      : "Marked in shop"
-                  }
+            ) : undefined
+          }
+        />
+        <Page wide className="pt-4">
+          <div className="flex flex-col gap-[var(--section-gap)]">
+            <section
+              className="list-card flex items-center gap-4 p-4"
+              aria-label="Vehicle"
+            >
+              {hero?.thumbUrl ? (
+                // biome-ignore lint/performance/noImgElement: signed storage thumbnail
+                <img
+                  src={hero.thumbUrl}
+                  alt=""
+                  width={72}
+                  height={72}
+                  className="size-[72px] shrink-0 rounded-[14px] object-cover"
+                />
+              ) : (
+                <span
+                  aria-hidden
+                  className="flex size-[72px] shrink-0 items-center justify-center rounded-[14px] bg-fill-2 text-label-2"
                 >
-                  {v.status === "in_shop" ? "Back in service" : "Mark in shop"}
-                </ActionButton>
+                  <Truck size={34} />
+                </span>
+              )}
+              <div className="flex min-w-0 flex-1 flex-col gap-1">
+                <h1 className="truncate text-title2 font-bold">{v.nickname}</h1>
+                <p className="truncate text-subhead text-label-2">
+                  {[description, v.plate, assigneeName ?? "Unassigned"]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <StatusPill kind="vehicle" status={v.status} size="sm" />
+                  <span className="num text-headline">
+                    {v.odometerCached != null
+                      ? `${num.format(v.odometerCached)} mi`
+                      : "No reading yet"}
+                  </span>
+                </div>
               </div>
-            )}
-          </section>
+              {manage && !retired && (
+                <div className="hidden sm:block">
+                  <ActionButton
+                    action={setVehicleStatus}
+                    input={{
+                      vehicleId: v.id,
+                      status: v.status === "in_shop" ? "active" : "in_shop",
+                    }}
+                    success={
+                      v.status === "in_shop"
+                        ? "Back in service"
+                        : "Marked in shop"
+                    }
+                  >
+                    {v.status === "in_shop"
+                      ? "Back in service"
+                      : "Mark in shop"}
+                  </ActionButton>
+                </div>
+              )}
+            </section>
 
-          <VehicleActions
-            vehicle={{
-              id: v.id,
-              nickname: v.nickname,
-              odometer: v.odometerCached,
-              tankGal: v.tankGal,
-            }}
-            allowed={allowed}
-            today={dateKey(new Date(), tz)}
-            odometerHint={odometerHint}
-          />
+            <VehicleActions
+              vehicle={{
+                id: v.id,
+                nickname: v.nickname,
+                odometer: v.odometerCached,
+                tankGal: v.tankGal,
+              }}
+              allowed={allowed}
+              today={dateKey(new Date(), tz)}
+              odometerHint={odometerHint}
+            />
 
-          <SegmentLinks
-            param="tab"
-            value={tab}
-            segments={TABS}
-            label="Vehicle sections"
-            className="overflow-x-auto"
-          />
+            <SegmentLinks
+              param="tab"
+              value={tab}
+              segments={TABS}
+              label="Vehicle sections"
+              className="overflow-x-auto"
+            />
 
-          <Suspense key={tab} fallback={<SkeletonList rows={5} />}>
-            {tab === "overview" && (
-              <OverviewTab
-                v={v}
-                assigneeName={assigneeName}
-                photos={photos}
-                user={user}
-              />
-            )}
-            {tab === "logs" && <LogsTab vehicleId={v.id} />}
-            {tab === "service" && (
-              <ServiceTab vehicleId={v.id} manage={manage} />
-            )}
-            {tab === "docs" && (
-              <DocsTab vehicleId={v.id} canAdd={allowed.includes("document")} />
-            )}
-            {tab === "issues" && <IssuesTab vehicleId={v.id} manage={manage} />}
-            {tab === "trips" && (
-              <TripsTab v={v} user={user} canLog={canLogTrip} />
-            )}
-          </Suspense>
-        </div>
-      </Page>
+            <Suspense key={tab} fallback={<SkeletonList rows={5} />}>
+              {tab === "overview" && (
+                <OverviewTab
+                  v={v}
+                  assigneeName={assigneeName}
+                  photos={photos}
+                  user={user}
+                />
+              )}
+              {tab === "logs" && <LogsTab vehicleId={v.id} />}
+              {tab === "service" && (
+                <ServiceTab vehicleId={v.id} manage={manage} />
+              )}
+              {tab === "docs" && (
+                <DocsTab
+                  vehicleId={v.id}
+                  canAdd={allowed.includes("document")}
+                />
+              )}
+              {tab === "issues" && (
+                <IssuesTab vehicleId={v.id} manage={manage} />
+              )}
+              {tab === "trips" && (
+                <TripsTab v={v} user={user} canLog={canLogTrip} />
+              )}
+            </Suspense>
+          </div>
+        </Page>
+      </ActionRailFrame>
     </PageTransition>
   );
 }

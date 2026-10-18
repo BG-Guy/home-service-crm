@@ -67,6 +67,7 @@ import { Chip, ChipRow } from "@/ui/components/Chip";
 import { type KeyValueItem, KeyValueList } from "@/ui/components/KeyValueList";
 import { ListRow, ListSection } from "@/ui/components/List";
 import { NavBar } from "@/ui/components/NavBar";
+import { ActionRailFrame } from "@/ui/components/PageActions";
 import { SkeletonCard } from "@/ui/components/Skeleton";
 import { PageTransition } from "@/ui/motion/PageTransition";
 
@@ -625,213 +626,215 @@ export default async function JobPage({
 
   return (
     <PageTransition>
-      <NavBar
-        title={job.number}
-        back={{ href: backHref, label: techView ? "Today" : "Jobs" }}
-        trailing={
-          office ? (
-            <JobOfficeMenu
-              job={{
-                id: job.id,
-                number: job.number,
-                status: job.status,
-                title: job.title,
-                description: job.description,
-                customerNotes: job.customerNotes,
-                priority: job.priority,
-                afterHours: job.afterHours,
-                serviceTypeId: job.serviceTypeId,
-                recurrence: job.recurrence,
-                arrivedAt: job.arrivedAt,
-                windowStart: job.windowStart,
-                confirmedAt: job.confirmedAt,
-              }}
-              serviceTypes={serviceTypes.map((s) => ({
-                id: s.id,
-                name: s.name,
-              }))}
-              can={{
-                edit: has("jobs.edit"),
-                assign: has("jobs.assign") || has("jobs.reschedule"),
-                cancel: has("jobs.cancel"),
-                cancelAfterArrival: has("jobs.cancel_after_arrival"),
-                reviewCancellations: has("jobs.review_cancellations"),
-                reopen: has("jobs.reopen"),
-                statusAny: has("jobs.status_any"),
-                create: has("jobs.create"),
-                evidence: canEvidence,
-              }}
-              policy={settings.jobs.cancellation_policy}
-              windowLengths={settings.jobs.window_lengths_min}
-              defaultWindow={settings.jobs.default_window_min}
-              todayKey={todayKey}
-              initial={action === "assign" ? "assign" : null}
+      <ActionRailFrame enabled={office}>
+        <NavBar
+          title={job.number}
+          back={{ href: backHref, label: techView ? "Today" : "Jobs" }}
+          trailing={
+            office ? (
+              <JobOfficeMenu
+                job={{
+                  id: job.id,
+                  number: job.number,
+                  status: job.status,
+                  title: job.title,
+                  description: job.description,
+                  customerNotes: job.customerNotes,
+                  priority: job.priority,
+                  afterHours: job.afterHours,
+                  serviceTypeId: job.serviceTypeId,
+                  recurrence: job.recurrence,
+                  arrivedAt: job.arrivedAt,
+                  windowStart: job.windowStart,
+                  confirmedAt: job.confirmedAt,
+                }}
+                serviceTypes={serviceTypes.map((s) => ({
+                  id: s.id,
+                  name: s.name,
+                }))}
+                can={{
+                  edit: has("jobs.edit"),
+                  assign: has("jobs.assign") || has("jobs.reschedule"),
+                  cancel: has("jobs.cancel"),
+                  cancelAfterArrival: has("jobs.cancel_after_arrival"),
+                  reviewCancellations: has("jobs.review_cancellations"),
+                  reopen: has("jobs.reopen"),
+                  statusAny: has("jobs.status_any"),
+                  create: has("jobs.create"),
+                  evidence: canEvidence,
+                }}
+                policy={settings.jobs.cancellation_policy}
+                windowLengths={settings.jobs.window_lengths_min}
+                defaultWindow={settings.jobs.default_window_min}
+                todayKey={todayKey}
+                initial={action === "assign" ? "assign" : null}
+              />
+            ) : undefined
+          }
+        />
+        <Page
+          className={
+            showActionBar
+              ? // Clear the floating dock: its measured height (ActionBar publishes --dock-h).
+                "pt-3 pb-[calc(var(--dock-h,128px)+24px)] lg:pb-[calc(var(--dock-h,128px)+40px)]"
+              : "pt-3"
+          }
+        >
+          <div className="flex flex-col gap-[var(--section-gap)]">
+            <JobHeaderCard
+              job={job}
+              tz={tz}
+              chips={
+                <>
+                  <Suspense fallback={null}>
+                    <JobRiskChip jobId={job.id} showWhy={!techView} />
+                  </Suspense>
+                  <Suspense fallback={null}>
+                    <DepositChip jobId={job.id} />
+                  </Suspense>
+                </>
+              }
+              readiness={
+                job.status === "in_progress" ||
+                job.status === "completed" ||
+                job.status === "closed" ? (
+                  <Suspense fallback={null}>
+                    <JobReadinessRing jobId={job.id} size={40} showWhy />
+                  </Suspense>
+                ) : null
+              }
+              assign={
+                has("jobs.assign") &&
+                !["completed", "closed", "cancelled"].includes(job.status) ? (
+                  <AssignJobButton
+                    jobId={job.id}
+                    label={job.assignees.length ? "Reassign" : "Assign"}
+                    variant="gray"
+                  />
+                ) : null
+              }
+              evidenceHref={
+                canEvidence &&
+                (job.status === "completed" || job.status === "closed")
+                  ? `/jobs/${job.id}/evidence`
+                  : null
+              }
             />
-          ) : undefined
-        }
-      />
-      <Page
-        className={
-          showActionBar
-            ? // Clear the floating dock: its measured height (ActionBar publishes --dock-h).
-              "pt-3 pb-[calc(var(--dock-h,128px)+24px)] lg:pb-[calc(var(--dock-h,128px)+40px)]"
-            : "pt-3"
-        }
-      >
-        <div className="flex flex-col gap-[var(--section-gap)]">
-          <JobHeaderCard
-            job={job}
-            tz={tz}
-            chips={
-              <>
-                <Suspense fallback={null}>
-                  <JobRiskChip jobId={job.id} showWhy={!techView} />
-                </Suspense>
-                <Suspense fallback={null}>
-                  <DepositChip jobId={job.id} />
-                </Suspense>
-              </>
-            }
-            readiness={
-              job.status === "in_progress" ||
-              job.status === "completed" ||
-              job.status === "closed" ? (
-                <Suspense fallback={null}>
-                  <JobReadinessRing jobId={job.id} size={40} showWhy />
-                </Suspense>
-              ) : null
-            }
-            assign={
-              has("jobs.assign") &&
-              !["completed", "closed", "cancelled"].includes(job.status) ? (
-                <AssignJobButton
-                  jobId={job.id}
-                  label={job.assignees.length ? "Reassign" : "Assign"}
-                  variant="gray"
-                />
-              ) : null
-            }
-            evidenceHref={
-              canEvidence &&
-              (job.status === "completed" || job.status === "closed")
-                ? `/jobs/${job.id}/evidence`
+            {banners.length > 0 && (
+              <div className="flex flex-col gap-2">{banners}</div>
+            )}
+            {!techView &&
+              job.status === "completed" &&
+              canCollect &&
+              job.paymentStatus !== "paid" &&
+              !showActionBar && (
+                <CollectPaymentButton jobId={job.id} size="lg" fullWidth />
+              )}
+            {visibleTabs.length > 1 && (!techView || tab !== "overview") && (
+              <ChipRow
+                label="Job sections"
+                className="-mx-[var(--gutter)] px-[var(--gutter)]"
+              >
+                {visibleTabs.map((t) => (
+                  <Chip
+                    key={t}
+                    replace
+                    selected={tab === t}
+                    href={`/jobs/${job.id}${t === "overview" ? "" : `?tab=${t}`}`}
+                    icon={
+                      t === "overview" ? <ClipboardList size={14} /> : undefined
+                    }
+                  >
+                    {TAB_LABEL[t]}
+                  </Chip>
+                ))}
+              </ChipRow>
+            )}
+            {content[tab]}
+          </div>
+        </Page>
+        {showActionBar && (
+          <ActionBar
+            job={{
+              id: job.id,
+              number: job.number,
+              status: job.status,
+              customerName: job.customerName,
+              customerFirstName: job.customerFirstName,
+              windowStart: job.windowStart,
+              arrivedAt: job.arrivedAt,
+              paymentStatus: job.paymentStatus,
+            }}
+            navUrl={job.addressMasked ? null : navUrl(ua, job)}
+            phone={brief?.contactRevealed ? brief.phone : null}
+            perms={{
+              field: fieldPerm,
+              cancel: has("jobs.cancel"),
+              cancelAfterArrival: has("jobs.cancel_after_arrival"),
+              reviewCancellations: has("jobs.review_cancellations"),
+              override: has("jobs.override_requirements"),
+              photos: photosOn && has("photos.upload"),
+              estimates: estimatesOn && has("estimates.create"),
+            }}
+            startMissing={startMissing}
+            completeMissing={completeMissing}
+            windowLengths={settings.jobs.window_lengths_min}
+            defaultWindow={settings.jobs.default_window_min}
+            todayKey={todayKey}
+            policy={settings.jobs.cancellation_policy}
+            esignText={esignText}
+            nextJobId={nextJob?.id ?? null}
+            beforeAfter={beforeAfter}
+            hasChecklist={job.checklist.length > 0}
+            signed={!!custom.completion_signature_id}
+            invoice={
+              invoiceSummary
+                ? {
+                    lines: invoiceSummary,
+                    totalCents:
+                      draftInvoice?.totalCents ??
+                      (jobLines ?? []).reduce((a, l) => a + l.totalCents, 0),
+                  }
                 : null
             }
+            photoCounts={photoCounts}
+            initialSheet={action === "complete" ? "complete" : null}
+            slots={{
+              readiness: <JobReadinessRing jobId={job.id} size={56} showWhy />,
+              collect: canCollect ? (
+                <CollectPaymentButton jobId={job.id} size="lg" fullWidth />
+              ) : undefined,
+              collectDeposit: canCollect ? (
+                <CollectPaymentButton
+                  jobId={job.id}
+                  allowDeposit
+                  label="Collect deposit"
+                  variant="tinted"
+                />
+              ) : undefined,
+              addPart:
+                partsOn && has("parts.add_to_job") ? (
+                  <AddPartButton
+                    jobId={job.id}
+                    label="Parts"
+                    variant="gray"
+                    size="sm"
+                  />
+                ) : undefined,
+              orderPart:
+                partsOn && has("parts.add_to_job") ? (
+                  <AddPartButton
+                    jobId={job.id}
+                    mode="special_order"
+                    label="Order part"
+                    variant="gray"
+                    size="sm"
+                  />
+                ) : undefined,
+            }}
           />
-          {banners.length > 0 && (
-            <div className="flex flex-col gap-2">{banners}</div>
-          )}
-          {!techView &&
-            job.status === "completed" &&
-            canCollect &&
-            job.paymentStatus !== "paid" &&
-            !showActionBar && (
-              <CollectPaymentButton jobId={job.id} size="lg" fullWidth />
-            )}
-          {visibleTabs.length > 1 && (!techView || tab !== "overview") && (
-            <ChipRow
-              label="Job sections"
-              className="-mx-[var(--gutter)] px-[var(--gutter)]"
-            >
-              {visibleTabs.map((t) => (
-                <Chip
-                  key={t}
-                  replace
-                  selected={tab === t}
-                  href={`/jobs/${job.id}${t === "overview" ? "" : `?tab=${t}`}`}
-                  icon={
-                    t === "overview" ? <ClipboardList size={14} /> : undefined
-                  }
-                >
-                  {TAB_LABEL[t]}
-                </Chip>
-              ))}
-            </ChipRow>
-          )}
-          {content[tab]}
-        </div>
-      </Page>
-      {showActionBar && (
-        <ActionBar
-          job={{
-            id: job.id,
-            number: job.number,
-            status: job.status,
-            customerName: job.customerName,
-            customerFirstName: job.customerFirstName,
-            windowStart: job.windowStart,
-            arrivedAt: job.arrivedAt,
-            paymentStatus: job.paymentStatus,
-          }}
-          navUrl={job.addressMasked ? null : navUrl(ua, job)}
-          phone={brief?.contactRevealed ? brief.phone : null}
-          perms={{
-            field: fieldPerm,
-            cancel: has("jobs.cancel"),
-            cancelAfterArrival: has("jobs.cancel_after_arrival"),
-            reviewCancellations: has("jobs.review_cancellations"),
-            override: has("jobs.override_requirements"),
-            photos: photosOn && has("photos.upload"),
-            estimates: estimatesOn && has("estimates.create"),
-          }}
-          startMissing={startMissing}
-          completeMissing={completeMissing}
-          windowLengths={settings.jobs.window_lengths_min}
-          defaultWindow={settings.jobs.default_window_min}
-          todayKey={todayKey}
-          policy={settings.jobs.cancellation_policy}
-          esignText={esignText}
-          nextJobId={nextJob?.id ?? null}
-          beforeAfter={beforeAfter}
-          hasChecklist={job.checklist.length > 0}
-          signed={!!custom.completion_signature_id}
-          invoice={
-            invoiceSummary
-              ? {
-                  lines: invoiceSummary,
-                  totalCents:
-                    draftInvoice?.totalCents ??
-                    (jobLines ?? []).reduce((a, l) => a + l.totalCents, 0),
-                }
-              : null
-          }
-          photoCounts={photoCounts}
-          initialSheet={action === "complete" ? "complete" : null}
-          slots={{
-            readiness: <JobReadinessRing jobId={job.id} size={56} showWhy />,
-            collect: canCollect ? (
-              <CollectPaymentButton jobId={job.id} size="lg" fullWidth />
-            ) : undefined,
-            collectDeposit: canCollect ? (
-              <CollectPaymentButton
-                jobId={job.id}
-                allowDeposit
-                label="Collect deposit"
-                variant="tinted"
-              />
-            ) : undefined,
-            addPart:
-              partsOn && has("parts.add_to_job") ? (
-                <AddPartButton
-                  jobId={job.id}
-                  label="Parts"
-                  variant="gray"
-                  size="sm"
-                />
-              ) : undefined,
-            orderPart:
-              partsOn && has("parts.add_to_job") ? (
-                <AddPartButton
-                  jobId={job.id}
-                  mode="special_order"
-                  label="Order part"
-                  variant="gray"
-                  size="sm"
-                />
-              ) : undefined,
-          }}
-        />
-      )}
+        )}
+      </ActionRailFrame>
     </PageTransition>
   );
 }

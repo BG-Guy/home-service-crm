@@ -1,12 +1,17 @@
 "use client";
 
 import {
+  Ban,
+  CircleOff,
   Copy,
   Ellipsis,
   FileCheck2,
+  FilePen,
   Mail,
   MessageSquare,
+  NotebookPen,
   Printer,
+  ReceiptText,
   Send,
   Share2,
 } from "lucide-react";
@@ -21,6 +26,7 @@ import { TextArea, TextField } from "@/ui/components/Field";
 import { IconButton } from "@/ui/components/IconButton";
 import { ListRow, ListSection } from "@/ui/components/List";
 import { MoneyField } from "@/ui/components/MoneyField";
+import { type PageAction, usePageActions } from "@/ui/components/PageActions";
 import { Sheet } from "@/ui/components/Sheet";
 import { toast } from "@/ui/components/Toast";
 import {
@@ -152,30 +158,95 @@ export function InvoiceActionBar(p: InvoiceBarProps) {
     });
   };
 
-  const more: ActionSheetItem[] = [
+  const edit: PageAction[] = [
     ...(draft && p.canCreate
-      ? [{ label: "Notes & warranty", onSelect: () => setSheet("info") }]
+      ? [
+          {
+            label: "Notes & warranty",
+            short: "Notes",
+            icon: <NotebookPen />,
+            onSelect: () => setSheet("info"),
+          },
+        ]
       : []),
     ...(issued && p.canRevise
       ? [
-          { label: "Revise invoice", onSelect: () => setSheet("revise") },
-          { label: "Add credit note", onSelect: () => setSheet("credit") },
+          {
+            label: "Revise invoice",
+            short: "Revise",
+            icon: <FilePen />,
+            onSelect: () => setSheet("revise"),
+          },
+          {
+            label: "Add credit note",
+            short: "Credit note",
+            icon: <ReceiptText />,
+            onSelect: () => setSheet("credit"),
+          },
         ]
       : []),
-    { label: "Print / PDF", href: p.printHref },
+  ];
+  const docs: PageAction[] = [
+    ...(issued && p.canCreate
+      ? [
+          {
+            label: "Send to customer",
+            short: "Send",
+            icon: <Send />,
+            onSelect: () => setSheet("send"),
+          },
+        ]
+      : []),
+    {
+      label: "Print / PDF",
+      short: "Print",
+      icon: <Printer />,
+      href: p.printHref,
+    },
+  ];
+  const danger: PageAction[] = [
     ...(open && p.canVoid
-      ? [{ label: "Write off", onSelect: () => setSheet("writeoff") }]
+      ? [
+          {
+            label: "Write off",
+            icon: <CircleOff />,
+            destructive: true,
+            onSelect: () => setSheet("writeoff"),
+          },
+        ]
       : []),
     ...(p.status !== "void" && p.canVoid && !p.hasPayments
       ? [
           {
             label: "Void invoice",
+            short: "Void",
+            icon: <Ban />,
             destructive: true,
             onSelect: () => setSheet("void"),
           },
         ]
       : []),
   ];
+  const inRail = usePageActions({
+    title: p.number,
+    subtitle: "Invoice actions",
+    groups: [
+      { title: "Invoice", actions: edit },
+      { title: "Share", actions: docs },
+      { actions: danger },
+    ],
+  });
+  // "Send" has its own button; Write off stays a plain (not red) row in the sheet.
+  const more: ActionSheetItem[] = [
+    ...edit,
+    ...docs.filter((a) => a.label !== "Send to customer"),
+    ...danger,
+  ].map((a) => ({
+    label: a.label,
+    href: a.href,
+    destructive: a.destructive && a.label !== "Write off",
+    onSelect: a.onSelect,
+  }));
 
   return (
     <>
@@ -205,12 +276,18 @@ export function InvoiceActionBar(p: InvoiceBarProps) {
             Send
           </Button>
         )}
-        <IconButton label="Print" variant="gray" href={p.printHref}>
+        <IconButton
+          label="Print"
+          variant="gray"
+          href={p.printHref}
+          className={inRail ? "lg:hidden" : undefined}
+        >
           <Printer size={20} />
         </IconButton>
         <IconButton
           label="More actions"
           variant="gray"
+          className={inRail ? "lg:hidden" : undefined}
           onClick={() => setSheet("more")}
         >
           <Ellipsis size={20} />

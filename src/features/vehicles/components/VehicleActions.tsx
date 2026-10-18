@@ -13,6 +13,7 @@ import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
 import { ActionSheet } from "@/ui/components/ActionSheet";
+import { usePageActions } from "@/ui/components/PageActions";
 import { cx } from "@/ui/cx";
 import type { ApprovalHint } from "../rules";
 import type { SheetVehicle } from "./sheets/OdometerSheet";
@@ -52,6 +53,16 @@ export type LogKind =
   | "document"
   | "inspection"
   | "issue";
+
+/** Rail labels (the tiles use the one-word `LABEL`). */
+const RAIL_LABEL: Record<LogKind, string> = {
+  odometer: "Log odometer",
+  fuel: "Log fuel",
+  inspection: "Inspection",
+  issue: "Report an issue",
+  service: "Log service",
+  document: "Add document",
+};
 
 const LABEL: Record<LogKind, string> = {
   odometer: "Odometer",
@@ -157,6 +168,31 @@ export function VehicleActions({
     ["odometer", "fuel", "service", "document", "inspection"] as const
   ).filter((k) => !can(k));
   const toggle = (k: LogKind) => (o: boolean) => setOpen(o ? k : null);
+  // Desktop: every log action sits in the action rail instead of the tiles.
+  const inRail = usePageActions({
+    title: vehicle.nickname,
+    subtitle: "Vehicle log",
+    groups: [
+      {
+        title: "Log",
+        actions: [
+          ...primary.map((t) => ({
+            label: RAIL_LABEL[t.kind],
+            short: LABEL[t.kind],
+            icon: t.icon,
+            onSelect: () => setOpen(t.kind),
+          })),
+          ...secondary.map((k) => ({
+            label: RAIL_LABEL[k],
+            short: LABEL[k],
+            icon:
+              k === "service" ? <Wrench size={19} /> : <FileText size={19} />,
+            onSelect: () => setOpen(k),
+          })),
+        ],
+      },
+    ],
+  });
 
   return (
     <div className="flex flex-col gap-2">
@@ -164,6 +200,7 @@ export function VehicleActions({
         <div
           className={cx(
             "grid gap-2",
+            inRail && "lg:hidden",
             primary.length + (secondary.length ? 1 : 0) >= 5
               ? "grid-cols-5"
               : "grid-cols-4",

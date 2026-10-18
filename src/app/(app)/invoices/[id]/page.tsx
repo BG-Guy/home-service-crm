@@ -23,6 +23,7 @@ import { Banner } from "@/ui/components/Banner";
 import { ListGroup, ListRow, ListSection } from "@/ui/components/List";
 import { MoneyText } from "@/ui/components/MoneyText";
 import { NavBar } from "@/ui/components/NavBar";
+import { ActionRailFrame } from "@/ui/components/PageActions";
 import { StatusPill } from "@/ui/components/StatusPill";
 import { PageTransition } from "@/ui/motion/PageTransition";
 
@@ -79,201 +80,206 @@ export default async function InvoicesIdPage({
 
   return (
     <PageTransition>
-      <NavBar
-        title={inv.number}
-        back={
-          doc.job
-            ? { href: `/jobs/${doc.job.id}?tab=invoice`, label: doc.job.number }
-            : { href: "/invoices", label: "Invoices" }
-        }
-      />
-      <Page className="pt-4">
-        {/* Print shows only the document (QA T4-08): app panels carry print:hidden. */}
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start print:block">
-          <div className="min-w-0 space-y-6">
-            {/* Hero */}
-            <section className="flex flex-wrap items-end justify-between gap-3 px-1 print:hidden">
-              <div>
-                <StatusPill kind="invoice" status={statusKey} />
-                <p className="mt-2 text-footnote text-label-2">
-                  {inv.status === "void"
-                    ? "Voided"
-                    : draft
-                      ? "Draft total"
-                      : "Balance due"}
-                </p>
-                <MoneyText
-                  cents={draft ? inv.totalCents : inv.balanceCents}
-                  className="text-large-title font-bold"
-                />
-                <p className="text-subhead text-label-2">
-                  {doc.customer.displayName}
-                  {inv.dueAt && !draft
-                    ? ` · due ${formatDate(inv.dueAt, tz)}`
-                    : ""}
-                  {inv.version > 1 ? ` · v${inv.version}` : ""}
-                </p>
-              </div>
-            </section>
-
-            <div className="print:hidden">
-              <InvoiceActionBar
-                invoiceId={inv.id}
-                number={inv.number}
-                status={inv.status}
-                balanceCents={inv.balanceCents}
-                hasLines={doc.lines.length > 0}
-                canCreate={canCreate}
-                canRevise={user.perms.has("invoices.revise")}
-                canVoid={user.perms.has("invoices.void")}
-                printHref={`/invoices/${inv.id}/print`}
-                collect={
-                  open ? (
-                    <CollectPaymentButton
-                      invoiceId={inv.id}
-                      jobId={doc.job?.id}
-                      size="lg"
-                      label="Collect payment"
-                    />
-                  ) : null
+      <ActionRailFrame compact>
+        <NavBar
+          title={inv.number}
+          back={
+            doc.job
+              ? {
+                  href: `/jobs/${doc.job.id}?tab=invoice`,
+                  label: doc.job.number,
                 }
-                lines={lines}
-                notes={inv.notes}
-                warrantyText={inv.warrantyText}
-                taxBps={taxBps}
-                taxExempt={doc.customer.taxExempt}
-                allowDiscount={user.perms.has("estimates.discount")}
-                showCost={showCost}
-                hasPayments={payments.length > 0}
-              />
-            </div>
+              : { href: "/invoices", label: "Invoices" }
+          }
+        />
+        <Page className="pt-4">
+          {/* Print shows only the document (QA T4-08): app panels carry print:hidden. */}
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start print:block">
+            <div className="min-w-0 space-y-6">
+              {/* Hero */}
+              <section className="flex flex-wrap items-end justify-between gap-3 px-1 print:hidden">
+                <div>
+                  <StatusPill kind="invoice" status={statusKey} />
+                  <p className="mt-2 text-footnote text-label-2">
+                    {inv.status === "void"
+                      ? "Voided"
+                      : draft
+                        ? "Draft total"
+                        : "Balance due"}
+                  </p>
+                  <MoneyText
+                    cents={draft ? inv.totalCents : inv.balanceCents}
+                    className="text-large-title font-bold"
+                  />
+                  <p className="text-subhead text-label-2">
+                    {doc.customer.displayName}
+                    {inv.dueAt && !draft
+                      ? ` · due ${formatDate(inv.dueAt, tz)}`
+                      : ""}
+                    {inv.version > 1 ? ` · v${inv.version}` : ""}
+                  </p>
+                </div>
+              </section>
 
-            {revisedAfterPayment ? (
-              <Banner
-                tone="warning"
-                title="Revised after payment"
-                className="print:hidden"
-              >
-                This invoice changed after a payment was recorded. It is flagged
-                on the anomaly report.
-              </Banner>
-            ) : null}
-
-            {draft && canCreate ? (
-              <ListGroup className="print:hidden">
-                <DraftLines
+              <div className="print:hidden">
+                <InvoiceActionBar
                   invoiceId={inv.id}
+                  number={inv.number}
+                  status={inv.status}
+                  balanceCents={inv.balanceCents}
+                  hasLines={doc.lines.length > 0}
+                  canCreate={canCreate}
+                  canRevise={user.perms.has("invoices.revise")}
+                  canVoid={user.perms.has("invoices.void")}
+                  printHref={`/invoices/${inv.id}/print`}
+                  collect={
+                    open ? (
+                      <CollectPaymentButton
+                        invoiceId={inv.id}
+                        jobId={doc.job?.id}
+                        size="lg"
+                        label="Collect payment"
+                      />
+                    ) : null
+                  }
                   lines={lines}
+                  notes={inv.notes}
+                  warrantyText={inv.warrantyText}
                   taxBps={taxBps}
                   taxExempt={doc.customer.taxExempt}
                   allowDiscount={user.perms.has("estimates.discount")}
                   showCost={showCost}
-                />
-                {doc.credits.length > 0 ? (
-                  <ListSection
-                    header="Deposits applied"
-                    footer="Applied to the balance when the invoice is issued."
-                  >
-                    {doc.credits.map((c) => (
-                      <ListRow
-                        key={c.id}
-                        title={c.label}
-                        detail={formatMoney(-c.amountCents)}
-                      />
-                    ))}
-                  </ListSection>
-                ) : null}
-              </ListGroup>
-            ) : null}
-            {draft && canCreate ? (
-              <InvoiceDocument doc={doc} className="hidden print:block" />
-            ) : (
-              <InvoiceDocument
-                doc={doc}
-                photos={
-                  inv.showPhotos ? (
-                    <InvoicePhotoGrid invoiceId={inv.id} variant="invoice" />
-                  ) : null
-                }
-              />
-            )}
-          </div>
-
-          <aside className="min-w-0 space-y-6 print:hidden">
-            <CustomerCard
-              customerId={doc.customer.id}
-              jobId={doc.job?.id}
-              variant="compact"
-            />
-
-            {doc.job ? <JobPaymentsPanel jobId={doc.job.id} /> : null}
-
-            {payments.length > 0 ? (
-              <ListSection header="Receipts">
-                {payments.map((p) => (
-                  <ListRow
-                    key={p.id}
-                    title={p.label}
-                    subtitle={formatDateTime(p.at, tz)}
-                    detail={formatMoney(p.amountCents + p.tipCents)}
-                    accessory={
-                      p.paymentId ? (
-                        <ReceiptLinkButton
-                          invoiceId={inv.id}
-                          paymentId={p.paymentId}
-                        />
-                      ) : null
-                    }
-                    multiline
-                  />
-                ))}
-              </ListSection>
-            ) : null}
-
-            {doc.job && canCreate && inv.status !== "void" ? (
-              <InvoicePhotosForm
-                invoiceId={inv.id}
-                jobId={doc.job.id}
-                showPhotos={inv.showPhotos}
-                selected={inv.photoMediaIds}
-                locked={!draft}
-              />
-            ) : null}
-
-            {doc.revisions.length > 0 ? (
-              <ListSection
-                header="Versions"
-                footer="Each issued version is stored with a SHA-256 fingerprint and can't be changed."
-              >
-                {doc.revisions.map((r) => (
-                  <ListRow
-                    key={r.version}
-                    title={`v${r.version} · ${r.reason === "issued" ? "Issued" : (r.reason ?? "Revised")}`}
-                    subtitle={`${formatDateTime(r.createdAt, tz)}${r.byName ? ` · ${r.byName}` : ""} · ${r.sha256.slice(0, 12)}`}
-                    detail={
-                      r.afterPayment ? (
-                        <span className="text-warning">After payment</span>
-                      ) : undefined
-                    }
-                    multiline
-                  />
-                ))}
-              </ListSection>
-            ) : null}
-
-            <ListSection header="Tags">
-              <div className="px-4 py-3">
-                <TagEditor
-                  entityType="invoice"
-                  entityId={inv.id}
-                  initial={(tagMap as Record<string, never[]>)[inv.id] ?? []}
-                  readOnly={!canCreate}
+                  hasPayments={payments.length > 0}
                 />
               </div>
-            </ListSection>
-          </aside>
-        </div>
-      </Page>
+
+              {revisedAfterPayment ? (
+                <Banner
+                  tone="warning"
+                  title="Revised after payment"
+                  className="print:hidden"
+                >
+                  This invoice changed after a payment was recorded. It is
+                  flagged on the anomaly report.
+                </Banner>
+              ) : null}
+
+              {draft && canCreate ? (
+                <ListGroup className="print:hidden">
+                  <DraftLines
+                    invoiceId={inv.id}
+                    lines={lines}
+                    taxBps={taxBps}
+                    taxExempt={doc.customer.taxExempt}
+                    allowDiscount={user.perms.has("estimates.discount")}
+                    showCost={showCost}
+                  />
+                  {doc.credits.length > 0 ? (
+                    <ListSection
+                      header="Deposits applied"
+                      footer="Applied to the balance when the invoice is issued."
+                    >
+                      {doc.credits.map((c) => (
+                        <ListRow
+                          key={c.id}
+                          title={c.label}
+                          detail={formatMoney(-c.amountCents)}
+                        />
+                      ))}
+                    </ListSection>
+                  ) : null}
+                </ListGroup>
+              ) : null}
+              {draft && canCreate ? (
+                <InvoiceDocument doc={doc} className="hidden print:block" />
+              ) : (
+                <InvoiceDocument
+                  doc={doc}
+                  photos={
+                    inv.showPhotos ? (
+                      <InvoicePhotoGrid invoiceId={inv.id} variant="invoice" />
+                    ) : null
+                  }
+                />
+              )}
+            </div>
+
+            <aside className="min-w-0 space-y-6 print:hidden">
+              <CustomerCard
+                customerId={doc.customer.id}
+                jobId={doc.job?.id}
+                variant="compact"
+              />
+
+              {doc.job ? <JobPaymentsPanel jobId={doc.job.id} /> : null}
+
+              {payments.length > 0 ? (
+                <ListSection header="Receipts">
+                  {payments.map((p) => (
+                    <ListRow
+                      key={p.id}
+                      title={p.label}
+                      subtitle={formatDateTime(p.at, tz)}
+                      detail={formatMoney(p.amountCents + p.tipCents)}
+                      accessory={
+                        p.paymentId ? (
+                          <ReceiptLinkButton
+                            invoiceId={inv.id}
+                            paymentId={p.paymentId}
+                          />
+                        ) : null
+                      }
+                      multiline
+                    />
+                  ))}
+                </ListSection>
+              ) : null}
+
+              {doc.job && canCreate && inv.status !== "void" ? (
+                <InvoicePhotosForm
+                  invoiceId={inv.id}
+                  jobId={doc.job.id}
+                  showPhotos={inv.showPhotos}
+                  selected={inv.photoMediaIds}
+                  locked={!draft}
+                />
+              ) : null}
+
+              {doc.revisions.length > 0 ? (
+                <ListSection
+                  header="Versions"
+                  footer="Each issued version is stored with a SHA-256 fingerprint and can't be changed."
+                >
+                  {doc.revisions.map((r) => (
+                    <ListRow
+                      key={r.version}
+                      title={`v${r.version} · ${r.reason === "issued" ? "Issued" : (r.reason ?? "Revised")}`}
+                      subtitle={`${formatDateTime(r.createdAt, tz)}${r.byName ? ` · ${r.byName}` : ""} · ${r.sha256.slice(0, 12)}`}
+                      detail={
+                        r.afterPayment ? (
+                          <span className="text-warning">After payment</span>
+                        ) : undefined
+                      }
+                      multiline
+                    />
+                  ))}
+                </ListSection>
+              ) : null}
+
+              <ListSection header="Tags">
+                <div className="px-4 py-3">
+                  <TagEditor
+                    entityType="invoice"
+                    entityId={inv.id}
+                    initial={(tagMap as Record<string, never[]>)[inv.id] ?? []}
+                    readOnly={!canCreate}
+                  />
+                </div>
+              </ListSection>
+            </aside>
+          </div>
+        </Page>
+      </ActionRailFrame>
     </PageTransition>
   );
 }

@@ -35,6 +35,7 @@ import { Banner } from "@/ui/components/Banner";
 import { ListGroup, ListRow, ListSection } from "@/ui/components/List";
 import { MoneyText } from "@/ui/components/MoneyText";
 import { NavBar } from "@/ui/components/NavBar";
+import { ActionRailFrame } from "@/ui/components/PageActions";
 import { SkeletonCard } from "@/ui/components/Skeleton";
 import { Pill, StatusPill } from "@/ui/components/StatusPill";
 import { PageTransition } from "@/ui/motion/PageTransition";
@@ -123,7 +124,7 @@ export default async function LeadDetailPage({
   const filter = leadFilterFrom(sp);
 
   const detail = (
-    <>
+    <ActionRailFrame compact enabled={canEdit || p.has("leads.convert")}>
       <NavBar
         back={{ href: "/leads", label: "Leads" }}
         title={lead.name}
@@ -202,6 +203,7 @@ export default async function LeadDetailPage({
             </div>
             <LeadActions
               leadId={lead.id}
+              name={lead.name}
               status={lead.status}
               hasPhone={lead.hasPhone}
               phone={lead.phone}
@@ -512,7 +514,7 @@ export default async function LeadDetailPage({
           )}
         </ListGroup>
       </Page>
-    </>
+    </ActionRailFrame>
   );
 
   return (
