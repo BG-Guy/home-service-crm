@@ -33,6 +33,22 @@
   and per user.
 - **Worker profile.** The profile row in the sidebar and More opens your worker profile,
   with your work (schedule, jobs, pay, time) one tap away.
+- **Schedule on a map (free).** `/schedule?layout=map` shows routes on a map, with a
+  Calendar | Map toggle beside Day / 3 days / Week. Paging, Today, the tech filter and the
+  per-tech deep link `&tech=<id>` all keep working in both layouts.
+  - Each tech's stops get numbered pins in visit order, in the tech's calendar color,
+    joined by a dashed straight line. Unassigned jobs get grey "?" pins.
+  - A side list matches the pins: the tech legend (tap to show only that tech), the stops
+    by tech, and "Not on the map yet" for addresses that couldn't be located.
+  - Selecting a stop and selecting a pin highlight each other. The selected stop's card
+    has Open job and Assign. 3-day and week views get day chips.
+  - Techs get a compact "Today's route" map on `/today`. A stop gets a pin only inside its
+    contact window, like the house number.
+  - It's free: Leaflet (lazy; the calendar layout never loads it), the properties' Census
+    geocodes and the configured tiles, with no routing service. Without a tile URL in
+    production, pins and lines show on a plain background.
+  - Pins work with the keyboard: Enter and Space select them, and the live map's pins
+    now do too.
 - **Address autocomplete.** Staff typing a street get up to five US address suggestions.
   Picking one fills the street, city, state and ZIP (or the one-line address). It's on
   the customer form, the property sheet, company settings, the team home base, new leads

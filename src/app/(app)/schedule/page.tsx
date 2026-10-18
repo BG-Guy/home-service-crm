@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ViewTransition } from "react";
 import { getMapConfig } from "@/adapters/maps";
 import { HeaderActions } from "@/app/(app)/_components/HeaderActions";
 import {
@@ -17,6 +18,7 @@ import { BoardJobRow } from "@/features/jobs/components/schedule/BoardJobRow";
 import { ConfirmJobButton } from "@/features/jobs/components/schedule/ConfirmJobButton";
 import { DesktopBoard } from "@/features/jobs/components/schedule/DesktopBoard";
 import { LazyScheduleMap } from "@/features/jobs/components/schedule/LazyScheduleMap";
+import { ScheduleDateJump } from "@/features/jobs/components/schedule/ScheduleDateJump";
 import { type BoardJob, loadBoard } from "@/features/jobs/schedule-queries";
 import { AssignJobButton } from "@/features/jobs/slots.client";
 import { requireUser } from "@/lib/auth/current";
@@ -30,6 +32,14 @@ import { LargeTitleHeader } from "@/ui/components/NavBar";
 import { PageTransition } from "@/ui/motion/PageTransition";
 
 export const metadata: Metadata = { title: "Schedule" };
+
+// Paging days slides the board toward the new day (globals.css `.cal-next` /
+// `.cal-prev`); other changes (view, tech, color) swap in place.
+const CAL_SLIDE = {
+  "cal-next": "cal-next",
+  "cal-prev": "cal-prev",
+  default: "none",
+} as const;
 
 type SP = Record<string, string | string[] | undefined>;
 const one = (v: string | string[] | undefined) =>
@@ -135,7 +145,13 @@ export default async function SchedulePage({
     <PageTransition>
       <LargeTitleHeader
         title="Schedule"
-        subtitle={label}
+        subtitle={
+          <ScheduleDateJump
+            date={data.date}
+            label={label}
+            todayKey={data.todayKey}
+          />
+        }
         trailing={<HeaderActions />}
       >
         <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center">
@@ -194,6 +210,7 @@ export default async function SchedulePage({
               className={navBtn}
               aria-label="Previous"
               href={hrefWith(sp, { date: addDaysToKey(data.date, -step) })}
+              transitionTypes={["cal-prev"]}
               replace
             >
               <ChevronLeft size={18} />
@@ -201,6 +218,11 @@ export default async function SchedulePage({
             <Link
               className={navBtn}
               href={hrefWith(sp, { date: null })}
+              transitionTypes={
+                data.date === data.todayKey
+                  ? undefined
+                  : [data.date > data.todayKey ? "cal-prev" : "cal-next"]
+              }
               replace
             >
               Today
@@ -209,6 +231,7 @@ export default async function SchedulePage({
               className={navBtn}
               aria-label="Next"
               href={hrefWith(sp, { date: addDaysToKey(data.date, step) })}
+              transitionTypes={["cal-next"]}
               replace
             >
               <ChevronRight size={18} />
@@ -258,157 +281,167 @@ export default async function SchedulePage({
             allTechsHref={one(sp.tech) ? hrefWith(sp, { tech: null }) : null}
           />
         ) : (
-          <>
-            <div className="hidden lg:block">
-              <DesktopBoard data={data} colorBy={colorBy} />
-            </div>
+          // Keyed by the range: paging days swaps the board, and the ‹ › / Today /
+          // date-jump links tag that navigation so it slides toward the new day.
+          <ViewTransition
+            key={`${data.view}:${data.date}`}
+            enter={CAL_SLIDE}
+            exit={CAL_SLIDE}
+            default="none"
+          >
+            <div>
+              <div className="hidden lg:block">
+                <DesktopBoard data={data} colorBy={colorBy} />
+              </div>
 
-            <div className="flex flex-col gap-[var(--section-gap)] lg:hidden">
-              {data.jobs.length === 0 && (
-                <div className="list-card">
-                  <EmptyState
-                    compact
-                    icon={<CalendarX2 size={36} />}
-                    title="Nothing scheduled"
-                    message={
-                      data.unscheduled.length
-                        ? "Assign a job from the queue below."
-                        : "Booked jobs show up here."
-                    }
-                  />
-                </div>
-              )}
-              {unassignedInRange.length > 0 && (
-                <ListSection header="Needs a technician">
-                  {unassignedInRange.map((j) => (
-                    <BoardJobRow
-                      key={j.id}
-                      job={j}
-                      tz={data.tz}
-                      trailing={assign(j, "Assign")}
+              <div className="flex flex-col gap-[var(--section-gap)] lg:hidden">
+                {data.jobs.length === 0 && (
+                  <div className="list-card">
+                    <EmptyState
+                      compact
+                      icon={<CalendarX2 size={36} />}
+                      title="Nothing scheduled"
+                      message={
+                        data.unscheduled.length
+                          ? "Assign a job from the queue below."
+                          : "Booked jobs show up here."
+                      }
                     />
-                  ))}
-                </ListSection>
-              )}
-              {sections
-                .filter((s) => s.jobs.length > 0)
-                .map((s) => (
-                  <ListSection
-                    key={s.key}
-                    header={s.header}
-                    trailing={
-                      <span className="num text-footnote text-label-2">
-                        {s.jobs.length}
-                      </span>
-                    }
-                  >
-                    {s.jobs.map((j) => (
+                  </div>
+                )}
+                {unassignedInRange.length > 0 && (
+                  <ListSection header="Needs a technician">
+                    {unassignedInRange.map((j) => (
                       <BoardJobRow
-                        key={`${s.key}-${j.id}`}
+                        key={j.id}
                         job={j}
                         tz={data.tz}
-                        techs={data.techs}
-                        showTechs={s.techs}
-                        trailing={assign(j)}
+                        trailing={assign(j, "Assign")}
                       />
                     ))}
                   </ListSection>
-                ))}
-              {/* Empty days collapse into one row instead of a card each (QA T4-31). */}
-              {data.view !== "day" &&
-                emptyDays.length > 0 &&
-                data.jobs.length > 0 && (
-                  <ListSection header="No jobs">
-                    <p className="px-4 py-3 text-subhead text-label-2">
-                      {emptyDays
-                        .map((d) =>
-                          formatDateKey(d, "en-US", {
-                            weekday: "short",
-                            month: "short",
-                            day: "numeric",
-                          }),
+                )}
+                {sections
+                  .filter((s) => s.jobs.length > 0)
+                  .map((s) => (
+                    <ListSection
+                      key={s.key}
+                      header={s.header}
+                      trailing={
+                        <span className="num text-footnote text-label-2">
+                          {s.jobs.length}
+                        </span>
+                      }
+                    >
+                      {s.jobs.map((j) => (
+                        <BoardJobRow
+                          key={`${s.key}-${j.id}`}
+                          job={j}
+                          tz={data.tz}
+                          techs={data.techs}
+                          showTechs={s.techs}
+                          trailing={assign(j)}
+                        />
+                      ))}
+                    </ListSection>
+                  ))}
+                {/* Empty days collapse into one row instead of a card each (QA T4-31). */}
+                {data.view !== "day" &&
+                  emptyDays.length > 0 &&
+                  data.jobs.length > 0 && (
+                    <ListSection header="No jobs">
+                      <p className="px-4 py-3 text-subhead text-label-2">
+                        {emptyDays
+                          .map((d) =>
+                            formatDateKey(d, "en-US", {
+                              weekday: "short",
+                              month: "short",
+                              day: "numeric",
+                            }),
+                          )
+                          .join(" · ")}
+                      </p>
+                    </ListSection>
+                  )}
+                {data.view === "day" &&
+                  data.techs.some(
+                    (t) => !data.jobs.some((j) => j.techIds.includes(t.id)),
+                  ) && (
+                    <p className="px-1 text-footnote text-label-2">
+                      Free:{" "}
+                      {data.techs
+                        .filter(
+                          (t) =>
+                            !data.jobs.some((j) => j.techIds.includes(t.id)),
                         )
-                        .join(" · ")}
+                        .map((t) => t.name.split(" ")[0])
+                        .join(", ")}
                     </p>
+                  )}
+                <ListSection
+                  header="Unscheduled"
+                  trailing={
+                    <span className="num text-footnote text-label-2">
+                      {data.unscheduled.length}
+                    </span>
+                  }
+                >
+                  {data.unscheduled.length === 0 ? (
+                    <p className="px-4 py-3 text-subhead text-label-3">
+                      Every job has a time. Nice.
+                    </p>
+                  ) : (
+                    data.unscheduled.map((j) => (
+                      <BoardJobRow
+                        key={j.id}
+                        job={j}
+                        tz={data.tz}
+                        trailing={assign(j, "Assign")}
+                      />
+                    ))
+                  )}
+                </ListSection>
+                {data.onHold.length > 0 && (
+                  <ListSection header="On hold">
+                    {data.onHold.map((j) => (
+                      <BoardJobRow
+                        key={j.id}
+                        job={j}
+                        tz={data.tz}
+                        techs={data.techs}
+                        showTechs
+                        showDay
+                      />
+                    ))}
                   </ListSection>
                 )}
-              {data.view === "day" &&
-                data.techs.some(
-                  (t) => !data.jobs.some((j) => j.techIds.includes(t.id)),
-                ) && (
-                  <p className="px-1 text-footnote text-label-2">
-                    Free:{" "}
-                    {data.techs
-                      .filter(
-                        (t) => !data.jobs.some((j) => j.techIds.includes(t.id)),
-                      )
-                      .map((t) => t.name.split(" ")[0])
-                      .join(", ")}
-                  </p>
-                )}
-              <ListSection
-                header="Unscheduled"
-                trailing={
-                  <span className="num text-footnote text-label-2">
-                    {data.unscheduled.length}
-                  </span>
-                }
-              >
-                {data.unscheduled.length === 0 ? (
-                  <p className="px-4 py-3 text-subhead text-label-3">
-                    Every job has a time. Nice.
-                  </p>
-                ) : (
-                  data.unscheduled.map((j) => (
-                    <BoardJobRow
-                      key={j.id}
-                      job={j}
-                      tz={data.tz}
-                      trailing={assign(j, "Assign")}
-                    />
-                  ))
-                )}
-              </ListSection>
-              {data.onHold.length > 0 && (
-                <ListSection header="On hold">
-                  {data.onHold.map((j) => (
-                    <BoardJobRow
-                      key={j.id}
-                      job={j}
-                      tz={data.tz}
-                      techs={data.techs}
-                      showTechs
-                      showDay
-                    />
-                  ))}
-                </ListSection>
+              </div>
+
+              {data.unconfirmedTomorrow.length > 0 && (
+                <div className="mt-[var(--section-gap)] lg:hidden">
+                  <ListSection
+                    header="Unconfirmed tomorrow"
+                    footer="Customers who haven't confirmed yet. Mark a phone confirmation here."
+                  >
+                    {data.unconfirmedTomorrow.map((j) => (
+                      <BoardJobRow
+                        key={j.id}
+                        job={j}
+                        tz={data.tz}
+                        techs={data.techs}
+                        showTechs
+                        trailing={
+                          user.perms.has("jobs.edit") ? (
+                            <ConfirmJobButton jobId={j.id} />
+                          ) : undefined
+                        }
+                      />
+                    ))}
+                  </ListSection>
+                </div>
               )}
             </div>
-
-            {data.unconfirmedTomorrow.length > 0 && (
-              <div className="mt-[var(--section-gap)] lg:hidden">
-                <ListSection
-                  header="Unconfirmed tomorrow"
-                  footer="Customers who haven't confirmed yet. Mark a phone confirmation here."
-                >
-                  {data.unconfirmedTomorrow.map((j) => (
-                    <BoardJobRow
-                      key={j.id}
-                      job={j}
-                      tz={data.tz}
-                      techs={data.techs}
-                      showTechs
-                      trailing={
-                        user.perms.has("jobs.edit") ? (
-                          <ConfirmJobButton jobId={j.id} />
-                        ) : undefined
-                      }
-                    />
-                  ))}
-                </ListSection>
-              </div>
-            )}
-          </>
+          </ViewTransition>
         )}
       </Page>
     </PageTransition>

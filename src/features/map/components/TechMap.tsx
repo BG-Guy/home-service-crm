@@ -131,6 +131,13 @@ export default function TechMap({
           })
           .on("click", pick)
           .addTo(m);
+        // Leaflet gives the pin role="button" but only maps Enter to popups:
+        // Enter and Space press it here.
+        mk.getElement()?.addEventListener("keydown", (e) => {
+          if (e.key !== "Enter" && e.key !== " ") return;
+          e.preventDefault();
+          if (!e.repeat) pick();
+        });
         markers.current.set(key, mk);
       }
     };
