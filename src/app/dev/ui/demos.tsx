@@ -20,7 +20,13 @@ import { Button } from "@/ui/components/Button";
 import { CameraButton } from "@/ui/components/CameraButton";
 import { ConfirmTyped } from "@/ui/components/ConfirmTyped";
 import { ContextMenu } from "@/ui/components/ContextMenu";
-import { TextArea, TextField } from "@/ui/components/Field";
+import { Calendar, DatePickerButton } from "@/ui/components/DatePicker";
+import {
+  DateField,
+  TextArea,
+  TextField,
+  TimeField,
+} from "@/ui/components/Field";
 import { IconButton } from "@/ui/components/IconButton";
 import { InstallPrompt } from "@/ui/components/InstallPrompt";
 import { ListRow, ListSection } from "@/ui/components/List";
@@ -640,6 +646,48 @@ export function IconButtonDemo() {
       <IconButton label="Disabled" disabled>
         <Phone size={22} />
       </IconButton>
+    </div>
+  );
+}
+
+/** Date / time pickers: the calendar window (sheet on touch, popover with a
+ * mouse) and the time field (wheels on touch, typed segments with a mouse). */
+export function PickerDemos() {
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("09:00");
+  const [jump, setJump] = useState(() => new Date().toISOString().slice(0, 10));
+  return (
+    <div className="grid gap-6 md:grid-cols-2">
+      <div className="flex flex-col gap-4">
+        <div className="grid grid-cols-2 gap-3">
+          <DateField
+            label="Visit date"
+            value={date}
+            min={new Date().toISOString().slice(0, 10)}
+            onChange={(e) => setDate(e.target.value)}
+          />
+          <TimeField
+            label="Arrive from"
+            step={900}
+            value={time}
+            onChange={(e) => setTime(e.target.value)}
+          />
+        </div>
+        <p className="num px-1 text-footnote text-label-2">
+          value: {date || "—"} · {time || "—"}
+        </p>
+        <DatePickerButton
+          value={jump}
+          onSelect={setJump}
+          label="Jump to a day"
+          className="pressable self-start rounded-pill bg-fill-2 px-3.5 py-1.5 text-subhead font-medium text-accent-text"
+        >
+          {jump} ▾
+        </DatePickerButton>
+      </div>
+      <div className="list-card p-3">
+        <Calendar value={date} onSelect={setDate} />
+      </div>
     </div>
   );
 }

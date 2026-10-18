@@ -72,6 +72,7 @@ import {
   MapDemo,
   MediaDemos,
   OverlayDemos,
+  PickerDemos,
   ThemeToggle,
   ToastDemos,
 } from "./demos";
@@ -390,6 +391,14 @@ export default async function UiGalleryPage() {
               </div>
             </div>
           </div>
+        </Section>
+
+        <Section
+          id="pickers"
+          title="Date and time pickers"
+          note="The calendar window slides up as a sheet on touch screens and springs out of the field with a mouse; months slide left / right (arrows, swipe, PgUp/PgDn). Times: iOS wheels on touch, typed segments + AM/PM with a mouse."
+        >
+          <PickerDemos />
         </Section>
 
         <Section
