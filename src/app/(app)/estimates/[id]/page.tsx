@@ -7,10 +7,10 @@ import { assertEstimateAccess } from "@/features/estimates/access";
 import { complianceNotes } from "@/features/estimates/compliance";
 import { EstimateBuilder } from "@/features/estimates/components/EstimateBuilder";
 import { EstimateDocument } from "@/features/estimates/components/EstimateDocument";
+import { EstimatePhotosForm } from "@/features/estimates/components/EstimatePhotosForm";
 import { loadEstimateDocForViewer } from "@/features/estimates/doc";
 import { isEstimateOpen } from "@/features/estimates/logic";
 import { getJobForUser } from "@/features/jobs/api";
-import { CameraCaptureButton } from "@/features/media/slots.client";
 import { ActivityTimeline } from "@/features/notify/slots";
 import { requireUser } from "@/lib/auth/current";
 import { NotFoundError } from "@/lib/errors";
@@ -234,36 +234,30 @@ export default async function EstimatesIdPage({
                 coolingOff={doc.coolingOff}
               />
 
-              {doc.job ? (
+              {doc.job && open && canCreate ? (
+                <EstimatePhotosForm
+                  estimateId={e.id}
+                  jobId={doc.job.id}
+                  showPhotos={e.showPhotos}
+                  selected={e.photoMediaIds}
+                />
+              ) : doc.job && doc.problemPhotos.length > 0 ? (
                 <ListSection
-                  header="Photos of the problem"
-                  footer="Problem photos show on the estimate the customer sees."
+                  header="Photos on estimate"
+                  footer="These photos show on the estimate the customer sees."
                 >
-                  {doc.problemPhotos.length > 0 ? (
-                    <div className="grid grid-cols-4 gap-1.5 p-3">
-                      {doc.problemPhotos.map((p) => (
-                        // biome-ignore lint/performance/noImgElement: signed storage URL
-                        <img
-                          key={p.id}
-                          src={p.thumbUrl}
-                          alt={p.caption ?? "Problem photo"}
-                          className="aspect-square w-full rounded-md object-cover"
-                          loading="lazy"
-                        />
-                      ))}
-                    </div>
-                  ) : null}
-                  {open && canCreate ? (
-                    <div className="px-4 py-3">
-                      <CameraCaptureButton
-                        jobId={doc.job.id}
-                        defaultTag="problem"
-                        allowedTags={["problem"]}
-                        label="Add problem photo"
-                        multiple
+                  <div className="grid grid-cols-4 gap-1.5 p-3">
+                    {doc.problemPhotos.map((p) => (
+                      // biome-ignore lint/performance/noImgElement: signed storage URL
+                      <img
+                        key={p.id}
+                        src={p.thumbUrl}
+                        alt={p.caption ?? "Job photo"}
+                        className="aspect-square w-full rounded-md object-cover"
+                        loading="lazy"
                       />
-                    </div>
-                  ) : null}
+                    ))}
+                  </div>
                 </ListSection>
               ) : null}
             </div>

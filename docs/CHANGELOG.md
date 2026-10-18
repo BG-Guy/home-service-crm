@@ -85,6 +85,12 @@
     key; `PHOTON_URL` for a self-hosted server) or Geoapify (`GEOAPIFY_API_KEY`).
   - Lookups are cached and rate-limited per user, and never log the typed text.
   - Settings → Integrations has a test button. DEPLOY §9 has the free options.
+- **Photos on estimates are optional.** The estimate page has a "Photos on estimate" card
+  like the invoice's. "Attach job photos" turns the photos on or off, and a picker chooses
+  which job photos show and in what order (empty = the problem photos, as before). It
+  applies to the customer's link and the print view, and can be changed only while the
+  estimate is open. New column `estimates.show_photos` (default on; migration 0004). The
+  invoice's toggle now reads "Attach job photos" too.
 - Bundle: pages now import `DateField`/`TimeField` from their own modules. Forms without
   dates don't ship the pickers, and the breadcrumb UI stays out of the app shell.
 - Fixed: the assign sheet re-queried conflicts every ~250 ms while open once edited.

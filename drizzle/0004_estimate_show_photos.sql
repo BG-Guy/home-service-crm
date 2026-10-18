@@ -1,0 +1,1 @@
+ALTER TABLE "estimates" ADD COLUMN "show_photos" boolean DEFAULT true NOT NULL;

@@ -198,6 +198,37 @@ export const updateEstimateInfo = action({
   revalidate: ({ data }) => estPaths(data.estimateId, data.jobId),
 });
 
+/**
+ * Job photos on the estimate: the show_photos toggle and an ordered selection
+ * (S25 PhotoPicker; empty = the job's "problem" photos). Only while the estimate
+ * is open: the customer signs what they see.
+ */
+export const setEstimatePhotos = action({
+  perm: "estimates.create",
+  feature: F,
+  input: z.object({
+    estimateId: uuid,
+    showPhotos: zf.checkbox(),
+    photoMediaIds: zf.array(z.uuid()).pipe(z.array(z.uuid()).max(8)),
+  }),
+  audit: "estimate.photos_updated",
+  async run({ input, user, tx }) {
+    await assertEstimateAccess(user, input.estimateId, "write");
+    const e = await openEstimateOrThrow(tx, input.estimateId);
+    await tx
+      .update(estimates)
+      .set({
+        showPhotos: input.showPhotos,
+        photoMediaIds: input.photoMediaIds,
+        updatedAt: new Date(),
+      })
+      .where(eq(estimates.id, e.id));
+    return { estimateId: e.id, jobId: e.jobId };
+  },
+  auditEntity: ({ input }) => ({ type: "estimate", id: input.estimateId }),
+  revalidate: ({ data }) => estPaths(data.estimateId, data.jobId),
+});
+
 export const addEstimateOption = action({
   perm: "estimates.create",
   feature: F,

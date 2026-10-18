@@ -51,7 +51,7 @@ export function InvoicePhotosForm({
         }
       >
         <ToggleRow
-          title="Show before/after photos"
+          title="Attach job photos"
           name="showPhotos"
           checked={on}
           onChange={(e) => setOn(e.currentTarget.checked)}

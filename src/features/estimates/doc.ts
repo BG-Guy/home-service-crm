@@ -118,7 +118,7 @@ export const loadEstimateDoc = cache(
         est.signatureId
           ? signatureView(est.signatureId)
           : Promise.resolve(null),
-        est.jobId
+        est.jobId && est.showPhotos
           ? est.photoMediaIds.length
             ? // Staff-chosen selection (estimates.photo_media_ids), in that order.
               listJobPhotos(est.jobId)

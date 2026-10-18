@@ -53,6 +53,8 @@ export const estimates = pgTable(
     policyVersionIds: uuidArray("policy_version_ids"),
     /** For estimates without a job (cooling-off rule, compliance notes). */
     serviceTypeId: uuid("service_type_id").references(() => serviceTypes.id),
+    /** Show job photos on the estimate at all (staff toggle; off = no photo section). */
+    showPhotos: boolean("show_photos").notNull().default(true),
     /** Staff-chosen photos shown on the estimate (empty = the job's "problem" photos). */
     photoMediaIds: uuidArray("photo_media_ids"),
     createdBy: uuid("created_by").references(() => users.id),

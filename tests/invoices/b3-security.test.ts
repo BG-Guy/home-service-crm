@@ -5,6 +5,7 @@
 // - T5-19: public magic-link uploads are capped per document.
 // - T1-02: completing a job never auto-issues an empty $0 invoice.
 // - T5-09 / T2-15: createEstimate binds property and lead; the lead is booked on send.
+// - Estimate photos: attaching job photos is a per-estimate option (on by default).
 import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -58,7 +59,10 @@ import {
   properties,
 } from "@/db/schema";
 import "@/db/seed/register";
-import { createEstimate } from "@/features/estimates/actions";
+import {
+  createEstimate,
+  setEstimatePhotos,
+} from "@/features/estimates/actions";
 import {
   createEstimateDraft,
   loadEstimate,
@@ -621,5 +625,83 @@ describe("T5-09 / T2-15 creating an estimate", () => {
           .where(and(eq(leads.id, leadId)))
       )[0]?.id,
     ).toBe(estimateId);
+  });
+});
+
+describe("photos on an estimate", () => {
+  let estimateId: string;
+  let problem: string;
+  let after: string;
+  const photo = async (tag: string) => {
+    n++;
+    const [m] = await db
+      .insert(media)
+      .values({
+        kind: "photo",
+        tag,
+        jobId: jobA,
+        storageKey: `test/photo-${n}.jpg`,
+        mime: "image/jpeg",
+      } as never)
+      .returning({ id: media.id });
+    return m?.id as string;
+  };
+  const shown = async () => {
+    const doc = await loadEstimateDocForViewer(admin, estimateId);
+    if (!doc) throw new Error("estimate");
+    return doc.problemPhotos.map((p) => p.id);
+  };
+
+  beforeAll(async () => {
+    problem = await photo("problem");
+    after = await photo("after");
+    ({ estimateId } = await db.transaction((tx) =>
+      createEstimateDraft(
+        tx,
+        { customerId: custA, jobId: jobA },
+        actorOf(admin),
+      ),
+    ));
+  });
+
+  it("shows the job's problem photos by default", async () => {
+    expect(await shown()).toContain(problem);
+    expect(await shown()).not.toContain(after);
+  });
+
+  it("shows the staff's pick, in order", async () => {
+    auth.user = admin;
+    const r = await setEstimatePhotos({
+      estimateId,
+      showPhotos: true,
+      photoMediaIds: [after, problem],
+    });
+    expect(r.ok).toBe(true);
+    expect(await shown()).toEqual([after, problem]);
+  });
+
+  it("attaches no photos when switched off", async () => {
+    auth.user = admin;
+    const r = await setEstimatePhotos({
+      estimateId,
+      showPhotos: false,
+      photoMediaIds: [after],
+    });
+    expect(r.ok).toBe(true);
+    expect(await shown()).toEqual([]);
+  });
+
+  it("can't change the photos once the estimate is closed", async () => {
+    await db
+      .update(estimates)
+      .set({ status: "declined" })
+      .where(eq(estimates.id, estimateId));
+    auth.user = admin;
+    const r = await setEstimatePhotos({
+      estimateId,
+      showPhotos: true,
+      photoMediaIds: [],
+    });
+    expect(r.ok).toBe(false);
   });
 });
