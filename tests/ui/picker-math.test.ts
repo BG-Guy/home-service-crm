@@ -15,8 +15,8 @@ import {
   parseHm,
   to12,
   to24,
-  weekEdge,
   weekdayOf,
+  weekEdge,
 } from "@/ui/components/picker-math";
 
 describe("calendar grid", () => {
