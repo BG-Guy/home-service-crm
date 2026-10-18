@@ -1900,7 +1900,7 @@ List pages must accept these params. Insights (B8), notifications and Ops Today 
 | `/jobs` (B2) | `status=a,b`, `tech=<userId>`, `from=`, `to=` (YYYY-MM-DD), `mine=1`, `callback=1`, `cancelledAfterArrival=1`, `unassigned=1`, `unconfirmed=1`, `noInvoiceAfter48h=1`, `q=` |
 | `/jobs/[id]` (B2) | `tab=overview\|photos\|estimate\|invoice\|parts\|messages\|history`, `action=collect\|complete\|assign` (opens the sheet) |
 | `/jobs/new` (B2) | `customerId`, `propertyId`, `leadId`, `callbackOf`, `date` |
-| `/schedule` (B2) | `view=day\|3day\|week`, `date=`, `tech=` |
+| `/schedule` (B2) | `view=day\|3day\|week`, `date=`, `tech=`, `layout=map` (routes on a map; with `tech=` one tech's route) |
 | `/leads` (B1) | `status=`, `source=`, `from=`, `to=`, `filter=check\|breached\|mine` |
 | `/customers` (B1) | `q=`, `type=`, `tag=`, `flag=` |
 | `/estimates` (B3) | `status=`, `tech=`, `from=`, `to=`, `unsold=1` |

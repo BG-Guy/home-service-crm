@@ -74,7 +74,7 @@ app shell under the 150 KB budget.
 
 | Item | Size (gz) | Reason | Alternatives considered |
 |---|---|---|---|
-| `leaflet` (B7) | ~43 KB | Live map only; loaded in a lazy `ssr:false` chunk on `/map`. | MapLibre (banned, heavier); static map images (no live markers). |
+| `leaflet` (B7) | ~43 KB | Maps only, always in lazy `ssr:false` chunks: the live map on `/map`, the schedule's map layout (`/schedule?layout=map`, never the calendar layout) and the tech's route card on `/today` (loads when the card scrolls near; `/today` itself adds a < 1 KB gz loader). | MapLibre (banned, heavier); static map images (no live markers). |
 | Payroll engine on `/settings/commission` (B6) | ~8–10 KB | Live commission calculator runs the pure engine client-side on that route only. | Server round-trip per keystroke. |
 | QR encoder `src/lib/qr.ts` | ~2 KB | Server-rendered SVG on invoices and tool labels; client only inside the lazy collect sheet. | — |
 | Framework baseline (Next 16.4 + React 19.3) | ~127 KB | The SPEC's 150 KB assumed a smaller framework baseline. Not under app control. | Preact compat (not supported by Next App Router) |

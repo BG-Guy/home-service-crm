@@ -18,6 +18,9 @@ export interface JobListItem {
   addressShort: string;
   /** Street masked: outside the viewer's contact window (no navigation link). */
   addressMasked?: boolean;
+  /** The property's geocode, only when the address is revealed (route map pin). */
+  lat?: number | null;
+  lng?: number | null;
   city: string | null;
   windowStart: string | null;
   windowEnd: string | null;

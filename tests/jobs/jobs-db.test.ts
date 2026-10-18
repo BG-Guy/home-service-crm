@@ -402,6 +402,25 @@ describe("read DAL (real SQL, row scope)", () => {
     );
     const day = await loadBoard({ view: "day", date: tomorrow() });
     expect(day.jobs.length).toBeGreaterThan(0);
+    // Map layout pins: the property's geocode rides along on every board job.
+    expect(day.jobs.every((j) => j.lat === 30.2639 && j.lng === -97.7442)).toBe(
+      true,
+    );
+    // A dispatcher role without customers.contact_view gets no house number, so no pin.
+    auth.user = {
+      ...admin,
+      perms: new Set(
+        [...admin.perms].filter((p) => p !== "customers.contact_view"),
+      ),
+    };
+    const maskedDay = await loadBoard({ view: "day", date: tomorrow() });
+    expect(maskedDay.jobs.length).toBe(day.jobs.length);
+    expect(
+      maskedDay.jobs.every(
+        (j) => j.addressMasked && j.lat === null && j.lng === null,
+      ),
+    ).toBe(true);
+    auth.user = admin;
     const opts = await loadAssignOptions({ jobId: id });
     expect(opts.ok && opts.data?.techs.length).toBeGreaterThan(1);
     const cj = await listCustomerJobs(customerId, admin, 5);
@@ -416,8 +435,19 @@ describe("read DAL (real SQL, row scope)", () => {
     expect(await getJobDetail(id)).toBeNull();
     const myDay = await listMyDay(tech2, tomorrow());
     expect(myDay.today.length).toBe(1);
+    // Outside the contact window a tech's route card gets no pin (like no house number).
+    expect(myDay.today[0]).toMatchObject({
+      addressMasked: true,
+      lat: null,
+      lng: null,
+    });
 
     auth.user = tech;
+    // Inside it (the job finished minutes ago) the pin comes with the address.
+    const own = await listJobs({});
+    expect(own.items.find((j) => j.title === "Rekey front door")).toMatchObject(
+      { addressMasked: false, lat: 30.2639, lng: -97.7442 },
+    );
     expect(await listTasks({ scope: "all" })).toEqual([]);
     const te = await listTimeEntries(
       tech.id,
