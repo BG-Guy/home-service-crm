@@ -227,9 +227,3 @@ export function Select({
     </FieldShell>
   );
 }
-
-/** Date field (`YYYY-MM-DD`): opens the calendar sheet / popover (`DatePicker.tsx`). */
-export { DateField } from "./DatePicker";
-
-/** Time field (`HH:MM`): iOS wheels on touch, typed segments + AM/PM on desktop (`TimePicker.tsx`). */
-export { TimeField } from "./TimePicker";

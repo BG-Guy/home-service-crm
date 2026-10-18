@@ -4,15 +4,12 @@ import { Clock, MapPin, Pencil, Plus } from "lucide-react";
 import { useState, useTransition } from "react";
 import { dateKey, formatDateKey, formatInTz } from "@/lib/time";
 import { Button } from "@/ui/components/Button";
-import {
-  DateField,
-  TextArea,
-  TextField,
-  TimeField,
-} from "@/ui/components/Field";
+import { DateField } from "@/ui/components/DatePicker";
+import { TextArea, TextField } from "@/ui/components/Field";
 import { ListSection } from "@/ui/components/List";
 import { Sheet } from "@/ui/components/Sheet";
 import { Pill } from "@/ui/components/StatusPill";
+import { TimeField } from "@/ui/components/TimePicker";
 import { toast } from "@/ui/components/Toast";
 import { haptic } from "@/ui/motion/haptics";
 import { addTimeEntry, editTimeEntry } from "../actions";

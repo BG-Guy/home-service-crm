@@ -3,7 +3,8 @@
 import { Pencil } from "lucide-react";
 import { useState, useTransition } from "react";
 import { Button } from "@/ui/components/Button";
-import { DateField, TextField } from "@/ui/components/Field";
+import { DateField } from "@/ui/components/DatePicker";
+import { TextField } from "@/ui/components/Field";
 import { SegmentedControl } from "@/ui/components/SegmentedControl";
 import { Sheet } from "@/ui/components/Sheet";
 import { toast } from "@/ui/components/Toast";

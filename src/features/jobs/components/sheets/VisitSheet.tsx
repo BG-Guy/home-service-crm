@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import { Button } from "@/ui/components/Button";
-import { DateField, Select, TimeField } from "@/ui/components/Field";
+import { DateField } from "@/ui/components/DatePicker";
+import { Select } from "@/ui/components/Field";
 import { Sheet } from "@/ui/components/Sheet";
+import { TimeField } from "@/ui/components/TimePicker";
 
 /** Pick a date + arrival window (return visit; also used by reschedule). */
 export default function VisitSheet({

@@ -11,9 +11,10 @@ import {
 } from "@/client/sms-href";
 import { Banner } from "@/ui/components/Banner";
 import { Button } from "@/ui/components/Button";
-import { Select, TextField, TimeField } from "@/ui/components/Field";
+import { Select, TextField } from "@/ui/components/Field";
 import { ListRow, ListSection } from "@/ui/components/List";
 import { SegmentedControl } from "@/ui/components/SegmentedControl";
+import { TimeField } from "@/ui/components/TimePicker";
 import { toast } from "@/ui/components/Toast";
 import { ToggleRow } from "@/ui/components/Toggle";
 import { saveMessagingSettings } from "../actions";

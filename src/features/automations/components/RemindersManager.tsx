@@ -6,17 +6,13 @@ import { CustomerPicker } from "@/features/customers/slots.client";
 import { useConfirm } from "@/ui/components/Alert";
 import { Button } from "@/ui/components/Button";
 import { Chip, ChipRow } from "@/ui/components/Chip";
+import { DateField } from "@/ui/components/DatePicker";
 import { EmptyState } from "@/ui/components/EmptyState";
-import {
-  DateField,
-  Select,
-  TextArea,
-  TextField,
-  TimeField,
-} from "@/ui/components/Field";
+import { Select, TextArea, TextField } from "@/ui/components/Field";
 import { ListSection } from "@/ui/components/List";
 import { SegmentedControl } from "@/ui/components/SegmentedControl";
 import { Sheet } from "@/ui/components/Sheet";
+import { TimeField } from "@/ui/components/TimePicker";
 import { toast } from "@/ui/components/Toast";
 import { Toggle } from "@/ui/components/Toggle";
 import { deleteReminder, saveReminder, toggleReminder } from "../actions";

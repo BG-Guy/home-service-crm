@@ -3,7 +3,8 @@
 import { Check, Sparkles, X } from "lucide-react";
 import { useState, useTransition } from "react";
 import { Button } from "@/ui/components/Button";
-import { DateField, TextArea, TextField } from "@/ui/components/Field";
+import { DateField } from "@/ui/components/DatePicker";
+import { TextArea, TextField } from "@/ui/components/Field";
 import { Sheet } from "@/ui/components/Sheet";
 import { toast } from "@/ui/components/Toast";
 import {

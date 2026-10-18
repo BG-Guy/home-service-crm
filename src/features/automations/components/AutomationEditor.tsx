@@ -8,12 +8,13 @@ import { useConfirm } from "@/ui/components/Alert";
 import { Banner } from "@/ui/components/Banner";
 import { Button } from "@/ui/components/Button";
 import { Chip, ChipRow } from "@/ui/components/Chip";
-import { Select, TextArea, TextField, TimeField } from "@/ui/components/Field";
+import { Select, TextArea, TextField } from "@/ui/components/Field";
 import { IconButton } from "@/ui/components/IconButton";
 import { ListSection } from "@/ui/components/List";
 import { MessageBubble } from "@/ui/components/MessageBubble";
 import { SegmentedControl } from "@/ui/components/SegmentedControl";
 import { Sheet } from "@/ui/components/Sheet";
+import { TimeField } from "@/ui/components/TimePicker";
 import { toast } from "@/ui/components/Toast";
 import { ToggleRow } from "@/ui/components/Toggle";
 import {

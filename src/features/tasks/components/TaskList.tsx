@@ -13,16 +13,12 @@ import { useOptimistic, useState, useTransition } from "react";
 import { ROW_SEP } from "@/features/jobs/components/sep";
 import { dateKey, formatInTz } from "@/lib/time";
 import { Button } from "@/ui/components/Button";
-import {
-  DateField,
-  Select,
-  TextArea,
-  TextField,
-  TimeField,
-} from "@/ui/components/Field";
+import { DateField } from "@/ui/components/DatePicker";
+import { Select, TextArea, TextField } from "@/ui/components/Field";
 import { Sheet } from "@/ui/components/Sheet";
 import { Pill } from "@/ui/components/StatusPill";
 import { SwipeActions } from "@/ui/components/SwipeActions";
+import { TimeField } from "@/ui/components/TimePicker";
 import { toast } from "@/ui/components/Toast";
 import { cx } from "@/ui/cx";
 import { haptic } from "@/ui/motion/haptics";

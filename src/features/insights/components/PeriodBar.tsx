@@ -4,7 +4,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState, useTransition } from "react";
 import { UrlSegmented } from "@/features/settings/components/UrlSegmented";
 import { Button } from "@/ui/components/Button";
-import { DateField } from "@/ui/components/Field";
+import { DateField } from "@/ui/components/DatePicker";
 import { cx } from "@/ui/cx";
 import { PERIOD_LABELS, PERIODS, type PeriodKey } from "../period";
 

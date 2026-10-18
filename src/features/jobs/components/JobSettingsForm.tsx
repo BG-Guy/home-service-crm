@@ -2,9 +2,10 @@
 
 import { useState, useTransition } from "react";
 import { Button } from "@/ui/components/Button";
-import { Select, TextField, TimeField } from "@/ui/components/Field";
+import { Select, TextField } from "@/ui/components/Field";
 import { ListSection } from "@/ui/components/List";
 import { MoneyField } from "@/ui/components/MoneyField";
+import { TimeField } from "@/ui/components/TimePicker";
 import { toast } from "@/ui/components/Toast";
 import { ToggleRow } from "@/ui/components/Toggle";
 import { cx } from "@/ui/cx";

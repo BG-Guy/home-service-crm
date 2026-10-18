@@ -8,8 +8,9 @@ import { requireUser } from "@/lib/auth/current";
 import { getCompany } from "@/lib/settings";
 import { safeTimeZone } from "@/lib/time";
 import { buttonClass } from "@/ui/components/Button";
+import { DateField } from "@/ui/components/DatePicker";
 import { EmptyState } from "@/ui/components/EmptyState";
-import { DateField, Select, TextField } from "@/ui/components/Field";
+import { Select, TextField } from "@/ui/components/Field";
 
 export const metadata: Metadata = { title: "Audit log" };
 

@@ -3,9 +3,9 @@
 import { Scale } from "lucide-react";
 import { useState } from "react";
 import { Banner } from "@/ui/components/Banner";
-import { TimeField } from "@/ui/components/Field";
 import { ListSection } from "@/ui/components/List";
 import { Stepper } from "@/ui/components/Stepper";
+import { TimeField } from "@/ui/components/TimePicker";
 import { ToggleRow } from "@/ui/components/Toggle";
 import { cx } from "@/ui/cx";
 import {

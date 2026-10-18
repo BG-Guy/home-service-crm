@@ -157,8 +157,8 @@ server-rendered by the root layout (`getBrandingStyle()` → `src/lib/branding.t
 Components (`src/ui/components/`, import each file directly): Button, IconButton, List
 (ListGroup/ListSection/ListRow), KeyValueList, StatusPill, Badge, Chip, Avatar, TechCard,
 MoneyText, Score (ReadinessRing/RiskChip), Toggle, SegmentedControl, Stepper, Field
-(TextField/TextArea/Select/DateField/TimeField), DatePicker (Calendar/CalendarWindow/
-DatePickerButton), TimePicker, AddressAutocomplete, MoneyField, PhoneField, SearchField,
+(TextField/TextArea/Select), DatePicker (DateField/Calendar/CalendarWindow/DatePickerButton),
+TimePicker (TimeField), AddressAutocomplete, MoneyField, PhoneField, SearchField,
 SubmitButton, Sheet, ActionSheet, Alert (useConfirm), ConfirmTyped, ContextMenu, AnchoredPopover,
 SwipeActions, AddMenu, NavBar (LargeTitleHeader/BackButton), NavHistory (history breadcrumbs),
 PageActions (ActionRailFrame/usePageActions), TabBar, Sidebar, AppShell
@@ -177,9 +177,11 @@ labels are sentence case ("Sign in", "New job"). `StatCard size="sm"` for 3-up r
 Phone numbers shown to people go through `formatPhoneDisplay()` (`@/lib/phone-display`).
 
 Conventions from the UX round (2026-10-18):
-- Dates and times: always `DateField` / `TimeField` (never `<input type="date|time">`). They keep the native
-  contract ('YYYY-MM-DD' / 'HH:MM', `name`, `required`, a real `onChange` event) but open the calendar window
-  (sheet on touch, popover with a mouse) and iOS wheels / typed segments. Pure math: `picker-math.ts`.
+- Dates and times: always `DateField` (`DatePicker.tsx`) / `TimeField` (`TimePicker.tsx`), never
+  `<input type="date|time">`. They keep the native contract ('YYYY-MM-DD' / 'HH:MM', `name`, `required`, a real
+  `onChange` event) but open the calendar window (sheet on touch, popover with a mouse) and iOS wheels / typed
+  segments. Import them from their own files, not `Field`, so forms without dates don't ship the pickers
+  (~10 KB gz). Pure math: `picker-math.ts`.
 - Page actions on desktop: wrap a page that has actions in `<ActionRailFrame>` (`compact` beside a list or side
   column) and publish them from the component that owns them with `usePageActions({ title, subtitle, groups })`;
   it returns `true` when the rail shows them, so hide that component's "…" at `lg`. Phones keep the "…" sheet.

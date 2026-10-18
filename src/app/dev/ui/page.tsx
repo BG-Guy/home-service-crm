@@ -31,15 +31,10 @@ import {
   ProgressRing,
   Sparkline,
 } from "@/ui/components/charts";
+import { DateField } from "@/ui/components/DatePicker";
 import { EmptyState } from "@/ui/components/EmptyState";
 import { FeatureGate } from "@/ui/components/FeatureGate";
-import {
-  DateField,
-  Select,
-  TextArea,
-  TextField,
-  TimeField,
-} from "@/ui/components/Field";
+import { Select, TextArea, TextField } from "@/ui/components/Field";
 import { KeyValueList } from "@/ui/components/KeyValueList";
 import { ListGroup, ListRow, ListSection } from "@/ui/components/List";
 import { MessageBubble, MessageSeparator } from "@/ui/components/MessageBubble";
@@ -59,6 +54,7 @@ import { StatCard } from "@/ui/components/StatCard";
 import { Pill, StatusPill } from "@/ui/components/StatusPill";
 import { TechCard } from "@/ui/components/TechCard";
 import { Timeline } from "@/ui/components/Timeline";
+import { TimeField } from "@/ui/components/TimePicker";
 import { Toggle } from "@/ui/components/Toggle";
 import { PageTransition, PushLink } from "@/ui/motion/PageTransition";
 import { STATUS, type StatusKind } from "@/ui/status";
