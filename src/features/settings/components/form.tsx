@@ -14,6 +14,7 @@ import {
   useRef,
 } from "react";
 import type { ActionResult } from "@/lib/types";
+import { DateField, type DateFieldProps } from "@/ui/components/DatePicker";
 import {
   Select,
   type SelectProps,
@@ -168,6 +169,11 @@ export function FArea(props: TextAreaProps & { name: string }) {
 export function FSelect(props: SelectProps & { name: string }) {
   const err = useFieldError(props.name);
   return <Select {...props} error={props.error ?? err} />;
+}
+
+export function FDate(props: DateFieldProps & { name: string }) {
+  const err = useFieldError(props.name);
+  return <DateField {...props} error={props.error ?? err} />;
 }
 
 export function FMoney(

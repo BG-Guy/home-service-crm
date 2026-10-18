@@ -6,7 +6,7 @@ import type { CustomFieldDef } from "@/features/settings/contracts";
 import { CustomFieldsFields } from "@/features/settings/slots.client";
 import { AddressAutocomplete } from "@/ui/components/AddressAutocomplete";
 import { Button } from "@/ui/components/Button";
-import { Select, TextArea, TextField } from "@/ui/components/Field";
+import { DateField, Select, TextArea, TextField } from "@/ui/components/Field";
 import { MoneyField } from "@/ui/components/MoneyField";
 import { PhoneField } from "@/ui/components/PhoneField";
 import { toast } from "@/ui/components/Toast";
@@ -128,10 +128,9 @@ export function LeadForm({
           error={err("price")}
         />
         <div className="grid grid-cols-2 gap-3">
-          <TextField
+          <DateField
             label="Preferred date"
             name="preferredDate"
-            type="date"
             error={err("preferred_date") ?? err("preferredDate")}
           />
           <Select

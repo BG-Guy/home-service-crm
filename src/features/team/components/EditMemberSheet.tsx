@@ -4,6 +4,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { ColorSwatches } from "@/features/settings/components/ColorSwatches";
 import {
+  FDate,
   FieldCard,
   FieldErrorText,
   FormErrors,
@@ -169,10 +170,9 @@ function EditMemberSheet({
               inputMode="tel"
               defaultValue={member.phone ?? ""}
             />
-            <FText
+            <FDate
               name="hireDate"
               label="Hire date"
-              type="date"
               defaultValue={member.hireDate ?? ""}
             />
           </FieldCard>
@@ -359,10 +359,9 @@ function EditMemberSheet({
                       label="Number"
                       defaultValue={l.number}
                     />
-                    <FText
+                    <FDate
                       name={`licenses.${i}.expires_on`}
                       label="Expires"
-                      type="date"
                       defaultValue={l.expires_on ?? ""}
                     />
                   </div>

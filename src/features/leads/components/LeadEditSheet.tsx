@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Button } from "@/ui/components/Button";
-import { Select, TextArea, TextField } from "@/ui/components/Field";
+import { DateField, Select, TextArea, TextField } from "@/ui/components/Field";
 import { MoneyField } from "@/ui/components/MoneyField";
 import { Sheet } from "@/ui/components/Sheet";
 import { toast } from "@/ui/components/Toast";
@@ -131,10 +131,9 @@ export function LeadEditSheet({
             error={errors.price}
           />
           <div className="grid grid-cols-2 gap-3">
-            <TextField
+            <DateField
               label="Preferred date"
               name="preferredDate"
-              type="date"
               defaultValue={lead.preferredDate ?? ""}
               error={errors.preferredDate}
             />

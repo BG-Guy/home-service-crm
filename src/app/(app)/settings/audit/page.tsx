@@ -9,7 +9,7 @@ import { getCompany } from "@/lib/settings";
 import { safeTimeZone } from "@/lib/time";
 import { buttonClass } from "@/ui/components/Button";
 import { EmptyState } from "@/ui/components/EmptyState";
-import { Select, TextField } from "@/ui/components/Field";
+import { DateField, Select, TextField } from "@/ui/components/Field";
 
 export const metadata: Metadata = { title: "Audit log" };
 
@@ -94,18 +94,8 @@ export default async function SettingsAuditPage({
           name="entityId"
           defaultValue={sp.entityId ?? ""}
         />
-        <TextField
-          label="From"
-          name="from"
-          type="date"
-          defaultValue={sp.from ?? ""}
-        />
-        <TextField
-          label="To"
-          name="to"
-          type="date"
-          defaultValue={sp.to ?? ""}
-        />
+        <DateField label="From" name="from" defaultValue={sp.from ?? ""} />
+        <DateField label="To" name="to" defaultValue={sp.to ?? ""} />
         <div className="col-span-full flex gap-2">
           <button
             type="submit"
