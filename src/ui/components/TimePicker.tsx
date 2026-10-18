@@ -659,12 +659,13 @@ function Wheel({
     [],
   );
 
+  const valueAt = (i: number) => items[((i % n) + n) % n] as number;
+  // After a fling: report the final item, then quietly jump back to the middle copy.
   const settle = () => {
     const el = ref.current;
     if (!el) return;
     const i = Math.round(el.scrollTop / ITEM_H);
-    const v = items[((i % n) + n) % n] as number;
-    onChangeRef.current(v);
+    onChangeRef.current(valueAt(i));
     if (loop) {
       const local = ((i % n) + n) % n;
       const target = mid + local;
@@ -683,6 +684,8 @@ function Wheel({
     if (i !== lastTick.current) {
       lastTick.current = i;
       setCentered(i);
+      // Report every tick, so "Done" right after a flick keeps what's centered.
+      onChangeRef.current(valueAt(i));
       haptic();
     }
     if (settleTimer.current) clearTimeout(settleTimer.current);

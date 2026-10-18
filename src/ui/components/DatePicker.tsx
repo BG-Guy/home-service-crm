@@ -167,6 +167,9 @@ export function Calendar({
   const start = isDateKey(value) ? value : clampKey(today, min, max);
   const [ym, setYm] = useState<YearMonth>(() => monthOf(start));
   const [focusKey, setFocusKey] = useState(start);
+  // Fresh after a flushSync commit (key repeat while a slide is in flight).
+  const focusRef = useRef(focusKey);
+  focusRef.current = focusKey;
   const [view, setView] = useState<"days" | "months">("days");
   // The month being slid to: the title changes as the slide starts, like iOS.
   const [heading, setHeading] = useState<YearMonth | null>(null);
@@ -293,7 +296,7 @@ export function Calendar({
 
   const moveFocus = (next: string) => {
     const target = monthOf(next);
-    const d = monthDiff(ym, target);
+    const d = monthDiff(ymRef.current, target);
     if (d === 0) {
       setFocusKey(next);
       setFocusTick((n) => n + 1);
@@ -307,22 +310,25 @@ export function Calendar({
     }
   };
 
-  const onGridKey = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+  const onGridKey = (e: ReactKeyboardEvent<HTMLElement>) => {
     const k = e.key;
-    let next: string | null = null;
-    if (k === "ArrowLeft") next = addDaysToKey(focusKey, -1);
-    else if (k === "ArrowRight") next = addDaysToKey(focusKey, 1);
-    else if (k === "ArrowUp") next = addDaysToKey(focusKey, -7);
-    else if (k === "ArrowDown") next = addDaysToKey(focusKey, 7);
-    else if (k === "Home") next = weekEdge(focusKey, "start", weekStartsOn);
-    else if (k === "End") next = weekEdge(focusKey, "end", weekStartsOn);
-    else if (k === "PageUp")
-      next = addMonthsToKey(focusKey, e.shiftKey ? -12 : -1);
-    else if (k === "PageDown")
-      next = addMonthsToKey(focusKey, e.shiftKey ? 12 : 1);
-    if (!next) return;
+    const step: Record<string, (from: string) => string> = {
+      ArrowLeft: (f) => addDaysToKey(f, -1),
+      ArrowRight: (f) => addDaysToKey(f, 1),
+      ArrowUp: (f) => addDaysToKey(f, -7),
+      ArrowDown: (f) => addDaysToKey(f, 7),
+      Home: (f) => weekEdge(f, "start", weekStartsOn),
+      End: (f) => weekEdge(f, "end", weekStartsOn),
+      PageUp: (f) => addMonthsToKey(f, e.shiftKey ? -12 : -1),
+      PageDown: (f) => addMonthsToKey(f, e.shiftKey ? 12 : 1),
+    };
+    const fn = step[k];
+    if (!fn) return;
     e.preventDefault();
-    moveFocus(next);
+    // Land any slide still in flight first, so the step starts from where the
+    // focus really is (holding an arrow key across a month edge).
+    settle();
+    moveFocus(fn(focusRef.current));
   };
 
   /* ---------- swipe between months (touch / pen) ---------- */
