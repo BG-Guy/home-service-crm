@@ -298,16 +298,13 @@ export default async function CustomerDetailPage({
             <StatCard
               label="Jobs"
               value={c.jobCount}
-              // Found by name, like "See all jobs" (an anonymized name isn't theirs).
+              // Found by name, like "See all jobs" (an anonymized name isn't
+              // theirs). A tech's list opens on Upcoming, with Past one tap away.
               href={
-                anonymized
-                  ? undefined
-                  : p.has("jobs.view_all")
-                    ? `/jobs?q=${encodeURIComponent(c.displayName)}`
-                    : p.has("jobs.view_own")
-                      ? // Your jobs list starts on upcoming; these are all of them.
-                        `/jobs?q=${encodeURIComponent(c.displayName)}&view=all`
-                      : undefined
+                !anonymized &&
+                (p.has("jobs.view_all") || p.has("jobs.view_own"))
+                  ? `/jobs?q=${encodeURIComponent(c.displayName)}`
+                  : undefined
               }
               className={
                 (c.balanceCents != null ? 1 : 0) +

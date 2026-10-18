@@ -38,9 +38,10 @@ export async function TechDashboard({
   const range = `from=${period.fromKey}&to=${period.toKey}`;
   const jobsOn =
     user.perms.has("jobs.view_all") || user.perms.has("jobs.view_own");
-  const completedJobs = jobsOn
-    ? `/jobs?mine=1&status=completed,closed&${range}`
-    : undefined;
+  // A tech's job list has an Upcoming/Past switch: open it on Past. The
+  // office list shows the status as its "Completed" chip instead.
+  const done = `${user.perms.has("jobs.view_all") ? "" : "view=past&"}status=completed,closed`;
+  const completedJobs = jobsOn ? `/jobs?mine=1&${done}&${range}` : undefined;
   const progress = s.today.total ? s.today.done / s.today.total : 0;
   const cmp = period.compareLabel;
   const d = (
@@ -140,9 +141,9 @@ export async function TechDashboard({
             value={pct(s.callbackRate, 1)}
             delta={d(s.callbackRate, prev.callbackRate, true, "down")}
             footnote={plural(s.callbacks, "callback")}
-            // Past and upcoming callback visits on your jobs in the period.
+            // The rate counts the period's completed callbacks.
             href={
-              jobsOn ? `/jobs?mine=1&callback=1&view=all&${range}` : undefined
+              jobsOn ? `/jobs?mine=1&callback=1&${done}&${range}` : undefined
             }
           />
           <StatCard
