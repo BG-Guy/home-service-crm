@@ -4,6 +4,7 @@ import { KeyRound, MapPin, Plus, Star } from "lucide-react";
 import { useState, useTransition } from "react";
 import type { CustomFieldDef } from "@/features/settings/contracts";
 import { CustomFieldsFields } from "@/features/settings/slots.client";
+import { AddressAutocomplete } from "@/ui/components/AddressAutocomplete";
 import { useConfirm } from "@/ui/components/Alert";
 import { Button } from "@/ui/components/Button";
 import { Select, TextArea, TextField } from "@/ui/components/Field";
@@ -211,12 +212,13 @@ function PropertySheet({
           placeholder="Home, Rental #2…"
           defaultValue={p?.label ?? ""}
         />
-        <TextField
+        <AddressAutocomplete
           label="Street"
           name="street"
-          autoComplete="address-line1"
           defaultValue={p?.street ?? ""}
           error={errors.street}
+          fill={{ city: "city", state: "state", zip: "zip" }}
+          focusAfter="unit"
         />
         <div className="grid grid-cols-[1fr_96px] gap-3">
           <TextField

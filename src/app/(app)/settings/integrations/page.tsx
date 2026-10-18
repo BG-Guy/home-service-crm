@@ -7,6 +7,7 @@ import {
   MapPinned,
   MessageSquare,
   ShieldCheck,
+  TextCursorInput,
 } from "lucide-react";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
@@ -14,6 +15,7 @@ import { aiProviderName } from "@/adapters/ai";
 import { emailDriverName } from "@/adapters/email";
 import { smsDriverName } from "@/adapters/messaging";
 import { paymentsDriverName } from "@/adapters/payments";
+import { placesDriverName } from "@/adapters/places";
 import { vapidPublicKey } from "@/adapters/push";
 import { storageDriverName } from "@/adapters/storage";
 import {
@@ -110,6 +112,8 @@ export default async function SettingsIntegrationsPage() {
   const storage = storageDriverName();
   const vapid = vapidPublicKey();
   const geocoder = process.env.GEOCODER || "census";
+  const places = placesDriverName();
+  const geoapifyKey = !!process.env.GEOAPIFY_API_KEY;
   const tiles = !!process.env.NEXT_PUBLIC_TILE_URL;
   const turnstile = (by.get("TURNSTILE_SECRET")?.source ?? "none") !== "none";
 
@@ -225,7 +229,16 @@ export default async function SettingsIntegrationsPage() {
           <SecretRow s={secret("GEMINI_API_KEY")} />
         </ListSection>
 
-        <ListSection header="Maps and addresses">
+        <ListSection
+          header="Maps and addresses"
+          footer={
+            places === "photon"
+              ? "Address autocomplete suggests real addresses as staff type a street. Photon is free and needs no key, but its public server throttles heavy use: set PHOTON_URL to a self-hosted Photon, or use Geoapify (ADDRESS_AUTOCOMPLETE=geoapify with GEOAPIFY_API_KEY)."
+              : places === "geoapify" && !geoapifyKey
+                ? "Address autocomplete is off until GEOAPIFY_API_KEY is set."
+                : undefined
+          }
+        >
           <Driver
             icon={<MapPinned size={17} aria-hidden />}
             tone="teal"
@@ -239,6 +252,35 @@ export default async function SettingsIntegrationsPage() {
             label="Test address lookup"
             subtitle="Looks up a known US address"
           />
+          <Driver
+            icon={<TextCursorInput size={17} aria-hidden />}
+            tone="teal"
+            title="Address autocomplete"
+            driver={
+              places === "photon"
+                ? "Photon (OpenStreetMap)"
+                : places === "geoapify"
+                  ? geoapifyKey
+                    ? "Geoapify"
+                    : "Geoapify (no key)"
+                  : "Off"
+            }
+            active={
+              places === "photon" || (places === "geoapify" && geoapifyKey)
+            }
+            env={
+              places === "geoapify"
+                ? "ADDRESS_AUTOCOMPLETE (photon | geoapify | none), GEOAPIFY_API_KEY"
+                : "ADDRESS_AUTOCOMPLETE (photon | geoapify | none), PHOTON_URL"
+            }
+          />
+          {places !== "none" && (
+            <TestRow
+              kind="places"
+              label="Test address autocomplete"
+              subtitle="Suggests addresses for a partial US address"
+            />
+          )}
           <Driver
             icon={<MapPinned size={17} aria-hidden />}
             tone="teal"

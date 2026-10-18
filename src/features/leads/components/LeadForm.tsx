@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import type { CustomFieldDef } from "@/features/settings/contracts";
 import { CustomFieldsFields } from "@/features/settings/slots.client";
+import { AddressAutocomplete } from "@/ui/components/AddressAutocomplete";
 import { Button } from "@/ui/components/Button";
 import { Select, TextArea, TextField } from "@/ui/components/Field";
 import { MoneyField } from "@/ui/components/MoneyField";
@@ -92,11 +93,12 @@ export function LeadForm({
           autoComplete="email"
           error={err("email")}
         />
-        <TextField
+        <AddressAutocomplete
           label="Service address"
           name="address"
           placeholder="12 Oak St, Austin, TX 78701"
           error={err("address")}
+          pick="label"
         />
       </section>
 

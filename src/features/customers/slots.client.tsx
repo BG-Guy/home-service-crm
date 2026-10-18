@@ -9,6 +9,7 @@ import {
   useState,
   useTransition,
 } from "react";
+import { AddressAutocomplete } from "@/ui/components/AddressAutocomplete";
 import { Avatar } from "@/ui/components/Avatar";
 import { Button } from "@/ui/components/Button";
 import { TextField } from "@/ui/components/Field";
@@ -214,12 +215,12 @@ function AddAddressRow({
       onAdded(r.data.propertyId);
     });
   return (
-    <div className="flex items-end gap-2 px-4 py-3">
-      <TextField
+    <div className="flex items-start gap-2 px-4 py-3">
+      <AddressAutocomplete
         label={required ? "Service address (required)" : "New service address"}
         placeholder="12 Oak St, Austin, TX 78701"
         value={line}
-        autoComplete="street-address"
+        pick="label"
         onChange={(e) => setLine(e.currentTarget.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
@@ -230,11 +231,14 @@ function AddAddressRow({
         error={error}
         className="flex-1"
       />
+      {/* Centered on the 44 px field under its label (18 px line + 6 px gap), so
+          suggestions or an error under the field don't move it. */}
       <Button
         size="sm"
         onClick={save}
         loading={pending}
         disabled={!line.trim()}
+        className="mt-[29px] shrink-0"
       >
         Add
       </Button>
@@ -452,11 +456,11 @@ function QuickCreate({
         onChange={(e) => setEmail(e.currentTarget.value)}
         error={errors.email}
       />
-      <TextField
+      <AddressAutocomplete
         label="Service address"
         placeholder="12 Oak St, Austin, TX 78701"
         value={address}
-        autoComplete="street-address"
+        pick="label"
         onChange={(e) => setAddress(e.currentTarget.value)}
         error={errors.address}
         hint="Optional — you can add it later."

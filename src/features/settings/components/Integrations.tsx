@@ -170,7 +170,7 @@ export function TestRow({
   label,
   subtitle,
 }: {
-  kind: "email" | "push" | "storage" | "geocode";
+  kind: "email" | "push" | "storage" | "geocode" | "places";
   label: string;
   subtitle?: string;
 }) {

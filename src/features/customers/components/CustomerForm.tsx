@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useRef, useState, useTransition } from "react";
 import type { CustomFieldDef } from "@/features/settings/contracts";
 import { CustomFieldsFields } from "@/features/settings/slots.client";
+import { AddressAutocomplete } from "@/ui/components/AddressAutocomplete";
 import { Avatar } from "@/ui/components/Avatar";
 import { Banner } from "@/ui/components/Banner";
 import { Button } from "@/ui/components/Button";
@@ -256,12 +257,17 @@ export function CustomerForm({
           <h2 className="px-1 text-footnote uppercase text-label-2">
             Service address
           </h2>
-          <TextField
+          <AddressAutocomplete
             label="Street"
             name="address.street"
-            autoComplete="address-line1"
             error={err("address.street")}
             onBlur={probe}
+            fill={{
+              city: "address.city",
+              state: "address.state",
+              zip: "address.zip",
+            }}
+            focusAfter="address.unit"
           />
           <div className="grid grid-cols-[1fr_88px] gap-3">
             <TextField
