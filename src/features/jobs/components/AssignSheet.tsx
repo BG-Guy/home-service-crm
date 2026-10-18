@@ -92,9 +92,12 @@ export default function AssignSheet({
     };
   }, [open, jobId, initialDate, initialTechId]);
 
-  // Re-check conflicts when the proposed window changes.
+  // Re-check conflicts when the proposed window changes. Keyed on whether the
+  // options have loaded, not on `opts` itself: the result updates `opts`, which
+  // would re-run this effect and poll the server forever.
+  const loaded = opts != null;
   useEffect(() => {
-    if (!open || !opts || !dirty || !date || !start) return;
+    if (!open || !loaded || !dirty || !date || !start) return;
     const t = setTimeout(() => {
       startLoading(async () => {
         const r = await loadAssignOptions({ jobId, date, start, minutes });
@@ -103,7 +106,7 @@ export default function AssignSheet({
       });
     }, 250);
     return () => clearTimeout(t);
-  }, [open, jobId, date, start, minutes, dirty, opts]);
+  }, [open, jobId, date, start, minutes, dirty, loaded]);
 
   const windowLengths = useMemo(() => {
     const set = new Set([...(opts?.windowLengths ?? [60, 120, 240]), minutes]);

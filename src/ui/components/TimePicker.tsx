@@ -448,7 +448,7 @@ function TimeSegments({
       aria-describedby={describedBy}
       aria-invalid={invalid}
       className={cx(
-        "min-w-0 flex-1 items-center gap-2 py-[7px] text-body",
+        "min-w-0 flex-1 items-center gap-1.5 py-[7px] text-body",
         disabled && "text-label-3",
         className,
       )}
@@ -497,7 +497,7 @@ function TimeSegments({
               }}
               onKeyDown={onMeridiemKey}
               className={cx(
-                "min-h-7 min-w-10 rounded-[6px] px-2 text-footnote font-semibold outline-offset-1 transition-[background-color,color,box-shadow] duration-200",
+                "min-h-7 min-w-[30px] rounded-[6px] px-1 text-caption font-semibold outline-offset-1 transition-[background-color,color,box-shadow] duration-200",
                 on
                   ? "bg-[var(--seg-thumb)] text-label shadow-[0_2px_6px_rgb(0_0_0/0.12)]"
                   : "text-label-2 hover:text-label",

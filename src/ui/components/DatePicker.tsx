@@ -841,7 +841,8 @@ export function DateField({
               set("");
               triggerRef.current?.focus();
             }}
-            className="hit-44 -mr-1 flex size-5 shrink-0 items-center justify-center rounded-full bg-label-3 text-card outline-offset-2"
+            // Touch screens clear from the calendar sheet; keep the width for the date.
+            className="hit-44 -mr-1 flex size-5 shrink-0 items-center justify-center rounded-full bg-label-3 text-card outline-offset-2 pointer-coarse:hidden"
           >
             <X aria-hidden size={12} strokeWidth={3} />
           </button>
