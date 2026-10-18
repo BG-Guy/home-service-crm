@@ -11,6 +11,7 @@ import {
   getUserOverrides,
 } from "@/features/settings/queries";
 import { requireUser } from "@/lib/auth/current";
+import { personHref } from "@/lib/links";
 import {
   ADMIN_LOCKED_PERMS,
   ADMIN_ONLY_OVERRIDE_PERMS,
@@ -21,6 +22,7 @@ import {
 } from "@/lib/permissions";
 import { Avatar } from "@/ui/components/Avatar";
 import { Banner } from "@/ui/components/Banner";
+import { TextLink } from "@/ui/components/TextLink";
 
 export const metadata: Metadata = { title: "Permission overrides" };
 
@@ -70,7 +72,9 @@ export default async function UserPermissionsPage({
         <div className="flex items-center gap-3 px-4">
           <Avatar name={u.name} seed={u.id} size={48} />
           <div className="min-w-0">
-            <p className="truncate text-headline">{u.name}</p>
+            <p className="truncate text-headline">
+              <TextLink href={personHref(viewer, u.id)}>{u.name}</TextLink>
+            </p>
             <p className="truncate text-subhead text-label-2">
               {u.roleName ?? u.role} · {u.email}
             </p>

@@ -17,6 +17,7 @@ import {
   odometerApprovalHint,
 } from "@/features/vehicles/api";
 import { requireUser } from "@/lib/auth/current";
+import { personHref } from "@/lib/links";
 import { getCompanyTimezone, getSettings, isEnabled } from "@/lib/settings";
 import {
   addDaysToKey,
@@ -28,6 +29,7 @@ import {
 import { Page } from "@/ui/components/AppShell";
 import { LargeTitleHeader } from "@/ui/components/NavBar";
 import { StatCard } from "@/ui/components/StatCard";
+import { TextLink } from "@/ui/components/TextLink";
 import { PageTransition } from "@/ui/motion/PageTransition";
 
 export const metadata: Metadata = { title: "Time clock" };
@@ -88,7 +90,11 @@ export default async function TimePage({
     <PageTransition>
       <LargeTitleHeader
         title="Time clock"
-        subtitle={!self && name ? name : undefined}
+        subtitle={
+          !self && name ? (
+            <TextLink href={personHref(viewer, userId)}>{name}</TextLink>
+          ) : undefined
+        }
         trailing={<HeaderActions />}
       >
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">

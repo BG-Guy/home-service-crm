@@ -5,6 +5,7 @@ import { StatementView } from "@/features/payroll/components/StatementView";
 import { getStatement } from "@/features/payroll/queries";
 import { requireUser } from "@/lib/auth/current";
 import { isUuid } from "@/lib/ids";
+import { personHref } from "@/lib/links";
 import { getCompany, getCompanyTimezone, isEnabled } from "@/lib/settings";
 import { Page } from "@/ui/components/AppShell";
 import { NavBar } from "@/ui/components/NavBar";
@@ -17,10 +18,14 @@ export default async function StatementPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireUser("payroll.view_own");
+  const user = await requireUser("payroll.view_own");
   const { id } = await params;
   if (!isUuid(id) || !(await isEnabled("payroll"))) notFound();
   const st = await getStatement(id);
+  // Your own stub's jobs are yours; anyone else's need jobs.view_all.
+  const jobs =
+    user.perms.has("jobs.view_all") ||
+    (st.viewerIsOwner && user.perms.has("jobs.view_own"));
   const [company, tz] = await Promise.all([getCompany(), getCompanyTimezone()]);
   return (
     <PageTransition>
@@ -35,6 +40,7 @@ export default async function StatementPage({
           companyName={company.name}
           tz={tz}
           admin={false}
+          links={{ tech: personHref(user, st.tech.id), jobs }}
         />
       </Page>
     </PageTransition>

@@ -11,7 +11,18 @@ import type { ReactNode } from "react";
 import { formatDayShort, formatInTz, formatTimeRange } from "@/lib/time";
 import { Avatar } from "@/ui/components/Avatar";
 import { Pill, StatusPill } from "@/ui/components/StatusPill";
+import { TextLink } from "@/ui/components/TextLink";
 import type { JobDetail } from "../types";
+
+/** Where the header's names lead; each is null when the viewer can't go there. */
+export interface JobHeaderLinks {
+  /** The customer record. */
+  customer?: string | null;
+  /** Directions (`mapsHref`); never for a masked address. */
+  address?: string | null;
+  /** By assignee user id (`personHref` with the job's day). */
+  assignees?: Record<string, string | null>;
+}
 
 /** Job header (BUILD_PLAN §5.3 "Header"): status, risk, readiness, deposit, payment, window, assignees. */
 export function JobHeaderCard({
@@ -21,6 +32,7 @@ export function JobHeaderCard({
   readiness,
   assign,
   evidenceHref,
+  links,
 }: {
   job: JobDetail;
   tz: string;
@@ -28,6 +40,7 @@ export function JobHeaderCard({
   readiness?: ReactNode;
   assign?: ReactNode;
   evidenceHref?: string | null;
+  links?: JobHeaderLinks;
 }) {
   const start = job.windowStart ?? job.scheduledStart;
   const end = job.windowEnd ?? job.scheduledEnd;
@@ -47,16 +60,26 @@ export function JobHeaderCard({
           </h1>
           {/* A flex row so each part truncates on its own (no orphan "·", QA T2-25). */}
           <p className="mt-0.5 flex min-w-0 items-center gap-1 text-subhead text-label-2">
-            <span className="min-w-0 shrink truncate">{job.customerName}</span>
+            <TextLink
+              href={links?.customer}
+              className="min-w-0 shrink truncate"
+            >
+              {job.customerName}
+            </TextLink>
             {job.addressShort && (
               <>
                 <span aria-hidden className="shrink-0">
                   ·
                 </span>
                 <MapPin size={12} aria-hidden className="shrink-0" />
-                <span className="min-w-0 shrink-[2] truncate">
+                <TextLink
+                  href={links?.address}
+                  external
+                  className="min-w-0 shrink-[2] truncate"
+                  aria-label={`Directions to ${job.addressShort}`}
+                >
                   {job.addressShort}
-                </span>
+                </TextLink>
               </>
             )}
           </p>
@@ -123,18 +146,37 @@ export function JobHeaderCard({
             className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1.5"
             aria-label="Assigned technicians"
           >
-            {job.assignees.map((a) => (
-              <li key={a.userId} className="flex items-center gap-1.5">
-                <Avatar name={a.name} seed={a.userId} size={24} />
-                <span className="text-subhead">{a.name.split(" ")[0]}</span>
-                {job.assignees.length > 1 && (
-                  <span className="num text-caption text-label-2">
-                    {a.role === "primary" ? "Lead" : "Helper"} ·{" "}
-                    {Math.round(a.splitBps / 100)}%
-                  </span>
-                )}
-              </li>
-            ))}
+            {job.assignees.map((a) => {
+              const href = links?.assignees?.[a.userId];
+              const first = a.name.split(" ")[0];
+              return (
+                <li key={a.userId} className="flex items-center gap-1.5">
+                  {href ? (
+                    // The full name: the visible first name plus who it is.
+                    <Link
+                      href={href}
+                      transitionTypes={["nav-forward"]}
+                      aria-label={a.name}
+                      className="pressable flex min-h-6 items-center gap-1.5 rounded-pill text-subhead text-accent-text hover:underline"
+                    >
+                      <Avatar name={a.name} seed={a.userId} size={24} />
+                      <span>{first}</span>
+                    </Link>
+                  ) : (
+                    <>
+                      <Avatar name={a.name} seed={a.userId} size={24} />
+                      <span className="text-subhead">{first}</span>
+                    </>
+                  )}
+                  {job.assignees.length > 1 && (
+                    <span className="num text-caption text-label-2">
+                      {a.role === "primary" ? "Lead" : "Helper"} ·{" "}
+                      {Math.round(a.splitBps / 100)}%
+                    </span>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         ) : (
           <span className="flex-1 text-subhead text-[var(--sys-orange)]">

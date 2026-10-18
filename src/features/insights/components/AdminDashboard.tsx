@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getCustodyBalances } from "@/features/payroll/api";
 import { listUsers } from "@/features/team/api";
 import { FleetSummaryCard } from "@/features/vehicles/slots";
+import { personHref } from "@/lib/links";
 import { isEnabled } from "@/lib/settings";
 import { formatDateKey, formatRelative } from "@/lib/time";
 import type { SessionUser } from "@/lib/types";
@@ -95,7 +96,13 @@ export async function AdminDashboard({
     getAnomalies(now, tz),
     listUsers().then((u) => u.filter((x) => x.baseRole === "tech")),
   ]);
-  const fleetOn = await isEnabled("vehicles");
+  const [fleetOn, payrollOn] = await Promise.all([
+    isEnabled("vehicles"),
+    isEnabled("payroll"),
+  ]);
+  // Held cash is handed in on Payroll → Cash; without it, the tech's profile or
+  // schedule day, whichever the viewer may open.
+  const cashView = payrollOn && user.perms.has("payroll.view_all");
   const custody = techs.length
     ? await getCustodyBalances(techs.map((t) => t.id)).catch(
         () => ({}) as Record<string, never>,
@@ -461,7 +468,11 @@ export async function AdminDashboard({
                     : undefined
                 }
                 detail={<MoneyText cents={c?.heldCents ?? 0} />}
-                href={`/team/${t.id}`}
+                href={
+                  cashView
+                    ? "/pay/settlements?view=cash"
+                    : (personHref(user, t.id) ?? undefined)
+                }
               />
             ))}
           </ListSection>
@@ -490,7 +501,7 @@ export async function AdminDashboard({
             ) : undefined
           }
         >
-          <Leaderboard rows={board} rq={rq} />
+          <Leaderboard rows={board} rq={rq} viewer={user} />
         </Block>
       )}
 

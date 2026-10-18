@@ -1,5 +1,7 @@
 "use client";
 
+import { ChevronRight } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { formatMoney } from "@/lib/money";
 import { cx } from "@/ui/cx";
@@ -11,11 +13,14 @@ export function VerifyList({
   rows,
   canVerify,
   dates,
+  hrefs = {},
 }: {
   rows: PaymentListRow[];
   canVerify: boolean;
   /** Pre-formatted dates by payment id (company time zone). */
   dates: Record<string, string>;
+  /** Where each payment opens (job → invoice → customer), by payment id. */
+  hrefs?: Record<string, string>;
 }) {
   const [sel, setSel] = useState<string[]>([]);
   const all = sel.length === rows.length && rows.length > 0;
@@ -41,12 +46,14 @@ export function VerifyList({
       <ul className="list-card">
         {rows.map((p) => {
           const on = sel.includes(p.id);
+          const href = hrefs[p.id];
           return (
-            <li key={p.id} className="list-row">
+            <li key={p.id} className="list-row flex items-center">
               {/* biome-ignore lint/a11y/noLabelWithoutControl: the checkbox input is a descendant */}
               <label
                 className={cx(
-                  "flex min-h-11 items-center gap-3 px-4 py-2.5",
+                  "flex min-h-11 min-w-0 flex-1 items-center gap-3 py-2.5 pl-4",
+                  href ? "pr-1" : "pr-4",
                   canVerify && "cursor-pointer",
                 )}
               >
@@ -85,6 +92,18 @@ export function VerifyList({
                   )}
                 </span>
               </label>
+              {/* Outside the label, so a tap here opens the payment instead of
+                  toggling its checkbox. */}
+              {href && (
+                <Link
+                  href={href}
+                  transitionTypes={["nav-forward"]}
+                  aria-label={`Open ${p.customerName}${p.jobNumber ? ` · ${p.jobNumber}` : ""}`}
+                  className="pressable mr-1 flex size-11 shrink-0 items-center justify-center rounded-full text-label-2 hover:bg-fill-2 hover:text-accent-text"
+                >
+                  <ChevronRight aria-hidden size={18} strokeWidth={2.5} />
+                </Link>
+              )}
             </li>
           );
         })}

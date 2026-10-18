@@ -26,6 +26,7 @@ export interface ReviewRow {
   id: string;
   jobId: string;
   jobNumber: string;
+  customerId: string;
   customerName: string;
   techName: string | null;
   sentCount: number;
@@ -79,6 +80,7 @@ export async function getReviewsPage(
       id: reviewRequests.id,
       jobId: reviewRequests.jobId,
       jobNumber: jobs.number,
+      customerId: reviewRequests.customerId,
       customerName: customers.displayName,
       techName: users.name,
       sentCount: reviewRequests.sentCount,
@@ -130,6 +132,7 @@ export async function getReviewsPage(
     id: r.id,
     jobId: r.jobId,
     jobNumber: r.jobNumber,
+    customerId: r.customerId,
     customerName: r.customerName,
     techName: r.techName,
     sentCount: r.sentCount,

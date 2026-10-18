@@ -63,6 +63,7 @@ export function TaskList({
   jobId,
   emptyText = "Nothing to do. Nice.",
   compact = false,
+  canOpenCustomers = false,
 }: {
   tasks: TaskView[];
   tz: string;
@@ -73,6 +74,8 @@ export function TaskList({
   jobId?: string;
   emptyText?: string;
   compact?: boolean;
+  /** customers.view_all: a task's customer chip links to the record. */
+  canOpenCustomers?: boolean;
 }) {
   const [list, patch] = useOptimistic(
     tasks,
@@ -263,13 +266,27 @@ export function TaskList({
                   {t.status === "dismissed" && <span>Dismissed</span>}
                 </span>
               </button>
-              {t.jobId && t.jobNumber && (
+              {t.jobId && t.jobNumber ? (
                 <Link
                   href={`/jobs/${t.jobId}`}
                   className="mt-2.5 inline-flex shrink-0 items-center gap-1 rounded-full bg-fill px-2.5 py-1 text-footnote text-label-2"
                 >
                   <Briefcase size={12} aria-hidden /> {t.jobNumber}
                 </Link>
+              ) : (
+                // No job: the customer the task is about (the job's page
+                // already leads to its customer).
+                canOpenCustomers &&
+                t.customerId &&
+                t.customerName && (
+                  <Link
+                    href={`/customers/${t.customerId}`}
+                    className="mt-2.5 inline-flex min-w-0 max-w-[40%] shrink-0 items-center gap-1 rounded-full bg-fill px-2.5 py-1 text-footnote text-label-2"
+                  >
+                    <User size={12} aria-hidden className="shrink-0" />
+                    <span className="truncate">{t.customerName}</span>
+                  </Link>
+                )
               )}
             </div>
           );

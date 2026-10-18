@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { canSeeCustomer } from "@/features/customers/api";
 import { assertChangeOrderAccess } from "@/features/estimates/access";
 import {
   DEFAULT_ESIGN_CONSENT,
@@ -19,6 +20,7 @@ import { MoneyText } from "@/ui/components/MoneyText";
 import { NavBar } from "@/ui/components/NavBar";
 import { ActionRailFrame } from "@/ui/components/PageActions";
 import { StatusPill } from "@/ui/components/StatusPill";
+import { TextLink } from "@/ui/components/TextLink";
 import { PageTransition } from "@/ui/motion/PageTransition";
 
 export const metadata: Metadata = { title: "Change order" };
@@ -47,6 +49,7 @@ export default async function EstimatesCoIdPage({
   ]);
   if (!loaded) notFound();
   const co = loaded.changeOrder;
+  const customerOpen = await canSeeCustomer(user, loaded.customer.id);
   return (
     <PageTransition>
       <ActionRailFrame
@@ -72,8 +75,25 @@ export default async function EstimatesCoIdPage({
               signed
               className="text-large-title font-bold"
             />
+            {/* Change orders open only for jobs.view_all or the job's
+                assignees, who may open the job too. */}
             <p className="text-subhead text-label-2">
-              {loaded.customer.displayName} · Job {loaded.job.number}
+              <TextLink
+                href={customerOpen ? `/customers/${loaded.customer.id}` : null}
+              >
+                {loaded.customer.displayName}
+              </TextLink>
+              {" · "}
+              <TextLink
+                href={
+                  user.perms.has("jobs.view_all") ||
+                  user.perms.has("jobs.view_own")
+                    ? `/jobs/${loaded.job.id}?tab=estimate`
+                    : null
+                }
+              >
+                Job {loaded.job.number}
+              </TextLink>
             </p>
           </section>
           {co.status === "approved" && sig ? (

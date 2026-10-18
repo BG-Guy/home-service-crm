@@ -12,6 +12,7 @@ import { StatementView } from "@/features/payroll/components/StatementView";
 import { getStatement } from "@/features/payroll/queries";
 import { requireUser } from "@/lib/auth/current";
 import { isUuid } from "@/lib/ids";
+import { personHref } from "@/lib/links";
 import {
   getCompany,
   getCompanyTimezone,
@@ -122,7 +123,18 @@ export default async function SettlementPage({
               />
             )}
           </div>
-          <StatementView st={st} companyName={company.name} tz={tz} admin />
+          <StatementView
+            st={st}
+            companyName={company.name}
+            tz={tz}
+            admin
+            links={{
+              tech: personHref(user, st.tech.id),
+              jobs:
+                user.perms.has("jobs.view_all") ||
+                (st.viewerIsOwner && user.perms.has("jobs.view_own")),
+            }}
+          />
         </div>
       </Page>
     </PageTransition>

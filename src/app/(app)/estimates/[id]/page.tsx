@@ -1,5 +1,7 @@
+import { Briefcase } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { canSeeCustomer } from "@/features/customers/api";
 import { CustomerCard } from "@/features/customers/slots";
 import { assertEstimateAccess } from "@/features/estimates/access";
 import { complianceNotes } from "@/features/estimates/compliance";
@@ -7,6 +9,7 @@ import { EstimateBuilder } from "@/features/estimates/components/EstimateBuilder
 import { EstimateDocument } from "@/features/estimates/components/EstimateDocument";
 import { loadEstimateDocForViewer } from "@/features/estimates/doc";
 import { isEstimateOpen } from "@/features/estimates/logic";
+import { getJobForUser } from "@/features/jobs/api";
 import { CameraCaptureButton } from "@/features/media/slots.client";
 import { ActivityTimeline } from "@/features/notify/slots";
 import { requireUser } from "@/lib/auth/current";
@@ -23,6 +26,7 @@ import { MoneyText } from "@/ui/components/MoneyText";
 import { NavBar } from "@/ui/components/NavBar";
 import { ActionRailFrame } from "@/ui/components/PageActions";
 import { StatusPill } from "@/ui/components/StatusPill";
+import { TextLink } from "@/ui/components/TextLink";
 import { PageTransition } from "@/ui/motion/PageTransition";
 
 export const metadata: Metadata = { title: "Estimate" };
@@ -58,6 +62,16 @@ export default async function EstimatesIdPage({
     enabled: settings.compliance.contract_templates,
   });
   const approvedOption = doc.options.find((o) => o.id === e.approvedOptionId);
+  // The writer of a job-less estimate may see it without seeing the customer,
+  // and a job's estimate without being on the job: check both.
+  const [customerOpen, jobOpen] = await Promise.all([
+    canSeeCustomer(user, doc.customer.id),
+    doc.job
+      ? user.perms.has("jobs.view_all") ||
+        getJobForUser(doc.job.id, user).then(Boolean)
+      : false,
+  ]);
+  const customerHref = customerOpen ? `/customers/${doc.customer.id}` : null;
 
   return (
     <PageTransition>
@@ -95,7 +109,9 @@ export default async function EstimatesIdPage({
                   className="text-large-title font-bold"
                 />
                 <p className="text-subhead text-label-2">
-                  {doc.customer.displayName}
+                  <TextLink href={customerHref}>
+                    {doc.customer.displayName}
+                  </TextLink>
                   {e.title ? ` · ${e.title}` : ""}
                   {e.expiresAt && open
                     ? ` · valid until ${formatDate(e.expiresAt, tz)}`
@@ -258,6 +274,23 @@ export default async function EstimatesIdPage({
                 jobId={doc.job?.id}
                 variant="compact"
               />
+              {doc.job && jobOpen ? (
+                <ListSection>
+                  <ListRow
+                    icon={<Briefcase size={17} />}
+                    iconTone="orange"
+                    title={`Job ${doc.job.number}`}
+                    detail={
+                      <StatusPill
+                        kind="job"
+                        status={doc.job.status}
+                        size="sm"
+                      />
+                    }
+                    href={`/jobs/${doc.job.id}`}
+                  />
+                </ListSection>
+              ) : null}
               {doc.job && canCreate && e.status === "approved" ? (
                 <ListSection header="Changes after approval">
                   <ListRow

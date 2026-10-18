@@ -124,6 +124,7 @@ export interface PaymentListRow {
   invoiceId: string | null;
   invoiceNumber: string | null;
   collectedByName: string | null;
+  collectedByUserId: string | null;
   reference: string | null;
   entryMode: string | null;
   verifiedAt: string | null;
@@ -143,9 +144,11 @@ export interface RefundListRow {
   overdue: boolean;
   createdAt: string;
   completedAt: string | null;
+  customerId: string;
   customerName: string;
   jobId: string | null;
   jobNumber: string | null;
+  invoiceId: string | null;
   methodLabel: string;
   provider: string;
   createdByName: string | null;

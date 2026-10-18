@@ -56,7 +56,7 @@ import {
 } from "@/features/settings/api";
 import { TagEditor } from "@/features/settings/slots.client";
 import { actorOf, requireAnyPerm } from "@/lib/auth/current";
-import { mapsHref } from "@/lib/links";
+import { mapsHref, personHref } from "@/lib/links";
 import { formatMoney } from "@/lib/money";
 import { getCurrentPolicy } from "@/lib/policies";
 import { getCompanyTimezone, getSettings, isEnabled } from "@/lib/settings";
@@ -70,6 +70,7 @@ import { ListRow, ListSection } from "@/ui/components/List";
 import { NavBar } from "@/ui/components/NavBar";
 import { ActionRailFrame } from "@/ui/components/PageActions";
 import { SkeletonCard } from "@/ui/components/Skeleton";
+import { TextLink } from "@/ui/components/TextLink";
 import { PageTransition } from "@/ui/motion/PageTransition";
 
 export const metadata: Metadata = { title: "Job" };
@@ -257,6 +258,12 @@ export default async function JobPage({
   const invoiceSummary = jobLines ? summarizeLines(jobLines) : null;
   const esignText = esign?.body ?? DEFAULT_ESIGN;
   const todayKey = dateKey(new Date(), tz);
+  // Directions only for an address the viewer may see (masked: no street, no pin).
+  const navUrl = job.addressMasked
+    ? null
+    : mapsHref({ full: job.addressFull, lat: job.lat, lng: job.lng }, ua);
+  const jobStart = job.windowStart ?? job.scheduledStart;
+  const jobDay = jobStart ? dateKey(jobStart, tz) : null;
   const canCollect = has("payments.collect") || has("payments.record_manual");
   const backHref = techView ? "/today" : "/jobs";
   const custom = job.custom;
@@ -417,7 +424,19 @@ export default async function JobPage({
     {
       key: "created",
       label: "Created",
-      value: `${formatDateTime(job.createdAt, tz)}${job.createdByName ? ` · ${job.createdByName}` : ""}`,
+      value: (
+        <>
+          {formatDateTime(job.createdAt, tz)}
+          {job.createdByName ? (
+            <>
+              {" · "}
+              <TextLink href={personHref(user, job.createdById)}>
+                {job.createdByName}
+              </TextLink>
+            </>
+          ) : null}
+        </>
+      ),
     },
   ];
   const customItems: KeyValueItem[] = defs
@@ -706,6 +725,17 @@ export default async function JobPage({
                   ? `/jobs/${job.id}/evidence`
                   : null
               }
+              links={{
+                // The brief loads only for a customer the viewer may open.
+                customer: brief ? `/customers/${job.customerId}` : null,
+                address: navUrl,
+                assignees: Object.fromEntries(
+                  job.assignees.map((a) => [
+                    a.userId,
+                    personHref(user, a.userId, { date: jobDay }),
+                  ]),
+                ),
+              }}
             />
             {banners.length > 0 && (
               <div className="flex flex-col gap-2">{banners}</div>
@@ -752,14 +782,7 @@ export default async function JobPage({
               arrivedAt: job.arrivedAt,
               paymentStatus: job.paymentStatus,
             }}
-            navUrl={
-              job.addressMasked
-                ? null
-                : mapsHref(
-                    { full: job.addressFull, lat: job.lat, lng: job.lng },
-                    ua,
-                  )
-            }
+            navUrl={navUrl}
             phone={brief?.contactRevealed ? brief.phone : null}
             perms={{
               field: fieldPerm,
