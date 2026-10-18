@@ -60,7 +60,7 @@ src/features/registry.ts  module list; nav, perms, settings schema and flags der
 src/features/_template/ reference module (not registered) — copy it to start a module
 src/lib/                core libs (auth, action, events, settings, permissions, nav, money, time, tokens…)
 src/db/                 Drizzle schema (12 files), enums, connection (PGlite or pg), seeds
-src/adapters/           provider drivers behind interfaces (messaging, email, payments, storage, ai, geocode, maps, push, pdf, vin)
+src/adapters/           provider drivers behind interfaces (messaging, email, payments, storage, ai, geocode, places, maps, push, pdf, vin)
 src/ui/                 the iOS component kit (components/), motion/, icons.ts, status.ts, tone.ts
 src/client/             browser utilities (outbox, drafts, upload, image, exif, geo, push, install prompt)
 tests/                  vitest; golden/ for money, rules and permissions
@@ -157,9 +157,11 @@ server-rendered by the root layout (`getBrandingStyle()` → `src/lib/branding.t
 Components (`src/ui/components/`, import each file directly): Button, IconButton, List
 (ListGroup/ListSection/ListRow), KeyValueList, StatusPill, Badge, Chip, Avatar, TechCard,
 MoneyText, Score (ReadinessRing/RiskChip), Toggle, SegmentedControl, Stepper, Field
-(TextField/TextArea/Select/DateField/TimeField), MoneyField, PhoneField, SearchField,
-SubmitButton, Sheet, ActionSheet, Alert (useConfirm), ConfirmTyped, ContextMenu,
-SwipeActions, AddMenu, NavBar (LargeTitleHeader/BackButton), TabBar, Sidebar, AppShell
+(TextField/TextArea/Select/DateField/TimeField), DatePicker (Calendar/CalendarWindow/
+DatePickerButton), TimePicker, AddressAutocomplete, MoneyField, PhoneField, SearchField,
+SubmitButton, Sheet, ActionSheet, Alert (useConfirm), ConfirmTyped, ContextMenu, AnchoredPopover,
+SwipeActions, AddMenu, NavBar (LargeTitleHeader/BackButton), NavHistory (history breadcrumbs),
+PageActions (ActionRailFrame/usePageActions), TabBar, Sidebar, AppShell
 (Page/SplitView), Toast, Banner, EmptyState, Skeleton, Spinner, OfflineBanner,
 SlotPlaceholder, FeatureGate, charts (Sparkline/BarChart/LineChart/DonutChart/ProgressRing),
 StatCard, Timeline, MessageBubble, PhotoGrid, PhotoCompare, SignaturePad, CameraButton,
@@ -173,6 +175,24 @@ back come from the nav manifests; pass `title`, `search`, `segments`, `back` whe
 skeletons in `PageTransition`. Small tap targets get `hit-44` (or `hit-44-kids` on a wrapper). Button and menu
 labels are sentence case ("Sign in", "New job"). `StatCard size="sm"` for 3-up rows on phones; money never truncates.
 Phone numbers shown to people go through `formatPhoneDisplay()` (`@/lib/phone-display`).
+
+Conventions from the UX round (2026-10-18):
+- Dates and times: always `DateField` / `TimeField` (never `<input type="date|time">`). They keep the native
+  contract ('YYYY-MM-DD' / 'HH:MM', `name`, `required`, a real `onChange` event) but open the calendar window
+  (sheet on touch, popover with a mouse) and iOS wheels / typed segments. Pure math: `picker-math.ts`.
+- Page actions on desktop: wrap a page that has actions in `<ActionRailFrame>` (`compact` beside a list or side
+  column) and publish them from the component that owns them with `usePageActions({ title, subtitle, groups })`;
+  it returns `true` when the rail shows them, so hide that component's "…" at `lg`. Phones keep the "…" sheet.
+- Back buttons and breadcrumbs follow the tab's real history (`src/client/nav-history.ts`): NavBar /
+  LargeTitleHeader name their page automatically when `title` is a string; the static `back` is only the
+  fallback. A list pane beside a detail pane passes `history={false}`. New pass-through screens (create forms,
+  print views) belong in `isTransient()`.
+- People, places and records render as links where the viewer can open them: `personHref()` for teammates
+  (profile for managers and yourself, else their day on the schedule) and `mapsHref()` for addresses that
+  aren't masked (`@/lib/links`). Never nest a link inside a row that is already a link.
+- Street inputs on staff pages are `AddressAutocomplete` (`fill` names the city/state/ZIP fields a pick fills,
+  `pick="label"` for one-line addresses). It calls `/api/places/autocomplete` (signed-in only), so never use it
+  on public pages.
 
 ## 9. Glossary
 

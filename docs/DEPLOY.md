@@ -179,7 +179,30 @@ Set `PAYMENTS_DRIVER=stripe`, `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`, a
 webhook endpoint at `https://crm.example.com/api/webhooks/stripe` (built by B4). Manual
 methods (cash, check, Zelle, Venmo) are always available.
 
-## 9. Health and checks
+## 9. Maps and addresses (free by default)
+
+Everything map-related works without a paid API:
+
+- **Geocoding** (`GEOCODER`): addresses are located when a property is saved, with the US
+  Census geocoder by default (free, no key, US addresses). Those coordinates put jobs on
+  the schedule map, the tech's "Today's route" card and `/map`.
+- **Address autocomplete** (`ADDRESS_AUTOCOMPLETE`): staff get address suggestions as
+  they type a street. The default is `photon`, komoot's public Photon server (OpenStreetMap
+  data, no key). It is free for fair use and throttles heavy use, so busy offices should
+  self-host Photon and set `PHOTON_URL`, or switch to `geoapify` with `GEOAPIFY_API_KEY`
+  (a free tier exists; check its current limits and attribution terms). `none` turns
+  suggestions off, and the field stays a plain input. Lookups need a signed-in session,
+  are rate-limited per user and cached, and never log the typed address. Settings →
+  Integrations has a test button.
+- **Map tiles** (`NEXT_PUBLIC_TILE_URL`, `NEXT_PUBLIC_TILE_ATTRIBUTION`): development uses
+  OpenStreetMap's tile servers. Their [usage policy](https://operations.osmfoundation.org/policies/tiles/)
+  rules out production apps, so in production the street map stays off until you set a
+  tile URL. Pins and route lines still show, on a plain background. Choose a raster tile
+  provider whose terms fit a business: many free tiers are for non-commercial use only. A
+  small paid plan or your own tile server are the safe choices. Set the provider's
+  attribution text too.
+
+## 10. Health and checks
 
 - `GET /api/health` → `{ ok, db, config: { ok, missing, warnings }, version }` for uptime monitors (names of missing env vars, never values; 503 when the DB is down or `SESSION_SECRET` is missing). In production the server refuses to boot without `SESSION_SECRET` (≥ 16 chars).
 - After deploying: sign in, open `/settings`, send yourself an invite, and confirm

@@ -73,7 +73,8 @@ and fill in what you need; missing values fall back to free or development drive
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | Web Push |
 | `PAYMENTS_DRIVER`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | `manual` (default) or `stripe` |
 | `AI_PROVIDER`, `GEMINI_API_KEY`, `AI_TIER`, `AI_DAILY_BUDGET`, `AI_MODEL_OCR` | Optional receipt/odometer OCR |
-| `GEOCODER`, `NEXT_PUBLIC_TILE_URL`, `NEXT_PUBLIC_TILE_ATTRIBUTION` | Geocoding and map tiles |
+| `GEOCODER`, `NEXT_PUBLIC_TILE_URL`, `NEXT_PUBLIC_TILE_ATTRIBUTION` | Geocoding and map tiles (see [DEPLOY §9](docs/DEPLOY.md#9-maps-and-addresses-free-by-default)) |
+| `ADDRESS_AUTOCOMPLETE`, `PHOTON_URL`, `GEOAPIFY_API_KEY` | Address suggestions while typing: `photon` (default, free, OpenStreetMap), `geoapify` or `none` |
 | `TURNSTILE_SECRET` | Optional bot check on the hosted lead form |
 
 The full list with comments is in `.env.example`.
