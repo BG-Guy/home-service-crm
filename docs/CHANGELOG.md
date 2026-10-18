@@ -2,6 +2,49 @@
 
 ## Unreleased
 
+### UX round (2026-10-18)
+- **Calendar window.** Date fields open the app's own calendar instead of the browser's.
+  On touch screens it's a bottom sheet that slides up. With a mouse it's a popover that
+  springs out of the field.
+  - Months slide left and right: arrows, a swipe that carries the finger's speed,
+    PageUp/PageDown, and Shift for a whole year.
+  - The month title opens a month/year grid, and quick picks cover Today, Tomorrow and
+    In a week.
+  - The day grid has full keyboard support and screen-reader labels.
+  - `DateField` keeps the native contract ('YYYY-MM-DD', `name`, `required`, a real
+    `onChange`).
+  - The schedule's date line opens the same window to jump to any day. Paging the board
+    (‹ ›, Today, the jump) slides it toward the new day.
+- **Time picking without typing on touch.** On touch screens, time fields open iOS
+  Clock-style wheels: hour, minute by the field's step, and AM/PM. The wheels snap, loop
+  and roll on a cylinder, and Done commits. With a mouse, they are typed hour/minute
+  segments: digits auto-advance, ↑/↓ step by the field's step, A/P switches, and there
+  are AM/PM toggle buttons. Every remaining native date and time input uses the new
+  pickers. The public lead form keeps the browser's, to stay light.
+- **Estimates.** Tags are gone. You write 1, 2 or 3 options and star the one you
+  recommend, in one tap. There are no per-item add-on/upsell tags, and the default
+  labels are Option 1/2/3 (stored labels win).
+- **Desktop action rail.** On desktop, page actions stand in a column beside the sidebar
+  instead of behind "…". This covers jobs, customers, leads, estimates, change orders,
+  invoices and vehicles. Phones keep the "…" sheet.
+- **History breadcrumbs.** Back buttons and desktop breadcrumbs follow the pages this tab
+  actually visited, not the app's folders, so they lead back to where you came from.
+  Long-press the back button on a phone for the whole trail. The trail is kept per tab
+  and per user.
+- **Worker profile.** The profile row in the sidebar and More opens your worker profile,
+  with your work (schedule, jobs, pay, time) one tap away.
+- **Address autocomplete.** Staff typing a street get up to five US address suggestions.
+  Picking one fills the street, city, state and ZIP (or the one-line address). It's on
+  the customer form, the property sheet, company settings, the team home base, new leads
+  and the job form's customer picker.
+  - Lookups run through a new `places` adapter: Photon (free, OpenStreetMap data, no
+    key; `PHOTON_URL` for a self-hosted server) or Geoapify (`GEOAPIFY_API_KEY`).
+  - Lookups are cached and rate-limited per user, and never log the typed text.
+  - Settings → Integrations has a test button. DEPLOY §9 has the free options.
+- Bundle: pages now import `DateField`/`TimeField` from their own modules. Forms without
+  dates don't ship the pickers, and the breadcrumb UI stays out of the app shell.
+- Fixed: the assign sheet re-queried conflicts every ~250 ms while open once edited.
+
 ### Trade demo profiles (2026-10-18)
 - `npm run seed:demo -- --profile=<handyman|locksmith|chimney>` (with `--reset` as usual)
   seeds one realistic single-trade business at the same scale as the mixed demo (40

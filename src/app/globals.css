@@ -417,6 +417,36 @@
     filter: brightness(0.92);
   }
 }
+/* Schedule paging (‹ ›, Today and the date jump): the board slides toward the new
+   day, like the calendar window's months; the header updates in place. */
+::view-transition-old(.cal-next),
+::view-transition-old(.cal-prev) {
+  animation: 140ms ease-in both cal-out;
+}
+::view-transition-new(.cal-next),
+::view-transition-new(.cal-prev) {
+  animation: var(--dur-push) var(--ease-spring) both cal-in;
+}
+::view-transition-old(.cal-next),
+::view-transition-new(.cal-prev) {
+  --cal-shift: -56px;
+}
+::view-transition-old(.cal-prev),
+::view-transition-new(.cal-next) {
+  --cal-shift: 56px;
+}
+@keyframes cal-out {
+  to {
+    translate: var(--cal-shift) 0;
+    opacity: 0;
+  }
+}
+@keyframes cal-in {
+  from {
+    translate: var(--cal-shift) 0;
+    opacity: 0;
+  }
+}
 ::view-transition-group(tabbar),
 ::view-transition-new(tabbar) {
   animation: none;
