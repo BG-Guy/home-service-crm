@@ -115,8 +115,9 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         </>
       }
       sidebarFooter={
+        // Your worker profile: details, your day, jobs, stats, pay and time.
         <Link
-          href="/more"
+          href={`/team/${user.id}`}
           className={cx(
             "pressable flex items-center gap-3 rounded-control px-2 py-1.5 hover:bg-fill-2",
             // Room for the location badge at the row's right end (QA2 NEW-8).
@@ -129,7 +130,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
               {user.name}
             </span>
             <span className="block truncate text-footnote text-label-2">
-              {ROLE_LABEL[user.baseRole]} · Account
+              {ROLE_LABEL[user.baseRole]} · Profile
             </span>
           </span>
         </Link>

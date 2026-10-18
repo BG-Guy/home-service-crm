@@ -1,6 +1,19 @@
-import { Mail, Phone } from "lucide-react";
+import {
+  BadgeDollarSign,
+  BarChart3,
+  Briefcase,
+  CalendarDays,
+  Clock,
+  Mail,
+  Phone,
+  Settings,
+  Star,
+  Sun,
+  Wrench,
+} from "lucide-react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import type { ReactNode } from "react";
 import { ReassignJobsList } from "@/features/jobs/slots";
 import { ActivityTimeline } from "@/features/notify/slots";
 import { TechCompSection } from "@/features/payroll/slots";
@@ -26,15 +39,17 @@ import { formatDate, formatDateKey, formatRelative } from "@/lib/time";
 import { Page } from "@/ui/components/AppShell";
 import { Avatar } from "@/ui/components/Avatar";
 import { Banner } from "@/ui/components/Banner";
+import { Button } from "@/ui/components/Button";
 import { IconButton } from "@/ui/components/IconButton";
 import { KeyValueList } from "@/ui/components/KeyValueList";
-import { ListSection } from "@/ui/components/List";
+import { ListRow, ListSection } from "@/ui/components/List";
 import { MoneyText } from "@/ui/components/MoneyText";
 import { NavBar } from "@/ui/components/NavBar";
 import { Pill } from "@/ui/components/StatusPill";
 import { PageTransition } from "@/ui/motion/PageTransition";
+import type { Tone } from "@/ui/tone";
 
-export const metadata: Metadata = { title: "Team member" };
+export const metadata: Metadata = { title: "Profile" };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -46,9 +61,13 @@ export default async function TeamMemberPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const viewer = await requireUser("users.manage");
+  const viewer = await requireUser();
   const { id } = await params;
   if (!UUID.test(id)) notFound();
+  // Your own profile is open to everyone (the sidebar's profile row leads here);
+  // anyone else's needs users.manage.
+  const manage = viewer.perms.has("users.manage");
+  if (!manage && viewer.id !== id) await requireUser("users.manage");
   const [m, roles, skills, tz] = await Promise.all([
     getTeamMember(id),
     listRoleOptions(),
@@ -75,13 +94,112 @@ export default async function TeamMemberPage({
       r.key === m.role,
   );
 
+  // The worker's dashboard: where their work lives, as far as the viewer may go.
+  const has = (perm: Parameters<typeof viewer.perms.has>[0]) =>
+    viewer.perms.has(perm);
+  const work: {
+    key: string;
+    title: string;
+    href: string;
+    icon: ReactNode;
+    tone: Tone;
+  }[] = [];
+  const link = (
+    when: boolean,
+    key: string,
+    title: string,
+    href: string,
+    icon: ReactNode,
+    tone: Tone,
+  ) => {
+    if (when) work.push({ key, title, href, icon, tone });
+  };
+  if (!deactivated) {
+    link(isSelf, "today", "My day", "/today", <Sun size={17} />, "orange");
+    link(
+      has("schedule.view_all") && tech,
+      "schedule",
+      isSelf ? "My schedule" : "Schedule",
+      `/schedule?view=day&tech=${m.id}`,
+      <CalendarDays size={17} />,
+      "red",
+    );
+    link(
+      isSelf || has("jobs.view_all"),
+      "jobs",
+      isSelf ? "My jobs" : "Jobs",
+      isSelf && !has("jobs.view_all") ? "/jobs?mine=1" : `/jobs?tech=${m.id}`,
+      <Briefcase size={17} />,
+      "blue",
+    );
+    link(
+      isSelf && tech && has("insights.view_own"),
+      "stats",
+      "My stats",
+      "/insights?view=me",
+      <BarChart3 size={17} />,
+      "purple",
+    );
+    link(
+      !isSelf && tech && has("reviews.view"),
+      "reviews",
+      "Reviews",
+      `/reviews?tech=${m.id}`,
+      <Star size={17} />,
+      "yellow",
+    );
+    link(
+      isSelf && has("payroll.view_own"),
+      "pay",
+      "My pay",
+      "/pay",
+      <BadgeDollarSign size={17} />,
+      "green",
+    );
+    link(
+      isSelf ? has("time.clock_self") : has("time.manage"),
+      "time",
+      isSelf ? "My time" : "Time",
+      isSelf ? "/time" : `/time?user=${m.id}`,
+      <Clock size={17} />,
+      "teal",
+    );
+    link(
+      tech &&
+        (isSelf
+          ? has("tools.view_own") || has("tools.view_all")
+          : has("tools.view_all")),
+      "tools",
+      isSelf ? "My tools" : "Tools",
+      has("tools.view_all") ? `/tools?scope=all&holder=${m.id}` : "/tools",
+      <Wrench size={17} />,
+      "brown",
+    );
+    link(
+      isSelf,
+      "account",
+      "Account settings",
+      "/settings/profile",
+      <Settings size={17} />,
+      "gray",
+    );
+  }
+
   return (
     <PageTransition>
       <NavBar
         title={m.name}
-        back={{ href: "/team", label: "Team" }}
+        back={
+          manage
+            ? { href: "/team", label: "Team" }
+            : { href: "/more", label: "More" }
+        }
         trailing={
-          deactivated ? undefined : (
+          !manage ? (
+            <Button href="/settings/profile" variant="plain" size="sm">
+              Edit
+            </Button>
+          ) : deactivated ? undefined : (
             <EditMemberButton
               skills={skills}
               member={{
@@ -148,7 +266,7 @@ export default async function TeamMemberPage({
                 ) : null}
               </div>
             </div>
-            {!deactivated && (
+            {!deactivated && !isSelf && (
               <div className="mt-1 flex gap-3">
                 {m.phone && (
                   <IconButton
@@ -198,6 +316,20 @@ export default async function TeamMemberPage({
               )}
               {offboarding.openJobs > 0 && <ReassignJobsList userId={m.id} />}
             </div>
+          )}
+
+          {work.length > 0 && (
+            <ListSection header={isSelf ? "Your work" : "Work"}>
+              {work.map((w) => (
+                <ListRow
+                  key={w.key}
+                  href={w.href}
+                  icon={w.icon}
+                  iconTone={w.tone}
+                  title={w.title}
+                />
+              ))}
+            </ListSection>
           )}
 
           <KeyValueList
@@ -303,20 +435,22 @@ export default async function TeamMemberPage({
             </ListSection>
           )}
 
-          <AccessSection
-            userId={m.id}
-            name={m.name}
-            role={{
-              key: m.role,
-              name: m.roleName,
-              baseRole: m.baseRole,
-            }}
-            roles={roleOptions}
-            overrideCount={m.overrideCount}
-            canPermissions={viewer.perms.has("settings.permissions")}
-            isSelf={isSelf}
-            deactivated={deactivated}
-          />
+          {manage && (
+            <AccessSection
+              userId={m.id}
+              name={m.name}
+              role={{
+                key: m.role,
+                name: m.roleName,
+                baseRole: m.baseRole,
+              }}
+              roles={roleOptions}
+              overrideCount={m.overrideCount}
+              canPermissions={viewer.perms.has("settings.permissions")}
+              isSelf={isSelf}
+              deactivated={deactivated}
+            />
+          )}
 
           {tech && <TechCompSection userId={m.id} />}
           {tech && <AssignedVehicleRow userId={m.id} />}
@@ -324,13 +458,15 @@ export default async function TeamMemberPage({
           <TimeEntriesSection userId={m.id} days={14} />
           <ActivityTimeline entity={{ type: "user", id: m.id }} limit={20} />
 
-          <StatusSection
-            userId={m.id}
-            name={m.name}
-            deactivated={deactivated}
-            awaitingApproval={m.status === "pending"}
-            isSelf={isSelf}
-          />
+          {manage && (
+            <StatusSection
+              userId={m.id}
+              name={m.name}
+              deactivated={deactivated}
+              awaitingApproval={m.status === "pending"}
+              isSelf={isSelf}
+            />
+          )}
           <p className="px-4 text-center text-footnote text-label-3">
             Added {formatDate(m.createdAt, tz)}
           </p>

@@ -56,6 +56,7 @@ import {
 } from "@/features/settings/api";
 import { TagEditor } from "@/features/settings/slots.client";
 import { actorOf, requireAnyPerm } from "@/lib/auth/current";
+import { mapsHref } from "@/lib/links";
 import { formatMoney } from "@/lib/money";
 import { getCurrentPolicy } from "@/lib/policies";
 import { getCompanyTimezone, getSettings, isEnabled } from "@/lib/settings";
@@ -121,20 +122,6 @@ async function previewMissing(
   } catch {
     return null;
   }
-}
-
-function navUrl(
-  ua: string,
-  job: { lat: number | null; lng: number | null; addressFull: string },
-) {
-  const dest =
-    job.lat != null && job.lng != null
-      ? `${job.lat},${job.lng}`
-      : job.addressFull;
-  const q = encodeURIComponent(dest);
-  return /iPhone|iPad|iPod|Macintosh/.test(ua)
-    ? `https://maps.apple.com/?daddr=${q}`
-    : `https://www.google.com/maps/dir/?api=1&destination=${q}`;
 }
 
 /** Sign-off summary rows: identical lines merged ("2 × Rekey cylinder — $90.00"). */
@@ -765,7 +752,14 @@ export default async function JobPage({
               arrivedAt: job.arrivedAt,
               paymentStatus: job.paymentStatus,
             }}
-            navUrl={job.addressMasked ? null : navUrl(ua, job)}
+            navUrl={
+              job.addressMasked
+                ? null
+                : mapsHref(
+                    { full: job.addressFull, lat: job.lat, lng: job.lng },
+                    ua,
+                  )
+            }
             phone={brief?.contactRevealed ? brief.phone : null}
             perms={{
               field: fieldPerm,

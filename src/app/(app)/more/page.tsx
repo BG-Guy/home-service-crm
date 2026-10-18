@@ -62,8 +62,8 @@ export default async function MorePage() {
             <ListRow
               leading={<Avatar name={user.name} seed={user.id} size={44} />}
               title={<span className="text-headline">{user.name}</span>}
-              subtitle={`${ROLE_LABEL[user.baseRole]} · ${user.email}`}
-              href="/settings/profile"
+              subtitle={`${ROLE_LABEL[user.baseRole]} · Your profile`}
+              href={`/team/${user.id}`}
             />
           </ListSection>
 

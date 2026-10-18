@@ -1,6 +1,7 @@
 // Pure, isomorphic helpers for customers/properties (no DB, no server-only).
 // Shared by the customers API, lead intake, CSV import and tests.
 
+import { mapsHref } from "@/lib/links";
 import type { AddressInput } from "./contracts";
 
 /** Lower-cased, trimmed email; null when empty or obviously invalid. */
@@ -169,16 +170,5 @@ export function navigateHref(
   },
   userAgent: string | null | undefined,
 ): string {
-  const q = encodeURIComponent(
-    `${p.street}, ${p.city}, ${p.state} ${p.zip}`.trim(),
-  );
-  const apple = /iPhone|iPad|iPod|Macintosh/i.test(userAgent ?? "");
-  if (apple) {
-    return p.lat != null && p.lng != null
-      ? `https://maps.apple.com/?daddr=${p.lat},${p.lng}&q=${q}`
-      : `https://maps.apple.com/?daddr=${q}`;
-  }
-  return `https://www.google.com/maps/dir/?api=1&destination=${
-    p.lat != null && p.lng != null ? `${p.lat},${p.lng}` : q
-  }`;
+  return mapsHref(p, userAgent) ?? "https://www.google.com/maps";
 }
