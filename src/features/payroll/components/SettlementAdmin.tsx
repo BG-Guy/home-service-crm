@@ -567,7 +567,7 @@ export function NachaExportButton({
                 hint="Usually the next business day."
               />
               <fieldset className="flex flex-col gap-1">
-                <legend className="mb-1 text-footnote font-semibold uppercase text-label-2">
+                <legend className="mb-1 text-subhead font-semibold text-label-2">
                   Include
                 </legend>
                 {candidates.map((c) => {

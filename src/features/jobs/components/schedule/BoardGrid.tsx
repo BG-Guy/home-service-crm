@@ -16,9 +16,10 @@ import { toast } from "@/ui/components/Toast";
 import { cx } from "@/ui/cx";
 import { haptic } from "@/ui/motion/haptics";
 import { statusDef } from "@/ui/status";
-import { TONE_VAR, type Tone, toneFor } from "@/ui/tone";
+import { TONE_VAR } from "@/ui/tone";
 import { scheduleJob } from "../../actions";
 import type { BoardData, BoardJob, BoardTech } from "../../schedule-queries";
+import { techColor } from "./colors";
 
 // Desktop schedule board (lazy chunk): day view = technician columns on a time
 // grid; 3-day / week = day columns. Native HTML5 drag-and-drop (no library):
@@ -32,13 +33,6 @@ const SNAP = 15;
 const UNASSIGNED = "__unassigned";
 
 type ColorBy = "status" | "tech";
-
-function techColor(t: BoardTech | undefined, id: string): string {
-  const c = t?.color;
-  if (c?.startsWith("#")) return c;
-  if (c && c in TONE_VAR) return TONE_VAR[c as Tone];
-  return TONE_VAR[toneFor(id)];
-}
 
 function jobColor(
   j: BoardJob,
@@ -272,6 +266,11 @@ export default function BoardGrid({
   // -------------------------------------------------------------- pieces
   const card = (j: BoardJob, compact = false) => {
     const color = jobColor(j, techMap, colorBy);
+    // The left edge is always the lead tech's color (who's on it at a glance);
+    // the soft fill follows "color by".
+    const edge = j.primaryTechId
+      ? techColor(techMap.get(j.primaryTechId), j.primaryTechId)
+      : "var(--sys-orange)";
     const depositDue = j.deposit?.required && !j.deposit.paid;
     const pendingStart = (j as BoardJob & { __pendingStart?: string })
       .__pendingStart;
@@ -280,11 +279,11 @@ export default function BoardGrid({
         href={`/jobs/${j.id}`}
         title={[j.number, j.title, j.customerName, ...j.warnings].join(" · ")}
         className={cx(
-          "group flex h-full min-h-0 flex-col overflow-hidden rounded-[8px] border-l-[3px] bg-[color-mix(in_srgb,var(--c)_14%,var(--card))] px-2 py-1 text-left shadow-[0_0_0_0.5px_var(--sep)] transition-[transform,box-shadow] duration-200 ease-[var(--ease-spring)] hover:shadow-[var(--shadow-card)]",
+          "group flex h-full min-h-0 flex-col overflow-hidden rounded-[12px] border-l-[4px] bg-[color-mix(in_srgb,var(--c)_13%,var(--card))] py-1.5 pr-2 pl-2.5 text-left transition-[transform,box-shadow] duration-200 ease-[var(--ease-spring)] hover:-translate-y-px hover:shadow-[var(--shadow-raised)]",
           drag?.jobId === j.id && "opacity-40",
           pendingStart && "animate-pulse",
         )}
-        style={{ "--c": color, borderLeftColor: color } as React.CSSProperties}
+        style={{ "--c": color, borderLeftColor: edge } as React.CSSProperties}
       >
         <span className="flex items-center gap-1 text-caption font-semibold">
           <span className="num truncate">
@@ -312,7 +311,7 @@ export default function BoardGrid({
             />
           )}
         </span>
-        <span className="truncate text-footnote">{j.title}</span>
+        <span className="truncate text-footnote font-semibold">{j.title}</span>
         {!compact && (
           <span className="truncate text-caption text-label-2">
             {j.customerName} · {j.addressShort}
@@ -354,14 +353,14 @@ export default function BoardGrid({
         },
       ].map((g) => (
         <section key={g.key} className="flex flex-col gap-1.5">
-          <h3 className="flex items-center justify-between px-1 text-footnote font-semibold uppercase tracking-wide text-label-2">
+          <h3 className="flex items-center justify-between px-1 text-headline">
             {g.title}
-            <span className="num rounded-full bg-fill px-1.5 text-caption">
+            <span className="num rounded-full bg-fill px-2 text-footnote font-semibold text-label-2">
               {g.items.length}
             </span>
           </h3>
           {g.items.length === 0 ? (
-            <p className="px-1 text-footnote text-label-3">Nothing here.</p>
+            <p className="px-1 text-footnote text-label-2">Nothing here.</p>
           ) : (
             <ul className="flex max-h-[40vh] flex-col gap-1.5 overflow-y-auto pr-1">
               {g.items.map((j) => (
@@ -387,7 +386,7 @@ export default function BoardGrid({
             </ul>
           )}
           {g.hint && g.items.length > 0 && (
-            <p className="px-1 text-caption text-label-3">{g.hint}</p>
+            <p className="px-1 text-caption text-label-2">{g.hint}</p>
           )}
         </section>
       ))}
@@ -398,12 +397,24 @@ export default function BoardGrid({
   if (data.view === "day") {
     return (
       <div className="flex gap-4">
-        <div className="list-card min-w-0 flex-1 overflow-x-auto">
+        <div className="card min-w-0 flex-1 overflow-x-auto p-0">
           {/* Tech columns share the width (≥ 180 px each) instead of a fixed 180 px (QA T4-29). */}
           <div className="flex w-full min-w-max">
-            <div className="sticky left-0 z-10 w-12 shrink-0 bg-card">
+            <div className="sticky left-0 z-10 w-14 shrink-0 bg-card">
               <div className="h-12 border-b border-[var(--sep)]" />
               <div className="relative" style={{ height }}>
+                {nowMin != null && (
+                  <span
+                    className="num absolute right-0.5 z-[4] -translate-y-1/2 rounded-pill bg-[var(--sys-red)] px-1.5 py-px text-[11px] font-bold text-white"
+                    style={{ top: (nowMin - startMin) * PX_PER_MIN }}
+                  >
+                    {formatInTz(new Date(now).toISOString(), data.tz, {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    }).replace(/\s?[AP]M$/, "")}
+                    <span className="sr-only"> now</span>
+                  </span>
+                )}
                 {hours.map((h) => (
                   <span
                     key={h}
@@ -509,7 +520,7 @@ export default function BoardGrid({
                     {nowMin != null && (
                       <div
                         aria-hidden
-                        className="pointer-events-none absolute inset-x-0 z-[1] h-px bg-[var(--sys-red)]"
+                        className="pointer-events-none absolute inset-x-0 z-[3] h-[2px] -translate-y-px bg-[var(--sys-red)]"
                         style={{ top: (nowMin - startMin) * PX_PER_MIN }}
                       />
                     )}
@@ -575,7 +586,7 @@ export default function BoardGrid({
   // -------------------------------------------------------------- 3-day / week
   return (
     <div className="flex gap-4">
-      <div className="list-card min-w-0 flex-1 overflow-x-auto">
+      <div className="card min-w-0 flex-1 overflow-x-auto p-0">
         <div
           className="grid min-w-max"
           style={{

@@ -1,10 +1,10 @@
-import { Mail, Phone } from "lucide-react";
+import { Mail, MessageCircle, Phone } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ReassignJobsList } from "@/features/jobs/slots";
 import { ActivityTimeline } from "@/features/notify/slots";
 import { TechCompSection } from "@/features/payroll/slots";
-import { EditMemberButton } from "@/features/team/components/EditMemberSheet";
+import { EditMemberButton } from "@/features/team/components/EditMemberButton";
 import {
   AccessSection,
   StatusSection,
@@ -26,7 +26,6 @@ import { formatDate, formatDateKey, formatRelative } from "@/lib/time";
 import { Page } from "@/ui/components/AppShell";
 import { Avatar } from "@/ui/components/Avatar";
 import { Banner } from "@/ui/components/Banner";
-import { IconButton } from "@/ui/components/IconButton";
 import { KeyValueList } from "@/ui/components/KeyValueList";
 import { ListSection } from "@/ui/components/List";
 import { MoneyText } from "@/ui/components/MoneyText";
@@ -149,25 +148,29 @@ export default async function TeamMemberPage({
               </div>
             </div>
             {!deactivated && (
-              <div className="mt-1 flex gap-3">
+              <div className="mt-2 flex justify-center gap-6">
                 {m.phone && (
-                  <IconButton
+                  <QuickAction
                     href={`tel:${m.phone}`}
-                    label={`Call ${m.name}`}
-                    variant="gray"
-                    transition="none"
-                  >
-                    <Phone size={18} aria-hidden />
-                  </IconButton>
+                    label="Call"
+                    aria={`Call ${m.name}`}
+                    icon={<Phone size={20} aria-hidden />}
+                  />
                 )}
-                <IconButton
+                {m.phone && (
+                  <QuickAction
+                    href={`sms:${m.phone}`}
+                    label="Text"
+                    aria={`Text ${m.name}`}
+                    icon={<MessageCircle size={20} aria-hidden />}
+                  />
+                )}
+                <QuickAction
                   href={`mailto:${m.email}`}
-                  label={`Email ${m.name}`}
-                  variant="gray"
-                  transition="none"
-                >
-                  <Mail size={18} aria-hidden />
-                </IconButton>
+                  label="Email"
+                  aria={`Email ${m.name}`}
+                  icon={<Mail size={20} aria-hidden />}
+                />
               </div>
             )}
           </header>
@@ -337,5 +340,34 @@ export default async function TeamMemberPage({
         </div>
       </Page>
     </PageTransition>
+  );
+}
+
+/** Round labeled quick action (call / text / email) under the profile header. */
+function QuickAction({
+  href,
+  label,
+  aria,
+  icon,
+}: {
+  href: string;
+  label: string;
+  aria: string;
+  icon: React.ReactNode;
+}) {
+  return (
+    <a
+      href={href}
+      aria-label={aria}
+      className="pressable flex w-16 flex-col items-center gap-1.5 text-footnote font-medium text-accent-text"
+    >
+      <span
+        aria-hidden
+        className="flex size-12 items-center justify-center rounded-full bg-card text-accent-text shadow-card"
+      >
+        {icon}
+      </span>
+      {label}
+    </a>
   );
 }

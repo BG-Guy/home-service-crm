@@ -26,6 +26,9 @@ import "./globals.css";
 // reads at build time — SPEC §15.5 hard rule). Metadata image routes stay static.
 export const dynamic = "force-dynamic";
 
+const REVEAL_NOW =
+  'try{Object.defineProperty(window,"$RT",{configurable:true,get:function(){},set:function(){}})}catch(e){}';
+
 async function appName(): Promise<string> {
   const [company, settings] = await Promise.all([findCompany(), getSettings()]);
   return settings.branding.app_name || company?.name || "CRM";
@@ -73,6 +76,16 @@ export default async function RootLayout({
   return (
     <html lang="en" data-theme={dataThemeFor(pref)} suppressHydrationWarning>
       <head>
+        <script
+          // React's streaming runtime holds each Suspense reveal until 300 ms after
+          // the previous one, counting the shell's first frame ($RT). When a frame
+          // lands while the HTML is still parsing, the page's content (already in
+          // the document) waited 300 ms behind its loading.tsx skeleton: warm LCP
+          // 212 -> 492 ms. Keeping $RT unset reveals each boundary on the next frame
+          // instead. If React renames the global this does nothing.
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: static string, no user input
+          dangerouslySetInnerHTML={{ __html: REVEAL_NOW }}
+        />
         {brandStyle ? (
           <style
             id="brand"

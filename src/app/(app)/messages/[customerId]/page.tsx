@@ -46,7 +46,7 @@ export default async function MessagesCustomerIdPage({
         thread.canLogReply ? <LogReplyButton customerId={customerId} /> : null
       }
     >
-      <div className="flex flex-col gap-4">
+      <div className="flex min-h-[calc(100dvh-var(--tabbar-space,0px)-96px)] flex-col gap-4 lg:min-h-0">
         <CustomerCard customerId={customerId} variant="compact" />
         {thread.optoutFlag && <OptoutReviewBanner customerId={customerId} />}
         {thread.customer.smsStatus === "opted_out" && (
@@ -63,7 +63,7 @@ export default async function MessagesCustomerIdPage({
         <ThreadMessages items={thread.messages} tz={tz} />
         <section
           aria-label="Write a message"
-          className="sticky bottom-[calc(var(--tabbar-h,0px)+env(safe-area-inset-bottom))] z-10 -mx-[var(--gutter)] border-t-[0.5px] border-sep bg-bar px-[var(--gutter)] pt-3 pb-3 backdrop-blur-xl lg:static lg:mx-0 lg:rounded-card lg:border-0 lg:bg-card lg:p-4 lg:shadow-card"
+          className="sticky mt-auto bottom-[calc(var(--tabbar-h,0px)+env(safe-area-inset-bottom))] z-10 -mx-[var(--gutter)] border-t-[0.5px] border-sep bg-bar px-[var(--gutter)] pt-3 pb-3 backdrop-blur-xl lg:static lg:mx-0 lg:rounded-card lg:border-0 lg:bg-card lg:p-4 lg:shadow-card"
         >
           <MessageComposer customerId={customerId} initial={composer} compact />
         </section>

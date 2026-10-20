@@ -28,6 +28,7 @@ import { ListRow, ListSection } from "@/ui/components/List";
 import { Pill } from "@/ui/components/StatusPill";
 import { getAssignedVehicle, getFleetSummary } from "./api";
 import { FleetSummaryView } from "./components/FleetSummary";
+import { OdometerCaptureButton } from "./components/islands";
 import type {
   AssignedVehicleRowProps,
   EndOdometerSectionProps,
@@ -41,7 +42,6 @@ import {
   taskLabel,
   type VehiclePolicies,
 } from "./rules";
-import { OdometerCaptureButton } from "./slots.client";
 
 // Server UI slots produced by B7 (BUILD_PLAN §5.1). Each takes ids, checks the
 // viewer, the row scope and the `vehicles` flag, and returns null otherwise.

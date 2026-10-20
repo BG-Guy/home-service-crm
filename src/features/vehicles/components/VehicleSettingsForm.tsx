@@ -2,6 +2,7 @@
 
 import { Plus, Trash2 } from "lucide-react";
 import { useState, useTransition } from "react";
+import { SaveBar } from "@/features/settings/components/SaveBar";
 import { Button } from "@/ui/components/Button";
 import { Select, TextField } from "@/ui/components/Field";
 import { IconButton } from "@/ui/components/IconButton";
@@ -354,17 +355,12 @@ export function VehicleSettingsForm({
           </div>
         </ListSection>
       </ListGroup>
-      <div className="sticky bottom-[calc(env(safe-area-inset-bottom)+64px)] z-10 md:bottom-4">
-        <Button
-          size="lg"
-          fullWidth
-          loading={pending}
-          disabled={!dirty}
-          onClick={save}
-        >
-          Save changes
-        </Button>
-      </div>
+      <SaveBar
+        dirty={dirty}
+        pending={pending}
+        disabled={!dirty}
+        onSave={save}
+      />
     </div>
   );
 }

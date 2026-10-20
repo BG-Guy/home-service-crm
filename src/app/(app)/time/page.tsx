@@ -4,7 +4,7 @@ import {
   ParamSegmented,
   ParamSelect,
 } from "@/features/jobs/components/ParamControls";
-import { ClockCard } from "@/features/tech/components/ClockCard";
+import { ClockCard } from "@/features/tech/components/islands";
 import { TimeEntryList } from "@/features/time/components/TimeEntryList";
 import { formatMinutes } from "@/features/time/format";
 import {
@@ -139,8 +139,22 @@ export default async function TimePage({
             />
           )}
           <div className="grid grid-cols-2 gap-3">
-            <StatCard label="Hours worked" value={formatMinutes(total)} />
-            <StatCard label="Days" value={String(days)} />
+            <StatCard
+              size="md"
+              label="Hours worked"
+              value={formatMinutes(total)}
+              footnote={
+                days
+                  ? `${formatMinutes(Math.round(total / days))} a day`
+                  : undefined
+              }
+            />
+            <StatCard
+              size="md"
+              label="Days worked"
+              value={String(days)}
+              footnote={`${entries.length} ${entries.length === 1 ? "entry" : "entries"}`}
+            />
           </div>
           <TimeEntryList
             entries={entries}

@@ -4,6 +4,7 @@ import { ExternalLink, Star } from "lucide-react";
 import { useState } from "react";
 import { Button, buttonClass } from "@/ui/components/Button";
 import { TextArea } from "@/ui/components/Field";
+import { SuccessCheck } from "@/ui/components/SuccessCheck";
 import { Toggle } from "@/ui/components/Toggle";
 import { cx } from "@/ui/cx";
 import { submitReviewRating } from "../public-actions";
@@ -55,9 +56,9 @@ export function RatingCard({
       href={googleUrl}
       rel="noopener noreferrer"
       className={buttonClass({
-        variant: "filled",
+        variant: "primary",
         size: "lg",
-        fullWidth: true,
+        block: true,
       })}
     >
       Leave a Google review
@@ -67,16 +68,19 @@ export function RatingCard({
 
   return (
     <div className="flex flex-col gap-4">
-      <section className="list-card px-5 py-6 text-center">
-        <h1 className="text-title1 font-bold tracking-tight">
+      <section className="card px-5 pb-6 pt-8 text-center">
+        {state === "done" ? (
+          <SuccessCheck size={64} label="Feedback sent" className="mb-4" />
+        ) : null}
+        <h1 className="text-large-title">
           {state === "done" ? "Thank you!" : "How did we do?"}
         </h1>
         <p className="mt-1 text-subhead text-label-2">
           {state === "done"
-            ? `Your feedback goes straight to ${companyName}.`
-            : `Tap a star to rate your visit from ${companyName}.`}
+            ? `Your feedback goes straight to ${companyName.replace(/\.$/, "")}.`
+            : `Tap a star to rate your visit from ${companyName.replace(/\.$/, "")}.`}
         </p>
-        <fieldset className="mt-5 flex justify-center gap-1 border-0 p-0">
+        <fieldset className="mt-6 flex justify-center gap-0.5 border-0 p-0">
           <legend className="sr-only">Rating, 1 to 5 stars</legend>
           {[1, 2, 3, 4, 5].map((n) => {
             const on = (rating ?? 0) >= n;
@@ -88,15 +92,21 @@ export function RatingCard({
                 aria-label={`${n} star${n === 1 ? "" : "s"}`}
                 disabled={state !== "idle"}
                 onClick={() => setRating(n)}
-                className="flex size-12 items-center justify-center rounded-full transition-transform duration-200 ease-[var(--ease-spring)] active:scale-90 disabled:active:scale-100"
+                className="flex size-14 items-center justify-center rounded-full transition-transform duration-[var(--dur-press)] ease-[var(--ease-spring)] active:scale-90 disabled:active:scale-100"
               >
+                {/* M11 pop, keyed on the rating so each pick replays it, staggered left to right */}
                 <Star
+                  key={on ? `on-${rating}` : "off"}
                   aria-hidden
-                  size={36}
-                  strokeWidth={1.75}
+                  size={44}
+                  strokeWidth={1.5}
+                  style={
+                    on ? { animationDelay: `${(n - 1) * 40}ms` } : undefined
+                  }
                   className={cx(
+                    "transition-colors duration-[var(--dur-quick)]",
                     on
-                      ? "fill-[var(--sys-yellow)] text-[var(--sys-yellow)]"
+                      ? "badge-pop fill-[var(--sys-yellow)] text-[var(--sys-yellow)]"
                       : "text-label-3",
                   )}
                 />
@@ -105,12 +115,12 @@ export function RatingCard({
           })}
         </fieldset>
         {rating && (
-          <p className="mt-2 text-subhead text-label-2">{WORDS[rating]}</p>
+          <p className="mt-2 text-headline text-label-2">{WORDS[rating]}</p>
         )}
       </section>
 
       {rating && state !== "done" && (
-        <section className="list-card flex flex-col gap-3 px-5 py-5">
+        <section className="card flex flex-col gap-3 px-5 py-5">
           <TextArea
             label={
               rating <= 3
@@ -136,7 +146,7 @@ export function RatingCard({
           <Button
             variant="tinted"
             size="lg"
-            fullWidth
+            block
             loading={state === "sending"}
             onClick={send}
           >

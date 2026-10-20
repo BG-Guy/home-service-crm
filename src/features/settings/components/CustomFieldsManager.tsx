@@ -196,7 +196,7 @@ export function CustomFieldsManager({
 
       {active.length > 0 && (
         <section aria-label="Preview">
-          <h2 className="px-4 pb-1.5 text-footnote uppercase text-label-2">
+          <h2 className="px-4 pb-2 text-subhead font-semibold text-label-2">
             Preview
           </h2>
           <div className="rounded-card bg-card p-4">
@@ -359,7 +359,7 @@ function CustomFieldSheet({
           </section>
           {entity === "job" && serviceTypes.length > 0 && (
             <section>
-              <h2 className="px-4 pb-1.5 text-footnote uppercase text-label-2">
+              <h2 className="px-4 pb-2 text-subhead font-semibold text-label-2">
                 Only for these service types
               </h2>
               <div className="flex flex-wrap gap-1.5 rounded-card bg-card p-4">

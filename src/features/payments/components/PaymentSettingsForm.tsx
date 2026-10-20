@@ -202,7 +202,7 @@ export function PaymentSettingsForm({
       </ListSection>
 
       <section className="flex flex-col gap-3">
-        <h2 className="px-4 text-footnote uppercase text-label-2">
+        <h2 className="px-4 text-subhead font-semibold text-label-2">
           Card fees ⚖️
         </h2>
         <SegmentedControl<PaymentSettingsValues["fee_policy"]>
@@ -378,7 +378,7 @@ export function PaymentSettingsForm({
       </ListSection>
 
       <section className="flex flex-col gap-2">
-        <h2 className="px-4 text-footnote uppercase text-label-2">
+        <h2 className="px-4 text-subhead font-semibold text-label-2">
           Pay page instructions
         </h2>
         <TextArea

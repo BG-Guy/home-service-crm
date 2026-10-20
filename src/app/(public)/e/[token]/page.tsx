@@ -1,5 +1,5 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
-import { CircleCheck } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import type { Metadata } from "next";
 import { db } from "@/db";
 import { depositRequests } from "@/db/schema";
@@ -28,6 +28,7 @@ import { formatMoney } from "@/lib/money";
 import { getCurrentPolicy } from "@/lib/policies";
 import { formatDate, formatDateTime } from "@/lib/time";
 import { Button } from "@/ui/components/Button";
+import { SuccessCheck } from "@/ui/components/SuccessCheck";
 
 export const metadata: Metadata = {
   title: "Your estimate",
@@ -104,9 +105,9 @@ export default async function ETokenPage({
       .limit(1);
     return (
       <div className="space-y-5 pt-2">
-        <section className="list-card flex flex-col items-center px-5 py-8 text-center print:hidden">
-          <CircleCheck size={48} className="text-success" aria-hidden />
-          <h1 className="mt-3 text-title2 font-bold">Approved — thank you!</h1>
+        <section className="card flex flex-col items-center px-6 py-9 text-center print:hidden">
+          <SuccessCheck size={64} label="Approved" />
+          <h1 className="mt-4 text-title1">Approved, thank you!</h1>
           <p className="mt-1 text-subhead text-label-2">
             {doc.signature
               ? `Signed by ${doc.signature.signerName} on ${formatDateTime(doc.signature.signedAt, tz)}.`
@@ -114,9 +115,9 @@ export default async function ETokenPage({
             We'll be in touch to schedule the work.
           </p>
           {dep ? (
-            <form action={payDepositFromPortal} className="mt-5 w-full">
+            <form action={payDepositFromPortal} className="mt-6 w-full">
               <input type="hidden" name="token" value={token} />
-              <Button type="submit" size="lg" fullWidth>
+              <Button type="submit" size="lg" block>
                 Pay {formatMoney(dep.amount)} deposit
               </Button>
               <p className="mt-2 text-footnote text-label-2">
@@ -135,16 +136,56 @@ export default async function ETokenPage({
   }
 
   const approvable = canApproveEstimate(e);
+  const terms = (
+    <>
+      {e.warrantyText ? (
+        <section className="card px-5 py-4 text-subhead">
+          <h2 className="text-headline">Warranty</h2>
+          <p className="mt-1 text-label-2">{e.warrantyText}</p>
+        </section>
+      ) : null}
+
+      {doc.policies.length > 0 ? (
+        <section className="space-y-2" aria-label="Terms">
+          <h2 className="px-1 pt-2 text-title3">Terms</h2>
+          {doc.policies
+            .filter((p) => p.kind !== "esign_consent")
+            .map((p) => (
+              <details
+                key={p.id}
+                className="card group px-5 py-1"
+                open={p.kind === "cooling_off"}
+              >
+                <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 text-body">
+                  {p.title}
+                  <span className="flex items-center gap-2 text-footnote text-label-3">
+                    v{p.version}
+                    <ChevronDown
+                      size={18}
+                      aria-hidden
+                      className="transition-transform duration-[var(--dur-quick)] group-open:rotate-180"
+                    />
+                  </span>
+                </summary>
+                <p className="whitespace-pre-line pb-2 text-subhead text-label-2">
+                  {p.body.replaceAll("{company}", doc.company.name)}
+                </p>
+              </details>
+            ))}
+        </section>
+      ) : null}
+    </>
+  );
   return (
     <div className="space-y-5 pt-2">
-      <section className="px-1">
-        <p className="text-footnote font-semibold uppercase text-label-2">
+      <section className="px-1 pt-2">
+        <p className="num text-subhead font-semibold text-label-2">
           Estimate {e.number}
         </p>
-        <h1 className="text-title1 font-bold tracking-tight">
+        <h1 className="mt-1 text-large-title">
           {e.title ?? `Hi ${first}, here's your estimate`}
         </h1>
-        <p className="mt-1 text-subhead text-label-2">
+        <p className="mt-2 text-subhead text-label-2">
           {doc.propertyLines[0] ? `${doc.propertyLines[0]} · ` : ""}
           {e.expiresAt
             ? approvable
@@ -155,13 +196,13 @@ export default async function ETokenPage({
       </section>
 
       {e.status === "declined" ? (
-        <div className="list-card px-5 py-4 text-subhead">
+        <div className="card px-5 py-4 text-subhead">
           You declined this estimate. Changed your mind? Call us and we'll
           reopen it.
         </div>
       ) : null}
       {!approvable && e.status !== "declined" ? (
-        <div className="list-card px-5 py-4 text-subhead">
+        <div className="card px-5 py-4 text-subhead">
           This estimate has expired. Prices may have changed — call us for an
           updated one.
         </div>
@@ -169,9 +210,7 @@ export default async function ETokenPage({
 
       {doc.problemPhotos.length > 0 ? (
         <section aria-label="What we found" className="space-y-2">
-          <h2 className="px-1 text-footnote font-semibold uppercase text-label-2">
-            What we found
-          </h2>
+          <h2 className="px-1 text-title3">What we found</h2>
           <div className="no-scrollbar -mx-[var(--gutter)] flex snap-x gap-2 overflow-x-auto px-[var(--gutter)]">
             {doc.problemPhotos.map((p) => (
               <figure key={p.id} className="w-56 shrink-0 snap-start">
@@ -194,7 +233,9 @@ export default async function ETokenPage({
       ) : null}
 
       {e.notes ? (
-        <p className="whitespace-pre-line px-1 text-body">{e.notes}</p>
+        <p className="whitespace-pre-line px-1 text-body text-label-2">
+          {e.notes}
+        </p>
       ) : null}
 
       {approvable ? (
@@ -215,48 +256,18 @@ export default async function ETokenPage({
           consentText={doc.consentText}
           signerNameDefault={doc.customer.displayName}
           coolingOff={doc.coolingOff}
-        />
+        >
+          {terms}
+          <PortalFooter />
+        </EstimateApproval>
       ) : (
-        <EstimateDocument doc={doc} showPolicies={false} />
+        <>
+          <EstimateDocument doc={doc} showPolicies={false} />
+          {terms}
+        </>
       )}
 
-      {e.warrantyText ? (
-        <section className="list-card px-5 py-4 text-subhead">
-          <h2 className="text-footnote font-semibold uppercase text-label-2">
-            Warranty
-          </h2>
-          <p>{e.warrantyText}</p>
-        </section>
-      ) : null}
-
-      {doc.policies.length > 0 ? (
-        <section className="space-y-2" aria-label="Terms">
-          <h2 className="px-1 text-footnote font-semibold uppercase text-label-2">
-            Terms
-          </h2>
-          {doc.policies
-            .filter((p) => p.kind !== "esign_consent")
-            .map((p) => (
-              <details
-                key={p.id}
-                className="list-card group px-5 py-3"
-                open={p.kind === "cooling_off"}
-              >
-                <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-body">
-                  {p.title}
-                  <span className="text-footnote text-label-3">
-                    v{p.version}
-                  </span>
-                </summary>
-                <p className="whitespace-pre-line pb-2 text-subhead text-label-2">
-                  {p.body.replaceAll("{company}", doc.company.name)}
-                </p>
-              </details>
-            ))}
-        </section>
-      ) : null}
-
-      <PortalFooter />
+      {approvable ? null : <PortalFooter />}
     </div>
   );
 }
@@ -280,12 +291,10 @@ async function ChangeOrderView({
   return (
     <div className="space-y-5 pt-2">
       <section className="px-1">
-        <p className="text-footnote font-semibold uppercase text-label-2">
+        <p className="num text-subhead font-semibold text-label-2">
           Change order {co.number} · Job {loaded.job.number}
         </p>
-        <h1 className="text-title1 font-bold tracking-tight">
-          Additional work
-        </h1>
+        <h1 className="mt-1 text-large-title">Additional work</h1>
         <p className="mt-1 text-body">{co.reason}</p>
         {loaded.signedTotalCents != null && open ? (
           <p className="mt-1 text-subhead text-label-2">
@@ -295,9 +304,9 @@ async function ChangeOrderView({
         ) : null}
       </section>
       {co.status === "approved" ? (
-        <div className="list-card flex flex-col items-center px-5 py-8 text-center">
-          <CircleCheck size={48} className="text-success" aria-hidden />
-          <h2 className="mt-3 text-title2 font-bold">Approved — thank you!</h2>
+        <div className="card flex flex-col items-center px-6 py-9 text-center">
+          <SuccessCheck size={64} label="Approved" />
+          <h2 className="mt-4 text-title2">Approved, thank you!</h2>
           {sig ? (
             <p className="mt-1 text-subhead text-label-2">
               Signed by {sig.signerName}.
@@ -305,7 +314,7 @@ async function ChangeOrderView({
           ) : null}
         </div>
       ) : co.status === "declined" ? (
-        <div className="list-card px-5 py-4 text-subhead">
+        <div className="card px-5 py-4 text-subhead">
           You declined this change. We won't do the extra work.
         </div>
       ) : (
@@ -328,9 +337,11 @@ async function ChangeOrderView({
           consentText={esign?.body ?? DEFAULT_ESIGN_CONSENT}
           signerNameDefault={loaded.customer.displayName}
           coolingOff={false}
-        />
+        >
+          <PortalFooter />
+        </EstimateApproval>
       )}
-      <PortalFooter />
+      {open ? null : <PortalFooter />}
     </div>
   );
 }

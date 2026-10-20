@@ -15,7 +15,7 @@ import {
   publicTokenCovers,
   selectInvoicePhotos,
 } from "./api";
-import { JobPhotosGallery } from "./components/JobPhotosGallery";
+import { LazyJobPhotosGallery as JobPhotosGallery } from "./components/lazy";
 import type {
   InvoicePhotoGridProps,
   JobPhotosPanelProps,
@@ -230,7 +230,7 @@ export async function PortalPhotoGallery({
     <section aria-labelledby="portal-photos-h" className="flex flex-col gap-2">
       <h2
         id="portal-photos-h"
-        className="px-4 text-footnote uppercase text-label-2"
+        className="px-4 text-subhead font-semibold text-label-2"
       >
         Photos from your service
       </h2>

@@ -217,7 +217,7 @@ export function CameraButton({
         </Button>
         {showLibrary && capture && (
           <Button
-            variant="gray"
+            variant="secondary"
             icon={<ImagePlus size={19} aria-hidden />}
             onClick={() => libraryInput.current?.click()}
           >
@@ -236,7 +236,7 @@ export function CameraButton({
           {shots.map((s) => (
             <li
               key={s.clientId}
-              className="enter-pop relative size-16 shrink-0 overflow-hidden rounded-[10px] bg-fill-2"
+              className="enter-pop relative size-16 shrink-0 overflow-hidden rounded-xl bg-fill-2"
             >
               {s.preview && (
                 // biome-ignore lint/performance/noImgElement: local object URL

@@ -1,6 +1,5 @@
-import { CalendarPlus, FileSignature, FileText, Merge } from "lucide-react";
+import { CalendarPlus, FileSignature, FileText } from "lucide-react";
 import type { Metadata } from "next";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { type ReactNode, Suspense } from "react";
 import { CallButton } from "@/features/customers/components/CallButton";
@@ -12,17 +11,18 @@ import {
 import { EmailLink } from "@/features/customers/components/EmailLink";
 import { FlagsEditor } from "@/features/customers/components/FlagsEditor";
 import { PropertiesList } from "@/features/customers/components/PropertiesList";
+import { QuickActionLink } from "@/features/customers/components/QuickActions";
 import {
   getCustomerDetail,
   getCustomerEditable,
 } from "@/features/customers/queries";
 import { CustomerCard } from "@/features/customers/slots";
-import { CustomerEstimatesPanel } from "@/features/estimates/slots";
-import { CustomerInvoicesPanel } from "@/features/invoices/slots";
+import { CustomerEstimatesPanel } from "@/features/estimates/customer-slots";
+import { CustomerInvoicesPanel } from "@/features/invoices/customer-slots";
 import { CustomerJobsPanel, NotesPanel } from "@/features/jobs/slots";
 import { ConsentPanel } from "@/features/messaging/slots";
 import { ActivityTimeline } from "@/features/notify/slots";
-import { CustomerPaymentsPanel } from "@/features/payments/slots";
+import { CustomerPaymentsPanel } from "@/features/payments/customer-slots";
 import { RecordPaymentButton } from "@/features/payments/slots.client";
 import { RequestReviewButton } from "@/features/reviews/slots.client";
 import { getCustomFieldDefs } from "@/features/settings/api";
@@ -32,7 +32,8 @@ import { getCompanyTimezone, isEnabled } from "@/lib/settings";
 import { formatDate } from "@/lib/time";
 import { Page, SplitView } from "@/ui/components/AppShell";
 import { Banner } from "@/ui/components/Banner";
-import { ListGroup, ListRow, ListSection } from "@/ui/components/List";
+import { Button } from "@/ui/components/Button";
+import { ListRow, ListSection } from "@/ui/components/List";
 import { MoneyText } from "@/ui/components/MoneyText";
 import { NavBar } from "@/ui/components/NavBar";
 import { SkeletonCard } from "@/ui/components/Skeleton";
@@ -62,27 +63,6 @@ const CHANNEL_LABEL: Record<string, string> = {
 
 function Slot({ children }: { children: ReactNode }) {
   return <Suspense fallback={<SkeletonCard lines={3} />}>{children}</Suspense>;
-}
-
-function QuickAction({
-  href,
-  icon,
-  label,
-}: {
-  href: string;
-  icon: ReactNode;
-  label: string;
-}) {
-  return (
-    <Link
-      href={href}
-      transitionTypes={["nav-forward"]}
-      className="pressable flex min-h-[64px] flex-col items-center justify-center gap-1 rounded-card bg-card px-2 text-center text-footnote font-medium text-accent-text shadow-card"
-    >
-      <span aria-hidden>{icon}</span>
-      {label}
-    </Link>
-  );
 }
 
 export default async function CustomerDetailPage({
@@ -147,7 +127,7 @@ export default async function CustomerDetailPage({
         }
       />
       <Page className="pt-2">
-        <ListGroup>
+        <div className="mx-auto flex w-full max-w-[760px] flex-col gap-[var(--section-gap)]">
           {(anonymized || c.deletedAt || c.flags.doNotService) && (
             <div className="flex flex-col gap-2">
               {anonymized && (
@@ -169,93 +149,108 @@ export default async function CustomerDetailPage({
             </div>
           )}
 
-          <CustomerCard
-            customerId={c.id}
-            variant="header"
-            showActions={!anonymized}
-          />
-
-          {!anonymized && (
-            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-              {p.has("jobs.create") && (
-                <QuickAction
-                  href={`/jobs/new?customerId=${c.id}`}
-                  icon={<CalendarPlus size={20} />}
-                  label="New job"
-                />
-              )}
-              {estimatesOn && p.has("estimates.create") && (
-                <QuickAction
-                  href={`/estimates/new?customerId=${c.id}`}
-                  icon={<FileSignature size={20} />}
-                  label="Estimate"
-                />
-              )}
-              {p.has("invoices.view") && (
-                <QuickAction
-                  href={`/invoices/statement/${c.id}`}
-                  icon={<FileText size={20} />}
-                  label="Statement"
-                />
-              )}
-              {p.has("customers.merge") && (
-                <QuickAction
-                  href={`/customers/${c.id}/merge`}
-                  icon={<Merge size={20} />}
-                  label="Merge"
-                />
-              )}
-            </div>
-          )}
-
-          {!anonymized && (p.has("payments.record_manual") || !isTech) && (
-            <div className="flex flex-wrap gap-2 empty:hidden">
-              <RecordPaymentButton customerId={c.id} />
-              {!isTech && <RequestReviewButton customerId={c.id} />}
-            </div>
-          )}
-
-          {/* 2 columns on phones so money never truncates (T4-05); a lone third tile spans both. */}
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {c.balanceCents != null && (
-              <StatCard
-                label="Balance"
-                value={
-                  // Same format as Lifetime: whole amounts drop ".00" (QA2 NEW-12).
-                  <MoneyText
-                    cents={c.balanceCents}
-                    compactWhole
-                    className={c.balanceCents > 0 ? "text-warning" : undefined}
+          <div className="flex flex-col gap-5">
+            <CustomerCard
+              customerId={c.id}
+              variant="header"
+              showActions={!anonymized}
+              extraActions={
+                !anonymized && p.has("jobs.create") ? (
+                  <QuickActionLink
+                    href={`/jobs/new?customerId=${c.id}`}
+                    icon={<CalendarPlus />}
+                    label="New job"
+                    primary
                   />
-                }
-                href={
-                  p.has("invoices.view")
-                    ? `/invoices/statement/${c.id}`
-                    : undefined
-                }
-              />
-            )}
-            {p.has("invoices.view") && (
-              <StatCard
-                label="Lifetime"
-                value={<MoneyText cents={c.lifetimeCents} compactWhole />}
-              />
-            )}
-            <StatCard
-              label="Jobs"
-              value={c.jobCount}
-              className={
-                (c.balanceCents != null ? 1 : 0) +
-                  (p.has("invoices.view") ? 1 : 0) ===
-                2
-                  ? "col-span-2 sm:col-span-1"
-                  : undefined
+                ) : null
               }
             />
+
+            {/* Secondary actions: neutral pills, one line that scrolls on phones. */}
+            {!anonymized && (
+              <div className="-mx-[var(--gutter)] flex justify-start gap-2 overflow-x-auto px-[var(--gutter)] py-1 [scrollbar-width:none] empty:hidden sm:flex-wrap sm:justify-center">
+                {estimatesOn && p.has("estimates.create") && (
+                  <Button
+                    href={`/estimates/new?customerId=${c.id}`}
+                    transition="push"
+                    variant="secondary"
+                    size="sm"
+                    icon={<FileSignature size={16} aria-hidden />}
+                    className="shrink-0"
+                  >
+                    Estimate
+                  </Button>
+                )}
+                {p.has("invoices.view") && (
+                  <Button
+                    href={`/invoices/statement/${c.id}`}
+                    transition="push"
+                    variant="secondary"
+                    size="sm"
+                    icon={<FileText size={16} aria-hidden />}
+                    className="shrink-0"
+                  >
+                    Statement
+                  </Button>
+                )}
+                {(p.has("payments.record_manual") || !isTech) && (
+                  <RecordPaymentButton customerId={c.id} size="sm" />
+                )}
+                {!isTech && <RequestReviewButton customerId={c.id} />}
+              </div>
+            )}
+
+            {/* Lifetime, balance, jobs: three tiles, 22 px values so money never truncates. */}
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
+              {p.has("invoices.view") && (
+                <StatCard
+                  size="sm"
+                  label="Lifetime"
+                  value={<MoneyText cents={c.lifetimeCents} compactWhole />}
+                />
+              )}
+              {c.balanceCents != null && (
+                <StatCard
+                  size="sm"
+                  label="Balance"
+                  value={
+                    // Same format as Lifetime: whole amounts drop ".00" (QA2 NEW-12).
+                    <MoneyText
+                      cents={c.balanceCents}
+                      compactWhole
+                      className={
+                        c.balanceCents > 0 ? "text-warning" : undefined
+                      }
+                    />
+                  }
+                  href={
+                    p.has("invoices.view")
+                      ? `/invoices/statement/${c.id}`
+                      : undefined
+                  }
+                />
+              )}
+              <StatCard
+                size="sm"
+                label="Jobs"
+                value={c.jobCount}
+                className={
+                  (c.balanceCents != null ? 1 : 0) +
+                    (p.has("invoices.view") ? 1 : 0) ===
+                  0
+                    ? "col-span-3"
+                    : (c.balanceCents != null ? 1 : 0) +
+                          (p.has("invoices.view") ? 1 : 0) ===
+                        1
+                      ? "col-span-2"
+                      : undefined
+                }
+              />
+            </div>
           </div>
 
           {!anonymized && (
-            <ListSection header="Contact">
+            <ListSection variant="title" header="Contact">
               {c.phoneDisplay ? (
                 <CallButton
                   customerId={c.id}
@@ -321,7 +316,7 @@ export default async function CustomerDetailPage({
           )}
 
           {c.notes && !anonymized ? (
-            <ListSection header="Notes">
+            <ListSection variant="title" header="Notes">
               <ListRow
                 title={<span className="whitespace-pre-wrap">{c.notes}</span>}
                 multiline
@@ -360,11 +355,8 @@ export default async function CustomerDetailPage({
           </Slot>
 
           {(customValues.length > 0 || canEdit) && (
-            <section className="flex flex-col gap-2">
-              <h2 className="px-4 text-footnote uppercase text-label-2">
-                Tags
-              </h2>
-              <div className="list-card px-4 py-3">
+            <ListSection variant="title" header="Tags">
+              <div className="px-4 py-3">
                 {canEdit ? (
                   <TagEditor
                     entityType="customer"
@@ -377,10 +369,10 @@ export default async function CustomerDetailPage({
                   </span>
                 )}
               </div>
-            </section>
+            </ListSection>
           )}
           {customValues.length > 0 && (
-            <ListSection header="Details">
+            <ListSection variant="title" header="Details">
               {customValues.map((v) => (
                 <ListRow key={v.key} title={v.label} detail={v.value} />
               ))}
@@ -400,7 +392,7 @@ export default async function CustomerDetailPage({
           {p.has("customers.flags_manage") && !anonymized && (
             <FlagsEditor customerId={c.id} flags={c.flags} />
           )}
-        </ListGroup>
+        </div>
       </Page>
     </>
   );

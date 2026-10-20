@@ -21,6 +21,7 @@ import { MoneyText } from "@/ui/components/MoneyText";
 import { LargeTitleHeader } from "@/ui/components/NavBar";
 import { SearchField } from "@/ui/components/SearchField";
 import { StatusPill } from "@/ui/components/StatusPill";
+import { Morph } from "@/ui/motion/Morph";
 import { PageTransition } from "@/ui/motion/PageTransition";
 
 export const metadata: Metadata = { title: "Estimates" };
@@ -130,7 +131,9 @@ export default async function EstimatesPage({
 
         {unsold && rates.length > 0 ? (
           <ListSection
-            header="Close rate · last 90 days"
+            variant="title"
+            header="Close rate"
+            subtitle="Last 90 days"
             footer="Approved ÷ decided (approved, declined or expired) for estimates each person wrote."
           >
             {rates.map((r) => (
@@ -169,7 +172,10 @@ export default async function EstimatesPage({
             }
           />
         ) : (
-          <ListSection header={unsold ? "Unsold, by value" : "Estimates"}>
+          <ListSection
+            variant="title"
+            header={unsold ? "Unsold, by value" : "Estimates"}
+          >
             {rows.map((r) => {
               const expired =
                 r.expiresAt && r.expiresAt < now && unsold
@@ -191,18 +197,29 @@ export default async function EstimatesPage({
                       <StatusPill kind="estimate" status={r.status} size="sm" />
                     </span>
                   }
-                  subtitle={[
-                    r.number,
-                    r.title,
-                    r.jobNumber,
-                    r.createdByName,
-                    `${when}${expired}`,
-                    r.optionCount > 1 ? `${r.optionCount} options` : null,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
+                  subtitle={
+                    <>
+                      <Morph name={`estimate-${r.id}-title`}>
+                        <span className="inline-block">
+                          {r.title ? `${r.number} · ${r.title}` : r.number}
+                        </span>
+                      </Morph>
+                      {[
+                        "",
+                        r.jobNumber,
+                        r.createdByName,
+                        `${when}${expired}`,
+                        r.optionCount > 1 ? `${r.optionCount} options` : null,
+                      ]
+                        .filter((x, i) => i === 0 || Boolean(x))
+                        .join(" · ")}
+                    </>
+                  }
                   detail={
-                    <MoneyText cents={r.totalCents} className="text-label" />
+                    <MoneyText
+                      cents={r.totalCents}
+                      className="font-semibold text-label"
+                    />
                   }
                   multiline
                 />

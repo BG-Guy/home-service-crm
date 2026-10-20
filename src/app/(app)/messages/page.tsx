@@ -10,11 +10,13 @@ import { requireUser } from "@/lib/auth/current";
 import { formatRelative } from "@/lib/time";
 import { Page } from "@/ui/components/AppShell";
 import { Avatar } from "@/ui/components/Avatar";
+import { Badge } from "@/ui/components/Badge";
 import { Chip, ChipRow } from "@/ui/components/Chip";
 import { EmptyState } from "@/ui/components/EmptyState";
 import { ListGroup, ListRow, ListSection } from "@/ui/components/List";
 import { LargeTitleHeader } from "@/ui/components/NavBar";
 import { SearchField } from "@/ui/components/SearchField";
+import { cx } from "@/ui/cx";
 import { PageTransition } from "@/ui/motion/PageTransition";
 
 export const metadata: Metadata = { title: "Messages" };
@@ -101,8 +103,32 @@ export default async function MessagesPage({
               {threads.map((t) => (
                 <ListRow
                   key={t.customerId}
-                  leading={<Avatar name={t.name} size={40} />}
-                  title={t.name}
+                  leading={
+                    <Avatar name={t.name} seed={t.customerId} size={48} />
+                  }
+                  sepInset={76}
+                  accessory={
+                    t.pending ? (
+                      <Badge count={t.pending} tone="accent" />
+                    ) : (
+                      "none"
+                    )
+                  }
+                  title={
+                    <span className="flex items-baseline gap-2">
+                      <span
+                        className={cx(
+                          "min-w-0 flex-1 truncate",
+                          t.pending ? "font-bold" : "font-semibold",
+                        )}
+                      >
+                        {t.name}
+                      </span>
+                      <span className="num shrink-0 text-footnote text-label-2">
+                        {formatRelative(t.lastAt, now)}
+                      </span>
+                    </span>
+                  }
                   subtitle={
                     t.lastBody
                       ? `${t.lastDirection === "out" ? "You: " : ""}${t.lastBody}`
@@ -110,8 +136,6 @@ export default async function MessagesPage({
                         ? "Text waiting in the outbox"
                         : channelLabel(t.lastChannel)
                   }
-                  detail={formatRelative(t.lastAt, now)}
-                  badge={t.pending || undefined}
                   href={`/messages/${t.customerId}`}
                 />
               ))}

@@ -685,7 +685,7 @@ export function AutomationEditor({
                   key={p.index}
                   className="rounded-card bg-card p-4 shadow-card"
                 >
-                  <p className="text-footnote font-semibold uppercase text-label-2">
+                  <p className="text-subhead font-semibold text-label-2">
                     Step {p.index + 1} · {p.when} · {p.channel} → {p.audience}
                   </p>
                   {p.sendAt && (

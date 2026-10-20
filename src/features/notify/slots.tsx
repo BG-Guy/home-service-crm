@@ -9,8 +9,8 @@ import { safeTimeZone } from "@/lib/time";
 import { Badge } from "@/ui/components/Badge";
 import { IconButton } from "@/ui/components/IconButton";
 import type { NotificationPref } from "./catalog";
-import { ActivityFeed } from "./components/ActivityFeed";
-import { PrefsForm } from "./components/PrefsForm";
+import { ActivityFeed } from "./components/ActivityFeedLazy";
+import { PrefsForm } from "./components/PrefsFormLazy";
 import type {
   ActivityTimelineProps,
   NotificationPreferencesProps,

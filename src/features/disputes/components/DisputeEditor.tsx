@@ -8,22 +8,25 @@ import {
   Send,
   ShieldX,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useState, useTransition } from "react";
 import { useConfirm } from "@/ui/components/Alert";
 import { Banner } from "@/ui/components/Banner";
 import { Button } from "@/ui/components/Button";
 import { TextArea, TextField } from "@/ui/components/Field";
 import { ListSection } from "@/ui/components/List";
-import { Sheet, useSheetState } from "@/ui/components/Sheet";
 import { toast } from "@/ui/components/Toast";
-import { cx } from "@/ui/cx";
 import {
   acceptDispute,
   regenerateEvidence,
   saveDisputeEvidence,
-  setEvidenceFile,
   submitDispute,
 } from "../actions";
+
+// The attach-a-file picker is a lazy chunk (with the Sheet kit), loaded on first open.
+const EvidencePickerSheet = dynamic(() => import("./EvidencePickerSheet"), {
+  ssr: false,
+});
 
 export interface EditorField {
   key: string;
@@ -73,7 +76,13 @@ export function DisputeEditor({
   const [pending, start] = useTransition();
   const [confirm, confirmEl] = useConfirm();
   const [picking, setPicking] = useState<string | null>(null);
-  const picker = useSheetState();
+  const [pickerOpen, setPickerOpenState] = useState(false);
+  const [pickerArmed, setPickerArmed] = useState(false);
+  const setPickerOpen = (v: boolean) => {
+    if (v) setPickerArmed(true);
+    setPickerOpenState(v);
+  };
+  const picker = { show: () => setPickerOpen(true) };
   const dirty =
     narrative !== initialNarrative ||
     fields.some((f) => (values[f.key] ?? "") !== f.value);
@@ -140,7 +149,7 @@ export function DisputeEditor({
 
       <section className="flex flex-col gap-2">
         <div className="flex items-center justify-between px-4">
-          <h2 className="text-footnote uppercase text-label-2">Narrative</h2>
+          <h2 className="text-subhead font-semibold text-label-2">Narrative</h2>
           {editable && (
             <Button
               size="sm"
@@ -181,7 +190,7 @@ export function DisputeEditor({
 
       <section className="flex flex-col gap-3">
         <div className="flex items-center justify-between px-4">
-          <h2 className="text-footnote uppercase text-label-2">
+          <h2 className="text-subhead font-semibold text-label-2">
             Evidence fields
           </h2>
           <Button
@@ -353,99 +362,16 @@ export function DisputeEditor({
         </section>
       )}
 
-      <Sheet
-        {...picker.props}
-        title={files.find((f) => f.key === picking)?.label ?? "Attach"}
-        detents={["medium", "large"]}
-        leading={
-          <Button size="sm" variant="plain" onClick={picker.hide}>
-            Cancel
-          </Button>
-        }
-      >
-        <div className="flex flex-col gap-3 p-4">
-          {media.length === 0 ? (
-            <p className="py-6 text-center text-subhead text-label-2">
-              This job has no photos or signatures to attach.
-            </p>
-          ) : (
-            <ul className="grid grid-cols-3 gap-2">
-              {media.map((m) => {
-                const current = files.find((f) => f.key === picking)?.mediaId;
-                return (
-                  <li key={m.id}>
-                    <button
-                      type="button"
-                      aria-pressed={current === m.id}
-                      onClick={() =>
-                        start(async () => {
-                          if (!picking) return;
-                          const r = await setEvidenceFile({
-                            disputeId,
-                            field: picking as never,
-                            mediaId: m.id,
-                          });
-                          if (r.ok) {
-                            toast.success("Attached");
-                            picker.hide();
-                          } else toast.error(r.error);
-                        })
-                      }
-                      className={cx(
-                        "pressable flex w-full flex-col gap-1 text-left",
-                      )}
-                    >
-                      <span
-                        className={cx(
-                          "relative block aspect-square w-full overflow-hidden rounded-[8px] bg-fill-2",
-                          current === m.id &&
-                            "ring-[3px] ring-accent ring-inset",
-                        )}
-                      >
-                        {/* biome-ignore lint/performance/noImgElement: signed thumbnails */}
-                        <img
-                          src={m.thumbUrl}
-                          alt=""
-                          className="size-full object-cover"
-                        />
-                        {current === m.id && (
-                          <span className="absolute top-1 right-1 flex size-6 items-center justify-center rounded-full bg-accent text-on-accent">
-                            <Check size={14} strokeWidth={3} />
-                          </span>
-                        )}
-                      </span>
-                      <span className="truncate text-caption text-label-2">
-                        {m.label}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-          {picking && files.find((f) => f.key === picking)?.mediaId && (
-            <Button
-              variant="plain"
-              className="text-danger"
-              onClick={() =>
-                start(async () => {
-                  const r = await setEvidenceFile({
-                    disputeId,
-                    field: picking as never,
-                    mediaId: null,
-                  });
-                  if (r.ok) {
-                    toast.success("Removed");
-                    picker.hide();
-                  } else toast.error(r.error);
-                })
-              }
-            >
-              Remove file
-            </Button>
-          )}
-        </div>
-      </Sheet>
+      {pickerArmed && (
+        <EvidencePickerSheet
+          open={pickerOpen}
+          onOpenChange={setPickerOpen}
+          disputeId={disputeId}
+          files={files}
+          media={media}
+          picking={picking}
+        />
+      )}
       {confirmEl}
     </div>
   );

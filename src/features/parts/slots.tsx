@@ -6,13 +6,16 @@ import { getCompanyTimezone, isEnabled } from "@/lib/settings";
 import { dateKey } from "@/lib/time";
 import { ListRow, ListSection } from "@/ui/components/List";
 import { Pill, StatusPill } from "@/ui/components/StatusPill";
-import { AddReceiptButton, RemovePartButton } from "./components/LineActions";
+import {
+  AddPartButton,
+  AddReceiptButton,
+  RemovePartButton,
+} from "./components/islands";
 import type {
   JobPartsPanelProps,
   UnreceiptedPartsSectionProps,
 } from "./contracts";
 import { jobParts, unreceiptedForUser } from "./queries";
-import { AddPartButton } from "./slots.client";
 
 // Server UI slots produced by B6 (BUILD_PLAN §5.1). Each takes ids, resolves the viewer
 // itself and returns null when the viewer may not see it or the `parts` flag is off.

@@ -2,6 +2,7 @@
 
 import { Plus, Trash2 } from "lucide-react";
 import { useState, useTransition } from "react";
+import { SaveBar } from "@/features/settings/components/SaveBar";
 import { Banner } from "@/ui/components/Banner";
 import { Button } from "@/ui/components/Button";
 import { TextArea, TextField } from "@/ui/components/Field";
@@ -238,15 +239,12 @@ export function ToolSettingsForm({
           </div>
         </ListSection>
       </ListGroup>
-      <Button
-        size="lg"
-        fullWidth
-        loading={pending}
+      <SaveBar
+        dirty={dirty}
+        pending={pending}
         disabled={!dirty}
-        onClick={save}
-      >
-        Save changes
-      </Button>
+        onSave={save}
+      />
     </div>
   );
 }

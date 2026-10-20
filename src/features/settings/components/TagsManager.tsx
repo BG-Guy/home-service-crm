@@ -206,7 +206,7 @@ function TagSheet({
             />
           </FieldCard>
           <section>
-            <h2 className="px-4 pb-1.5 text-footnote uppercase text-label-2">
+            <h2 className="px-4 pb-2 text-subhead font-semibold text-label-2">
               Use on
             </h2>
             <div className="flex flex-wrap gap-1.5 rounded-card bg-card p-4">

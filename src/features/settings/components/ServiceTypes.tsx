@@ -333,7 +333,7 @@ function ServiceTypeSheet({
           </FieldCard>
 
           <section>
-            <h2 className="px-4 pb-1.5 text-footnote uppercase text-label-2">
+            <h2 className="px-4 pb-2 text-subhead font-semibold text-label-2">
               Photos
             </h2>
             <div className="rounded-card bg-card">
@@ -366,7 +366,7 @@ function ServiceTypeSheet({
           </section>
 
           <section>
-            <h2 className="px-4 pb-1.5 text-footnote uppercase text-label-2">
+            <h2 className="px-4 pb-2 text-subhead font-semibold text-label-2">
               Requirements
             </h2>
             <div className="rounded-card bg-card">
@@ -385,7 +385,7 @@ function ServiceTypeSheet({
           </section>
 
           <section>
-            <h2 className="px-4 pb-1.5 text-footnote uppercase text-label-2">
+            <h2 className="px-4 pb-2 text-subhead font-semibold text-label-2">
               Contract type ⚖️
             </h2>
             <div className="flex flex-col gap-3 rounded-card bg-card p-4">

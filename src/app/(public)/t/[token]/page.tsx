@@ -1,4 +1,4 @@
-import { CheckCircle2, Clock, Phone } from "lucide-react";
+import { Clock, Phone } from "lucide-react";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { AutoRefresh } from "@/features/map/components/AutoRefresh";
@@ -7,7 +7,10 @@ import { getTrackingView } from "@/features/map/tracking";
 import { clientIpFromHeaders } from "@/lib/client-ip";
 import { Button } from "@/ui/components/Button";
 import { EmptyState } from "@/ui/components/EmptyState";
+import { Pill } from "@/ui/components/StatusPill";
+import { SuccessCheck } from "@/ui/components/SuccessCheck";
 import { TechCard } from "@/ui/components/TechCard";
+import { TripTimeline } from "@/ui/components/Timeline";
 
 export const metadata: Metadata = {
   title: "Technician on the way",
@@ -55,7 +58,7 @@ export default async function TrackingPage({
 
   if (view.state === "invalid")
     return (
-      <div className="list-card mt-4">
+      <div className="card mt-4">
         <EmptyState
           icon={<Clock size={44} strokeWidth={1.5} />}
           title="This link has expired"
@@ -68,25 +71,26 @@ export default async function TrackingPage({
     const copy = DONE_COPY[view.phase];
     return (
       <div className="mt-4 flex flex-col gap-4">
-        <div className="list-card" aria-live="polite">
-          <EmptyState
-            icon={
-              view.phase === "inactive" ? (
-                <Clock size={44} strokeWidth={1.5} />
-              ) : (
-                <CheckCircle2 size={44} strokeWidth={1.5} />
-              )
-            }
-            title={copy.title(view.firstName)}
-            message={copy.message}
-          />
-        </div>
+        <section
+          className="card flex flex-col items-center px-6 py-10 text-center"
+          aria-live="polite"
+        >
+          {view.phase === "inactive" ? (
+            <span className="inline-flex size-14 items-center justify-center rounded-full bg-fill text-label-2">
+              <Clock size={28} aria-hidden />
+            </span>
+          ) : (
+            <SuccessCheck label={copy.title(view.firstName)} />
+          )}
+          <h1 className="mt-4 text-title2">{copy.title(view.firstName)}</h1>
+          <p className="mt-1 text-body text-label-2">{copy.message}</p>
+        </section>
         {view.companyPhone && (
           <Button
             href={`tel:${view.companyPhone}`}
-            variant="gray"
+            variant="secondary"
             size="lg"
-            fullWidth
+            block
             icon={<Phone size={18} aria-hidden />}
           >
             Call {view.companyName || "us"}
@@ -96,69 +100,95 @@ export default async function TrackingPage({
     );
   }
 
-  const { etaClock } = view;
+  const { etaClock, etaMinutes } = view;
+  const first = view.tech.firstName;
+  const arriving = etaClock
+    ? `Arriving around ${etaClock}`
+    : etaMinutes != null
+      ? `Arriving in about ${etaMinutes} min`
+      : "Arriving soon";
   return (
-    <div className="mt-2 flex flex-col gap-4">
+    <div className="mt-1 flex flex-col gap-4">
       <AutoRefresh seconds={90} />
-      <section
-        className="list-card flex flex-col gap-1 p-5 text-center"
-        aria-live="polite"
-      >
-        <p className="text-subhead text-label-2">
-          {view.tech.firstName} is on the way
-        </p>
-        <p className="num text-large-title font-bold">
-          {view.etaMinutes != null
-            ? `About ${view.etaMinutes} min`
-            : "On the way"}
-        </p>
-        {etaClock && (
-          <p className="text-subhead text-label-2">
-            Expected around {etaClock}
-          </p>
-        )}
-      </section>
-      <div className="list-card p-4">
-        <TechCard
-          firstName={view.tech.firstName}
-          photoUrl={view.tech.photoUrl}
-          seed={view.tech.seed}
-          licenseNo={view.tech.licenseNo}
-          subtitle={view.companyName}
-        />
-      </div>
-      {view.tech_at ? (
-        <figure className="flex flex-col gap-1.5">
+      {/* Uber-style ETA hero: map on top, then the live status and the ETA */}
+      <section className="card overflow-hidden" aria-live="polite">
+        {view.tech_at ? (
           <StaticMap
             center={view.tech_at}
             dest={view.dest}
-            label={`Last known position of ${view.tech.firstName}`}
+            height={200}
+            flush
+            label={`Last known position of ${first}`}
           />
-          <figcaption className="px-1 text-footnote text-label-2">
-            Last known position, updated {ago(view.tech_at.recordedAt)}. This
-            page refreshes on its own.
-          </figcaption>
-        </figure>
-      ) : (
-        <p className="px-1 text-footnote text-label-2">
-          Your technician’s position isn’t available right now — the ETA above
-          is our best estimate.
-        </p>
-      )}
+        ) : null}
+        <div className="flex items-end justify-between gap-4 p-5">
+          <div className="min-w-0">
+            <Pill tone="blue" live>
+              On the way
+            </Pill>
+            <h1 className="mt-3 text-title1">{first} is on the way</h1>
+            <p className="mt-1 text-body text-label-2">{arriving}</p>
+          </div>
+          {etaMinutes != null ? (
+            <div className="shrink-0 rounded-tile bg-label px-3.5 py-2.5 text-center text-bg">
+              <div className="num text-title1 leading-none">{etaMinutes}</div>
+              <div className="mt-1 text-caption">min</div>
+            </div>
+          ) : null}
+        </div>
+      </section>
+
+      <TechCard
+        firstName={first}
+        photoUrl={view.tech.photoUrl}
+        seed={view.tech.seed}
+        licenseNo={view.tech.licenseNo}
+        subtitle="Your technician"
+      />
+
+      <section className="card p-5" aria-labelledby="trip-title">
+        <h2 id="trip-title" className="text-headline">
+          Your visit
+        </h2>
+        <TripTimeline
+          className="mt-4"
+          label="Visit progress"
+          steps={[
+            { id: "booked", state: "done", title: "Booked" },
+            {
+              id: "way",
+              state: "current",
+              title: `${first} is driving to you`,
+              body: view.tech_at
+                ? `Position updated ${ago(view.tech_at.recordedAt)}`
+                : "Live position not available, the ETA is our best estimate",
+              time: "Now",
+            },
+            {
+              id: "arrive",
+              state: "upcoming",
+              title: "Arrives at your door",
+              time: etaClock ? `~${etaClock}` : undefined,
+            },
+            { id: "work", state: "upcoming", title: "Work begins" },
+          ]}
+        />
+      </section>
+
       {view.companyPhone && (
         <Button
           href={`tel:${view.companyPhone}`}
-          variant="gray"
+          variant="secondary"
           size="lg"
-          fullWidth
+          block
           icon={<Phone size={18} aria-hidden />}
         >
           Call {view.companyName || "us"}
         </Button>
       )}
-      <p className="px-1 text-caption text-label-2">
-        Live tracking ends when your technician arrives. This link expires after
-        3 hours.
+      <p className="px-1 text-center text-footnote text-label-2">
+        This page refreshes on its own. Live tracking ends when your technician
+        arrives, and the link expires after 3 hours.
       </p>
     </div>
   );

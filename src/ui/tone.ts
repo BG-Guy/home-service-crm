@@ -35,12 +35,23 @@ export const TONE_VAR: Record<Tone, string> = {
   gray: "var(--sys-gray)",
 };
 
-/** Inline style that sets `--tone` (merge with your own style if needed). */
+/**
+ * AA text shade of a tone on its soft tint: `--ink-<tone>` in globals.css (a darker
+ * shade in light mode, a lighter one in dark). `.tint-fg` reads it via `--tone-ink`.
+ */
+export const toneInk = (tone: Tone): string => `var(--ink-${tone})`;
+
+/** Inline style that sets `--tone` and its AA ink `--tone-ink` (merge your own style via `extra`). */
 export function toneStyle(
   tone: Tone | undefined,
   extra?: CSSProperties,
 ): CSSProperties {
-  return { ["--tone" as string]: TONE_VAR[tone ?? "accent"], ...extra };
+  const t = tone ?? "accent";
+  return {
+    ["--tone" as string]: TONE_VAR[t],
+    ["--tone-ink" as string]: toneInk(t),
+    ...extra,
+  };
 }
 
 /** Tones used for deterministic avatar / tag colors (no gray, no yellow: poor contrast with white text). */

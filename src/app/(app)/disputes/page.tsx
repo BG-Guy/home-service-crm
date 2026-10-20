@@ -105,6 +105,7 @@ export default async function DisputesPage({
               </div>
             ) : (
               <ListSection
+                variant="title"
                 header={
                   filter === "open" ? "Respond before the deadline" : "Disputes"
                 }
@@ -158,7 +159,7 @@ function RateMeter({ a }: { a: DisputeAnalytics }) {
     <div className="flex flex-col gap-3 rounded-card bg-card p-4">
       <div className="flex items-baseline justify-between gap-3">
         <div>
-          <p className="text-footnote uppercase text-label-2">
+          <p className="text-subhead font-semibold text-label-2">
             Dispute rate · {a.windowDays} days
           </p>
           <p
@@ -212,7 +213,7 @@ function Breakdown({ title, cells }: { title: string; cells: RateCell[] }) {
   const top = cells.filter((c) => c.payments > 0).slice(0, 5);
   if (top.length === 0) return null;
   return (
-    <ListSection header={title}>
+    <ListSection variant="title" header={title}>
       {top.map((c) => (
         <ListRow
           key={c.key}
@@ -233,6 +234,7 @@ function Analytics({ a }: { a: DisputeAnalytics }) {
     >
       <RateMeter a={a} />
       <ListSection
+        variant="title"
         header="Win rate by readiness"
         footer="Jobs documented well (photos, signatures, receipts) win more disputes."
       >
@@ -246,7 +248,7 @@ function Analytics({ a }: { a: DisputeAnalytics }) {
         ))}
       </ListSection>
       {a.byReason.length > 0 && (
-        <ListSection header="By reason">
+        <ListSection variant="title" header="By reason">
           {a.byReason.map((r) => (
             <ListRow key={r.key} title={r.label} detail={r.count} />
           ))}
@@ -263,6 +265,7 @@ function Analytics({ a }: { a: DisputeAnalytics }) {
 function EarlyWarnings({ rows, tz }: { rows: EfwRow[]; tz: string }) {
   return (
     <ListSection
+      variant="title"
       header="Early fraud warnings"
       footer="The card network reported possible fraud before any dispute. When the charge is small, refunding now costs less than the dispute fee and keeps your dispute rate down."
     >

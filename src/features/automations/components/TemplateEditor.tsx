@@ -257,7 +257,7 @@ function ChannelEditor({
         <div className="flex flex-col gap-3 px-4 py-3">
           {VARIABLE_GROUPS.filter((g) => staff || !g.staff).map((g) => (
             <div key={g.key}>
-              <p className="mb-1 text-footnote font-semibold uppercase text-label-2">
+              <p className="mb-1 text-subhead font-semibold text-label-2">
                 {g.label}
               </p>
               <ChipRow label={`${g.label} variables`}>

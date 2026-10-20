@@ -40,7 +40,7 @@ export async function settingsGroupsFor(user: SessionUser): Promise<
         label: i.label,
         description: i.description,
         tone: GROUP_TONE[g.key] ?? "gray",
-        icon: <Icon size={16} color="white" aria-hidden />,
+        icon: <Icon size={16} strokeWidth={2} aria-hidden />,
       };
     }),
   }));

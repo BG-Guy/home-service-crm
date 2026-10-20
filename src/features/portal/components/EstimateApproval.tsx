@@ -1,26 +1,30 @@
 "use client";
 
 import { Check } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { optionTotals } from "@/features/estimates/logic";
 import type { DocLineType } from "@/features/invoices/math";
-import { SignatureSheet } from "@/features/signatures/slots.client";
 import { formatMoney } from "@/lib/money";
+import { BarSummary, BottomBar } from "@/ui/components/BottomBar";
 import { Button } from "@/ui/components/Button";
-import { TextArea } from "@/ui/components/Field";
-import { Sheet } from "@/ui/components/Sheet";
-import { toast } from "@/ui/components/Toast";
+import { Pill } from "@/ui/components/StatusPill";
 import { cx } from "@/ui/cx";
-import {
-  approveChangeOrderPublic,
-  approveEstimatePublic,
-  declinePublic,
-} from "../actions";
+import { approveChangeOrderPublic, approveEstimatePublic } from "../actions";
 
-// The customer's side of /e/[token] (SPEC M07/M23): choose an option, tick add-ons,
-// see the total update, then the ESIGN consent + typed name + drawn signature (S15,
-// uploaded through the magic-link route). Decline with an optional reason.
+// The customer's side of /e/[token] (SPEC M07/M23): choose an option (good /
+// better / best cards), tick add-ons, see the total in the booking bar, then the
+// ESIGN consent + typed name + drawn signature (S15, uploaded through the
+// magic-link route) in a sheet that slides up. Decline with an optional reason.
+// Both sheets are lazy chunks loaded on first intent (hover / touch / focus of
+// their button), so the page's first load carries only the cards and the bar.
+
+const loadSignature = () =>
+  import("@/features/signatures/slots.client").then((m) => m.SignatureSheet);
+const loadDecline = () => import("./DeclineEstimateSheet");
+const SignatureSheet = dynamic(loadSignature, { ssr: false });
+const DeclineEstimateSheet = dynamic(loadDecline, { ssr: false });
 
 export interface PortalLine {
   id: string;
@@ -56,6 +60,7 @@ export function EstimateApproval({
   consentText,
   signerNameDefault,
   coolingOff,
+  children,
 }: {
   token: string;
   kind: "estimate" | "change_order";
@@ -66,6 +71,8 @@ export function EstimateApproval({
   consentText: string;
   signerNameDefault: string;
   coolingOff: boolean;
+  /** Page content after the options (warranty, terms, footer); the booking bar follows it. */
+  children?: ReactNode;
 }) {
   const router = useRouter();
   const [pickId, setPickId] = useState(
@@ -81,6 +88,17 @@ export function EstimateApproval({
   );
   const [signing, setSigning] = useState(false);
   const [declining, setDeclining] = useState(false);
+  // Mount each lazy sheet on first open and keep it mounted (close animation).
+  const [signMounted, setSignMounted] = useState(false);
+  const [declineMounted, setDeclineMounted] = useState(false);
+  const openSign = () => {
+    setSignMounted(true);
+    setSigning(true);
+  };
+  const openDecline = () => {
+    setDeclineMounted(true);
+    setDeclining(true);
+  };
   const pick = options.find((o) => o.id === pickId);
   const totals = useMemo(() => {
     const out: Record<string, number> = {};
@@ -108,11 +126,13 @@ export function EstimateApproval({
         : (a[optionId] ?? []).filter((x) => x !== lineId),
     }));
 
+  const multi = options.length > 1;
+  const canApprove = !!pick && pick.lines.length > 0;
   return (
     <>
-      <fieldset className="space-y-3">
-        <legend className="sr-only">
-          {options.length > 1 ? "Choose an option" : "Your estimate"}
+      <fieldset className="flex flex-col gap-3">
+        <legend className="mb-3 px-1 text-title3">
+          {multi ? "Choose an option" : "Your estimate"}
         </legend>
         {options.map((o) => {
           const selected = o.id === pickId;
@@ -122,14 +142,17 @@ export function EstimateApproval({
             <div
               key={o.id}
               className={cx(
-                "relative rounded-card bg-card p-4 shadow-card transition-[box-shadow] duration-300 ease-[var(--ease-spring-snappy)] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent",
-                selected && options.length > 1
-                  ? "ring-2 ring-accent"
+                "relative rounded-card bg-card shadow-card transition-[box-shadow,transform] duration-[var(--dur-quick)] ease-[var(--ease-spring-snappy)] has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent",
+                multi && selected
+                  ? "shadow-[var(--shadow-raised)] ring-2 ring-accent"
                   : "ring-0",
               )}
             >
               <label
-                className={cx("block", options.length > 1 && "cursor-pointer")}
+                className={cx(
+                  "block p-4 pb-3 sm:p-5 sm:pb-4",
+                  multi && "cursor-pointer active:scale-[.99]",
+                )}
               >
                 <input
                   type="radio"
@@ -139,159 +162,190 @@ export function EstimateApproval({
                   onChange={() => setPickId(o.id)}
                   className="sr-only"
                 />
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-headline">
-                      {o.label}
-                      {o.recommended && options.length > 1 ? (
-                        <span className="ml-2 rounded-pill bg-accent px-2 py-0.5 align-middle text-caption font-semibold text-on-accent">
+                <div className="flex items-start gap-3">
+                  {multi ? (
+                    <span
+                      aria-hidden
+                      className={cx(
+                        "mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full transition-colors duration-[var(--dur-quick)]",
+                        selected
+                          ? "bg-accent text-white"
+                          : "shadow-[inset_0_0_0_2px_var(--label-3)]",
+                      )}
+                    >
+                      {selected ? <Check size={14} strokeWidth={3} /> : null}
+                    </span>
+                  ) : null}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className="text-headline">{o.label}</span>
+                      {o.recommended && multi ? (
+                        <Pill tone="accent" size="sm" dot={false}>
                           Recommended
-                        </span>
+                        </Pill>
                       ) : null}
-                    </p>
+                    </div>
                     {o.notes ? (
                       <p className="mt-0.5 text-subhead text-label-2">
                         {o.notes}
                       </p>
                     ) : null}
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <span className="num text-title3 font-semibold">
-                      {formatMoney(totals[o.id] ?? 0)}
-                    </span>
-                    {options.length > 1 ? (
-                      <span
-                        aria-hidden
-                        className={cx(
-                          "flex size-6 items-center justify-center rounded-full border-2",
-                          selected
-                            ? "border-accent bg-accent text-on-accent"
-                            : "border-sep",
-                        )}
-                      >
-                        {selected ? <Check size={14} strokeWidth={3} /> : null}
-                      </span>
-                    ) : null}
-                  </div>
+                  <span className="num shrink-0 text-title3">
+                    {formatMoney(totals[o.id] ?? 0)}
+                  </span>
                 </div>
-                <ul className="mt-3 space-y-1.5 text-subhead">
-                  {required.map((l) => (
-                    <li key={l.id} className="flex justify-between gap-3">
-                      <span className="min-w-0">
-                        {l.name}
-                        {l.qty !== 1 ? (
-                          <span className="text-label-2">
-                            {" "}
-                            × {qtyFmt.format(l.qty)}
-                          </span>
-                        ) : null}
-                        {l.isServiceFee ? (
-                          <span className="block text-footnote text-label-2">
-                            Credited if you approve the repair
-                          </span>
-                        ) : l.description ? (
-                          <span className="block text-footnote text-label-2">
-                            {l.description}
-                          </span>
-                        ) : null}
-                      </span>
-                      <span
-                        className={cx(
-                          "num shrink-0",
-                          l.type === "discount" && "text-success",
-                        )}
-                      >
-                        {formatMoney(l.totalCents)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
               </label>
-              {extras.length > 0 ? (
-                <fieldset className="mt-3 border-t border-sep pt-3">
-                  <legend className="sr-only">Add-ons for {o.label}</legend>
-                  <p className="pb-1 text-footnote font-semibold uppercase text-label-2">
-                    Optional add-ons
-                  </p>
-                  {extras.map((l) => {
-                    const on = (addons[o.id] ?? []).includes(l.id);
-                    return (
-                      <label
-                        key={l.id}
-                        className="flex min-h-11 cursor-pointer items-center gap-3"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={on}
-                          onChange={(e) => {
-                            setPickId(o.id);
-                            toggle(o.id, l.id, e.currentTarget.checked);
-                          }}
-                          className="size-6 shrink-0 accent-[var(--accent)]"
-                        />
-                        <span className="min-w-0 flex-1 text-subhead">
-                          {l.name}
-                          {l.description ? (
-                            <span className="block text-footnote text-label-2">
-                              {l.description}
+              {/* Only the chosen option shows its lines (M15 disclosure) */}
+              <div
+                className="disclosure"
+                data-open={selected || !multi || undefined}
+              >
+                <div inert={!(selected || !multi) || undefined}>
+                  <div className="px-4 pb-4 sm:px-5">
+                    <ul
+                      className={cx(
+                        "space-y-1.5 border-t border-sep pt-3 text-subhead",
+                        multi && "sm:ml-9",
+                      )}
+                    >
+                      {required.map((l) => (
+                        <li key={l.id} className="flex justify-between gap-3">
+                          <span className="min-w-0 text-label-2">
+                            <span className="text-label">{l.name}</span>
+                            {l.qty !== 1 ? (
+                              <> × {qtyFmt.format(l.qty)}</>
+                            ) : null}
+                            {l.isServiceFee ? (
+                              <span className="block text-footnote">
+                                Credited if you approve the repair
+                              </span>
+                            ) : l.description ? (
+                              <span className="block text-footnote">
+                                {l.description}
+                              </span>
+                            ) : null}
+                          </span>
+                          <span
+                            className={cx(
+                              "num shrink-0",
+                              l.type === "discount" && "text-success",
+                            )}
+                          >
+                            {formatMoney(l.totalCents)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  {extras.length > 0 ? (
+                    <fieldset
+                      className={cx(
+                        "mx-4 border-t border-sep pb-2 pt-3 sm:mx-5",
+                        multi && "sm:ml-14",
+                      )}
+                    >
+                      <legend className="sr-only">Add-ons for {o.label}</legend>
+                      <p className="pb-1 text-subhead font-semibold text-label-2">
+                        Optional add-ons
+                      </p>
+                      {extras.map((l) => {
+                        const on = (addons[o.id] ?? []).includes(l.id);
+                        return (
+                          <label
+                            key={l.id}
+                            className="flex min-h-11 cursor-pointer items-center gap-3"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={on}
+                              onChange={(e) => {
+                                setPickId(o.id);
+                                toggle(o.id, l.id, e.currentTarget.checked);
+                              }}
+                              className="size-[22px] shrink-0 accent-[var(--accent)]"
+                            />
+                            <span className="min-w-0 flex-1 text-subhead">
+                              {l.name}
+                              {l.description ? (
+                                <span className="block text-footnote text-label-2">
+                                  {l.description}
+                                </span>
+                              ) : null}
                             </span>
-                          ) : null}
-                        </span>
-                        <span className="num text-subhead">
-                          +{formatMoney(l.totalCents)}
-                        </span>
-                      </label>
-                    );
-                  })}
-                </fieldset>
-              ) : null}
-              {o.depositCents ? (
-                <p className="mt-3 text-footnote text-label-2">
-                  Deposit to book: {formatMoney(o.depositCents)}
-                </p>
-              ) : null}
+                            <span className="num text-subhead">
+                              +{formatMoney(l.totalCents)}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </fieldset>
+                  ) : null}
+                  {o.depositCents ? (
+                    <p
+                      className={cx(
+                        "px-4 pb-4 text-footnote text-label-2 sm:px-5",
+                        multi && "sm:pl-14",
+                      )}
+                    >
+                      Deposit to book: {formatMoney(o.depositCents)}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
             </div>
           );
         })}
       </fieldset>
 
       {coolingOff ? (
-        <p className="mt-4 rounded-card bg-[color-mix(in_srgb,var(--sys-indigo)_12%,transparent)] p-4 text-subhead">
+        <p className="rounded-card bg-[color-mix(in_srgb,var(--sys-indigo)_12%,transparent)] p-4 text-subhead">
           You may cancel this transaction, without any penalty or obligation,
           within three business days from the date you sign. The full notice is
           below.
         </p>
       ) : null}
 
-      {/* Sticky approve bar */}
-      <div className="sticky bottom-0 z-10 -mx-[var(--gutter)] mt-6 border-t border-sep bg-[var(--bar)] px-[var(--gutter)] pb-[max(env(safe-area-inset-bottom),12px)] pt-3 backdrop-blur-xl print:hidden">
-        <div className="flex items-center gap-3">
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-footnote text-label-2">
-              {pick?.label ?? "Total"}
-            </p>
-            <p className="num text-title3 font-semibold">
-              {formatMoney(total)}
-            </p>
-          </div>
-          <Button
-            size="lg"
-            disabled={!pick || pick.lines.length === 0}
-            onClick={() => setSigning(true)}
-          >
-            Approve & sign
-          </Button>
-        </div>
-        <button
-          type="button"
-          className="mt-2 min-h-11 w-full text-subhead text-label-2 underline-offset-2 hover:underline"
-          onClick={() => setDeclining(true)}
+      <div className="flex justify-center print:hidden">
+        <Button
+          variant="plain"
+          size="sm"
+          className="text-label-2"
+          onPointerEnter={loadDecline}
+          onFocus={loadDecline}
+          onClick={openDecline}
         >
-          No thanks
-        </button>
+          Not right now? Decline
+        </Button>
       </div>
 
-      {pick ? (
+      {children}
+
+      <BottomBar
+        edge
+        label="Approve estimate"
+        className="print:hidden md:bottom-4 md:mx-0 md:rounded-card md:shadow-[var(--shadow-float)]"
+        summary={
+          <BarSummary
+            title={formatMoney(total)}
+            subtitle={pick && multi ? `${pick.label} · total` : "Total"}
+          />
+        }
+        action={
+          <Button
+            size="lg"
+            disabled={!canApprove}
+            onPointerEnter={loadSignature}
+            onTouchStart={loadSignature}
+            onFocus={loadSignature}
+            onClick={openSign}
+          >
+            Approve
+          </Button>
+        }
+      />
+
+      {pick && signMounted ? (
         <SignatureSheet
           open={signing}
           onOpenChange={setSigning}
@@ -330,73 +384,14 @@ export function EstimateApproval({
           }}
         />
       ) : null}
-      <DeclineCustomerSheet
-        open={declining}
-        onClose={() => setDeclining(false)}
-        token={token}
-        onDone={() => router.refresh()}
-      />
-    </>
-  );
-}
-
-function DeclineCustomerSheet({
-  open,
-  onClose,
-  token,
-  onDone,
-}: {
-  open: boolean;
-  onClose: () => void;
-  token: string;
-  onDone: () => void;
-}) {
-  const [reason, setReason] = useState("");
-  const [pending, start] = useTransition();
-  return (
-    <Sheet
-      open={open}
-      onOpenChange={(o) => !o && onClose()}
-      title="Not right now?"
-      detents={["content"]}
-      leading={
-        <Button variant="plain" size="sm" onClick={onClose}>
-          Back
-        </Button>
-      }
-    >
-      <div className="flex flex-col gap-4 px-[var(--gutter)] pb-6">
-        <p className="px-1 text-subhead text-label-2">
-          Tell us why (optional) — we read every answer and won't keep following
-          up.
-        </p>
-        <TextArea
-          label="Reason"
-          hideLabel
-          value={reason}
-          rows={3}
-          onChange={(e) => setReason(e.currentTarget.value)}
-          placeholder="Price, timing, getting other quotes…"
+      {declineMounted ? (
+        <DeclineEstimateSheet
+          open={declining}
+          onClose={() => setDeclining(false)}
+          token={token}
+          onDone={() => router.refresh()}
         />
-        <Button
-          variant="gray"
-          size="lg"
-          fullWidth
-          loading={pending}
-          onClick={() =>
-            start(async () => {
-              const r = await declinePublic({ token, reason: reason || null });
-              if (r.ok) {
-                toast({ title: "Thanks for letting us know", tone: "success" });
-                onClose();
-                onDone();
-              } else toast({ title: r.error, tone: "error" });
-            })
-          }
-        >
-          Decline estimate
-        </Button>
-      </div>
-    </Sheet>
+      ) : null}
+    </>
   );
 }

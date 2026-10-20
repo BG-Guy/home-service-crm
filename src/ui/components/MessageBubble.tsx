@@ -3,9 +3,10 @@ import type { ReactNode } from "react";
 import { cx } from "../cx";
 
 /**
- * Chat bubble (SPEC §12.6, presentational). Outgoing = accent, right; incoming
- * = gray, left. Pass `tail` on the last bubble of a consecutive group.
- * The thread container and Composer belong to the messaging module.
+ * Chat bubble (DESIGN.md §7, iMessage-like, presentational). Outgoing = accent,
+ * right; incoming = neutral fill, left. Pass `tail` on the last bubble of a
+ * consecutive group. The thread container and Composer belong to the messaging
+ * module.
  */
 export function MessageBubble({
   direction,
@@ -49,9 +50,9 @@ export function MessageBubble({
       >
         <div
           className={cx(
-            "relative whitespace-pre-wrap break-words rounded-[18px] px-3 py-[7px] text-body",
-            out ? "bg-accent text-on-accent" : "bg-fill-2 text-label",
-            tail && (out ? "rounded-br-[6px]" : "rounded-bl-[6px]"),
+            "relative whitespace-pre-wrap break-words rounded-[20px] px-3.5 py-2 text-body",
+            out ? "bg-accent-fill text-on-accent" : "bg-fill text-label",
+            tail && (out ? "rounded-br-md" : "rounded-bl-md"),
           )}
         >
           {children}
@@ -65,7 +66,7 @@ export function MessageBubble({
         )}
       </div>
       {(meta || channel || status) && tail && (
-        <div className="mt-0.5 px-2 text-caption text-label-2">
+        <div className="mt-1 px-2 text-caption text-label-2">
           {[channel, meta, status].filter(Boolean).map((x, i) => (
             // biome-ignore lint/suspicious/noArrayIndexKey: static meta parts
             <span key={i}>

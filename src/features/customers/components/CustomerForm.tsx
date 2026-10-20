@@ -253,7 +253,7 @@ export function CustomerForm({
 
       {mode === "create" && (
         <section className="flex flex-col gap-3">
-          <h2 className="px-1 text-footnote uppercase text-label-2">
+          <h2 className="px-1 text-subhead font-semibold text-label-2">
             Service address
           </h2>
           <TextField
@@ -323,7 +323,9 @@ export function CustomerForm({
 
       {customDefs.length > 0 && (
         <section className="flex flex-col gap-3">
-          <h2 className="px-1 text-footnote uppercase text-label-2">Details</h2>
+          <h2 className="px-1 text-subhead font-semibold text-label-2">
+            Details
+          </h2>
           <CustomFieldsFields
             defs={customDefs}
             values={initial?.custom ?? {}}

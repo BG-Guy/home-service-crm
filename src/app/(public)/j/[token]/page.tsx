@@ -12,7 +12,7 @@ import {
 } from "@/db/schema";
 import { getInvoiceForJob } from "@/features/invoices/api";
 import { addressLines } from "@/features/invoices/doc";
-import { PortalJobActions } from "@/features/jobs/slots.client";
+import { PortalJobActions } from "@/features/jobs/components/portal/PortalJobActions";
 import { PortalPhotoGallery } from "@/features/media/slots";
 import {
   openJobDocument,
@@ -28,8 +28,9 @@ import { formatMoney } from "@/lib/money";
 import { findCompany, getSettings } from "@/lib/settings";
 import { formatDateTime, formatDayShort, formatTimeRange } from "@/lib/time";
 import { Button } from "@/ui/components/Button";
+import { Pill } from "@/ui/components/StatusPill";
 import { TechCard } from "@/ui/components/TechCard";
-import { cx } from "@/ui/cx";
+import { type Tone, toneStyle } from "@/ui/tone";
 
 export const metadata: Metadata = {
   title: "Your appointment",
@@ -37,20 +38,53 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-const STATUS_COPY: Record<string, { title: string; tone: string }> = {
-  unscheduled: { title: "We're finding a time", tone: "text-label-2" },
-  scheduled: { title: "You're booked", tone: "text-accent-text" },
-  confirmed: { title: "Confirmed — see you then", tone: "text-success" },
+const STATUS_COPY: Record<
+  string,
+  { title: string; pill: string; tone: Tone; live?: boolean }
+> = {
+  unscheduled: { title: "We're finding a time", pill: "Booking", tone: "gray" },
+  scheduled: { title: "You're booked", pill: "Scheduled", tone: "blue" },
+  confirmed: {
+    title: "Confirmed, see you then",
+    pill: "Confirmed",
+    tone: "green",
+  },
   en_route: {
     title: "Your technician is on the way",
-    tone: "text-accent-text",
+    pill: "On the way",
+    tone: "blue",
+    live: true,
   },
-  arrived: { title: "Your technician has arrived", tone: "text-success" },
-  in_progress: { title: "Work in progress", tone: "text-accent-text" },
-  on_hold: { title: "Waiting on parts or approval", tone: "text-warning" },
-  completed: { title: "All done — thank you!", tone: "text-success" },
-  closed: { title: "All done — thank you!", tone: "text-success" },
-  cancelled: { title: "This appointment was cancelled", tone: "text-danger" },
+  arrived: {
+    title: "Your technician has arrived",
+    pill: "Arrived",
+    tone: "green",
+  },
+  in_progress: {
+    title: "Work in progress",
+    pill: "In progress",
+    tone: "blue",
+    live: true,
+  },
+  on_hold: {
+    title: "Waiting on parts or approval",
+    pill: "On hold",
+    tone: "orange",
+  },
+  completed: { title: "All done, thank you!", pill: "Done", tone: "green" },
+  closed: { title: "All done, thank you!", pill: "Done", tone: "green" },
+  cancelled: {
+    title: "This appointment was cancelled",
+    pill: "Cancelled",
+    tone: "red",
+  },
+};
+
+const FALLBACK_COPY = {
+  title: "You're booked",
+  pill: "Scheduled",
+  tone: "blue" as Tone,
+  live: false,
 };
 
 // /j/[token] (SPEC M23; BUILD_PLAN §5.3): tech card, status and window, confirm /
@@ -112,7 +146,7 @@ export default async function JTokenPage({
   const tz = company?.timezone ?? "America/New_York";
   const briefs = await getUserBriefs(assignees.map((a) => a.userId));
   const techs = assignees.map((a) => briefs[a.userId]).filter((b) => !!b);
-  const copy = STATUS_COPY[job.status] ?? STATUS_COPY.scheduled;
+  const copy = STATUS_COPY[job.status] ?? FALLBACK_COPY;
   const start = job.windowStart ?? job.scheduledStart;
   const end = job.windowEnd ?? job.scheduledEnd;
   const invoiceOpen =
@@ -123,35 +157,48 @@ export default async function JTokenPage({
 
   return (
     <div className="space-y-5 pt-2">
-      <section className="px-1">
-        <p className="text-footnote font-semibold uppercase text-label-2">
-          {row.serviceName ?? job.title} · {job.number}
-        </p>
-        <h1 className={cx("text-title1 font-bold tracking-tight", copy?.tone)}>
-          {copy?.title}
+      <section className="card p-5" aria-labelledby="appt-title">
+        <div className="flex items-center justify-between gap-3">
+          <Pill tone={copy.tone} live={copy.live}>
+            {copy.pill}
+          </Pill>
+          <span className="num truncate text-footnote text-label-2">
+            {row.serviceName ?? job.title} · {job.number}
+          </span>
+        </div>
+        <h1 id="appt-title" className="mt-3 text-title1">
+          {copy.title}
         </h1>
-        {start && live ? (
-          <p className="mt-1 flex items-center gap-1.5 text-body">
-            <CalendarClock size={18} aria-hidden className="text-label-2" />
-            {formatDayShort(start, tz)}
-            {end ? ` · ${formatTimeRange(start, end, tz)}` : ""}
-          </p>
-        ) : null}
-        {job.completedAt && !live ? (
-          <p className="mt-1 text-subhead text-label-2">
-            Completed {formatDateTime(job.completedAt, tz)}
-          </p>
-        ) : null}
-        {prop ? (
-          <p className="mt-1 flex items-center gap-1.5 text-subhead text-label-2">
-            <MapPin size={16} aria-hidden />
-            {addressLines(prop)[0]}
-          </p>
-        ) : null}
+        <div className="mt-3 flex flex-col gap-2 text-body">
+          {start && live ? (
+            <p className="flex items-center gap-2.5">
+              <CalendarClock
+                size={20}
+                aria-hidden
+                className="shrink-0 text-label-2"
+              />
+              <span className="num">
+                {formatDayShort(start, tz)}
+                {end ? ` · ${formatTimeRange(start, end, tz)}` : ""}
+              </span>
+            </p>
+          ) : null}
+          {job.completedAt && !live ? (
+            <p className="text-subhead text-label-2">
+              Completed {formatDateTime(job.completedAt, tz)}
+            </p>
+          ) : null}
+          {prop ? (
+            <p className="flex items-center gap-2.5 text-label-2">
+              <MapPin size={20} aria-hidden className="shrink-0" />
+              <span className="min-w-0 truncate">{addressLines(prop)[0]}</span>
+            </p>
+          ) : null}
+        </div>
       </section>
 
       {techs.length > 0 ? (
-        <section className="space-y-2" aria-label="Your technician">
+        <section className="space-y-3" aria-label="Your technician">
           {techs.map((t) => {
             const lic = t.licenseNumbers[0];
             return (
@@ -178,90 +225,98 @@ export default async function JTokenPage({
       ) : null}
 
       {est || invoice || cos.length > 0 ? (
-        <section
-          className="list-card divide-y divide-sep"
-          aria-label="Documents"
-        >
-          {est ? (
-            <form
-              action={openJobDocument}
-              className="flex items-center gap-3 px-4 py-3"
-            >
-              <input type="hidden" name="token" value={token} />
-              <input type="hidden" name="target" value="estimate" />
-              <FileText
-                size={22}
-                aria-hidden
-                className="shrink-0 text-accent-text"
-              />
-              <div className="min-w-0 flex-1">
-                <p className="text-body">Estimate {est.number}</p>
-                <p className="text-footnote text-label-2">
-                  {est.status === "approved"
-                    ? "Approved"
-                    : est.status === "declined"
-                      ? "Declined"
-                      : est.status === "expired"
-                        ? "Expired"
-                        : "Waiting for your approval"}
-                </p>
-              </div>
-              <Button type="submit" size="sm" variant="tinted">
-                {est.status === "sent" || est.status === "viewed"
-                  ? "Review"
-                  : "View"}
-              </Button>
-            </form>
-          ) : null}
-          {cos.map((c) => (
-            <form
-              key={c.id}
-              action={openJobDocument}
-              className="flex items-center gap-3 px-4 py-3"
-            >
-              <input type="hidden" name="token" value={token} />
-              <input type="hidden" name="target" value="change_order" />
-              <input type="hidden" name="id" value={c.id} />
-              <FileText
-                size={22}
-                aria-hidden
-                className="shrink-0 text-warning"
-              />
-              <div className="min-w-0 flex-1">
-                <p className="text-body">Change {c.number}</p>
-                <p className="text-footnote text-label-2">{c.reason}</p>
-              </div>
-              <Button type="submit" size="sm" variant="tinted">
-                Review
-              </Button>
-            </form>
-          ))}
-          {invoice &&
-          invoice.status !== "draft" &&
-          invoice.status !== "void" ? (
-            <div className="flex items-center gap-3 px-4 py-3">
-              <Receipt
-                size={22}
-                aria-hidden
-                className="shrink-0 text-accent-text"
-              />
-              <div className="min-w-0 flex-1">
-                <p className="text-body">Invoice {invoice.number}</p>
-                <p className="text-footnote text-label-2">
-                  {invoiceOpen
-                    ? `${formatMoney(invoice.balanceCents)} due`
-                    : "Paid — thank you"}
-                </p>
-              </div>
-              <form action={openJobDocument}>
+        <section className="flex flex-col gap-2" aria-labelledby="docs-title">
+          <h2 id="docs-title" className="px-1 pt-2 text-title3">
+            Documents
+          </h2>
+          <div className="card divide-y divide-sep overflow-hidden">
+            {est ? (
+              <form
+                action={openJobDocument}
+                className="flex min-h-[60px] items-center gap-3 px-4 py-2.5"
+              >
                 <input type="hidden" name="token" value={token} />
-                <input type="hidden" name="target" value="invoice" />
-                <Button type="submit" size="sm" variant="gray">
-                  View
+                <input type="hidden" name="target" value="estimate" />
+                <span
+                  className="icon-tile tint-bg tint-fg shrink-0"
+                  aria-hidden
+                  style={toneStyle("accent")}
+                >
+                  <FileText size={18} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-headline">Estimate {est.number}</p>
+                  <p className="text-footnote text-label-2">
+                    {est.status === "approved"
+                      ? "Approved"
+                      : est.status === "declined"
+                        ? "Declined"
+                        : est.status === "expired"
+                          ? "Expired"
+                          : "Waiting for your approval"}
+                  </p>
+                </div>
+                <Button type="submit" size="sm" variant="secondary">
+                  {est.status === "sent" || est.status === "viewed"
+                    ? "Review"
+                    : "View"}
                 </Button>
               </form>
-            </div>
-          ) : null}
+            ) : null}
+            {cos.map((c) => (
+              <form
+                key={c.id}
+                action={openJobDocument}
+                className="flex min-h-[60px] items-center gap-3 px-4 py-2.5"
+              >
+                <input type="hidden" name="token" value={token} />
+                <input type="hidden" name="target" value="change_order" />
+                <input type="hidden" name="id" value={c.id} />
+                <span
+                  className="icon-tile tint-bg tint-fg shrink-0"
+                  aria-hidden
+                  style={toneStyle("orange")}
+                >
+                  <FileText size={18} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-headline">Change {c.number}</p>
+                  <p className="text-footnote text-label-2">{c.reason}</p>
+                </div>
+                <Button type="submit" size="sm" variant="secondary">
+                  Review
+                </Button>
+              </form>
+            ))}
+            {invoice &&
+            invoice.status !== "draft" &&
+            invoice.status !== "void" ? (
+              <div className="flex min-h-[60px] items-center gap-3 px-4 py-2.5">
+                <span
+                  className="icon-tile tint-bg tint-fg shrink-0"
+                  aria-hidden
+                  style={toneStyle("accent")}
+                >
+                  <Receipt size={18} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-headline">Invoice {invoice.number}</p>
+                  <p className="text-footnote text-label-2">
+                    {invoiceOpen
+                      ? `${formatMoney(invoice.balanceCents)} due`
+                      : "Paid, thank you"}
+                  </p>
+                </div>
+                <form action={openJobDocument}>
+                  <input type="hidden" name="token" value={token} />
+                  <input type="hidden" name="target" value="invoice" />
+                  <Button type="submit" size="sm" variant="secondary">
+                    View
+                  </Button>
+                </form>
+              </div>
+            ) : null}
+          </div>
         </section>
       ) : null}
 
@@ -269,7 +324,7 @@ export default async function JTokenPage({
         <form action={payInvoiceFromPortal}>
           <input type="hidden" name="token" value={token} />
           <input type="hidden" name="from" value="j" />
-          <Button type="submit" size="lg" fullWidth>
+          <Button type="submit" size="lg" block>
             Pay {formatMoney(invoice.balanceCents)}
           </Button>
         </form>

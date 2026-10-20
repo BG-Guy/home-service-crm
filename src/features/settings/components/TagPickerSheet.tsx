@@ -155,7 +155,7 @@ export default function TagPickerSheet({
 
         {canManage && (
           <section aria-label="New tag" className="flex flex-col gap-3">
-            <h2 className="px-4 text-footnote uppercase text-label-2">
+            <h2 className="px-4 text-subhead font-semibold text-label-2">
               New tag
             </h2>
             <div className="flex flex-col gap-3 rounded-card bg-card p-4">

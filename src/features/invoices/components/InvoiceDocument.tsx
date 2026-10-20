@@ -83,12 +83,10 @@ export function DocHeader({
         </div>
       </div>
       <div className="shrink-0 sm:text-right">
-        <p className="text-footnote font-semibold uppercase tracking-wide text-label-2">
-          {kind}
-        </p>
-        <p className="num text-title2 font-semibold">{number}</p>
+        <p className="text-subhead font-semibold text-label-2">{kind}</p>
+        <p className="num text-title2">{number}</p>
         {stamp ? (
-          <p className="print-box print-strong mt-1 inline-block rounded-md border-2 border-current px-2 py-0.5 text-footnote font-bold uppercase tracking-wider text-label-2">
+          <p className="print-box print-strong mt-1.5 inline-block rounded-md border-2 border-current px-2 py-0.5 text-footnote font-bold text-label-2">
             {stamp}
           </p>
         ) : null}
@@ -138,7 +136,7 @@ export function LinesTable({
     <>
       <table className="w-full border-collapse text-subhead">
         <thead>
-          <tr className="border-b border-sep text-left text-footnote uppercase text-label-2">
+          <tr className="border-b border-sep text-left text-footnote text-label-2">
             <th scope="col" className="py-2 pr-2 font-medium">
               Description
             </th>
@@ -244,7 +242,7 @@ export function TotalsBlock({
             <dd className="num shrink-0">{formatMoney(r.cents)}</dd>
           </div>
         ))}
-        <div className="print-box mt-1 flex justify-between gap-4 rounded-lg bg-fill px-3 py-2 text-headline">
+        <div className="print-box mt-2 flex items-baseline justify-between gap-4 rounded-control bg-field px-3.5 py-2.5 text-headline">
           <dt>{grand.label}</dt>
           <dd className="num print-strong">{formatMoney(grand.cents)}</dd>
         </div>
@@ -297,9 +295,10 @@ export function PayOnlyNotice({
   descriptor?: string | null;
 }) {
   return (
-    <div className="print-box rounded-xl border border-sep px-3 py-2 text-footnote">
+    <div className="print-box rounded-control bg-fill-2 px-3.5 py-2.5 text-footnote">
       <p className="print-strong font-semibold">
-        Pay only {company}. Never pay a technician personally.
+        Pay only {company.replace(/\.$/, "")}. Never pay a technician
+        personally.
       </p>
       {descriptor ? (
         <p className="text-label-2">
@@ -351,7 +350,7 @@ export function InvoiceDocument({
   return (
     <article
       className={cx(
-        "rounded-card bg-card p-5 shadow-card sm:p-8 print:p-0",
+        "rounded-card bg-card p-5 shadow-card sm:p-8 print:p-0 print:shadow-none",
         className,
       )}
       aria-label={`Invoice ${inv.number}`}
@@ -366,7 +365,7 @@ export function InvoiceDocument({
 
       <section className="mt-6 grid gap-4 text-subhead sm:grid-cols-3">
         <div>
-          <h3 className="text-footnote uppercase text-label-2">Bill to</h3>
+          <h3 className="text-footnote font-semibold text-label-2">Bill to</h3>
           <p className="font-medium">{customer.displayName}</p>
           {customer.companyName &&
             customer.companyName !== customer.displayName && (
@@ -378,7 +377,7 @@ export function InvoiceDocument({
         </div>
         {doc.property && (
           <div>
-            <h3 className="text-footnote uppercase text-label-2">
+            <h3 className="text-footnote font-semibold text-label-2">
               Service address
             </h3>
             {doc.property.addressLines.map((l) => (
@@ -388,7 +387,9 @@ export function InvoiceDocument({
         )}
         {job && (
           <div>
-            <h3 className="text-footnote uppercase text-label-2">Service</h3>
+            <h3 className="text-footnote font-semibold text-label-2">
+              Service
+            </h3>
             <p>{job.serviceTypeName ?? job.title}</p>
             {job.serviceDate && (
               <p className="text-label-2">{formatDate(job.serviceDate, tz)}</p>
@@ -442,7 +443,7 @@ export function InvoiceDocument({
 
       {inv.notes ? (
         <section className="mt-6 text-subhead">
-          <h3 className="text-footnote uppercase text-label-2">Notes</h3>
+          <h3 className="text-footnote font-semibold text-label-2">Notes</h3>
           <p className="whitespace-pre-line">{inv.notes}</p>
         </section>
       ) : null}
@@ -452,7 +453,7 @@ export function InvoiceDocument({
           className="mt-6 text-footnote"
           style={{ breakInside: "avoid" }}
         >
-          <h3 className="uppercase text-label-2">Warranty</h3>
+          <h3 className="font-semibold text-label-2">Warranty</h3>
           {inv.warrantyText ? (
             <p className="text-subhead">{inv.warrantyText}</p>
           ) : null}

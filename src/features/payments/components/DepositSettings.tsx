@@ -646,7 +646,7 @@ export function DepositPolicyForm({
     body !== (current?.body ?? "");
   return (
     <section className="flex flex-col gap-3">
-      <h2 className="px-4 text-footnote uppercase text-label-2">
+      <h2 className="px-4 text-subhead font-semibold text-label-2">
         Deposit policy
         {current ? ` · version ${current.version}, ${current.at}` : ""}
       </h2>

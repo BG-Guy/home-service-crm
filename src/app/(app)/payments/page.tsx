@@ -191,7 +191,10 @@ async function AllTab({
           />
         </div>
       ) : (
-        <ListSection header={one(sp.cursor) ? "Earlier" : "Recent"}>
+        <ListSection
+          variant="title"
+          header={one(sp.cursor) ? "Earlier" : "Recent"}
+        >
           {rows.map((p) => (
             <ListRow
               key={p.id}
@@ -278,6 +281,7 @@ async function ReconTab() {
   return (
     <>
       <ListSection
+        variant="title"
         header="Needs attention"
         footer="Card payments without a processor reference or fee, invoices marked paid that don't add up, stale unverified manual payments and uncaptured card holds."
       >
@@ -304,6 +308,7 @@ async function ReconTab() {
         )}
       </ListSection>
       <ListSection
+        variant="title"
         header="Card settlements, last 14 days"
         footer="Expected payout = card payments − processor fees − refunds. Compare each day with the deposit in your bank."
       >
@@ -386,6 +391,7 @@ async function RefundsTab({
     <>
       {open.length > 0 && (
         <ListSection
+          variant="title"
           header="Promised and pending"
           footer="Pay these back by the original method on time: a late refund is the top cause of 'credit not processed' disputes."
         >
@@ -393,7 +399,9 @@ async function RefundsTab({
         </ListSection>
       )}
       {done.length > 0 && (
-        <ListSection header="Completed">{done.map(row)}</ListSection>
+        <ListSection variant="title" header="Completed">
+          {done.map(row)}
+        </ListSection>
       )}
     </>
   );

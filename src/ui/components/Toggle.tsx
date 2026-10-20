@@ -61,7 +61,7 @@ export function ToggleRow({
     // biome-ignore lint/a11y/noLabelWithoutControl: the Toggle input is a descendant
     <label
       className={cx(
-        "list-row flex min-h-11 cursor-pointer items-center gap-3 px-4 py-1.5",
+        "list-row flex min-h-[var(--row-min)] cursor-pointer items-center gap-3 px-4 py-1.5",
         className,
       )}
       data-icon={icon ? "" : undefined}

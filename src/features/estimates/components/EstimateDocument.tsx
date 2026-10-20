@@ -66,7 +66,9 @@ export function EstimateDocument({
 
       <section className="mt-6 grid gap-4 text-subhead sm:grid-cols-2">
         <div>
-          <h3 className="text-footnote uppercase text-label-2">Prepared for</h3>
+          <h3 className="text-footnote font-semibold text-label-2">
+            Prepared for
+          </h3>
           <p className="font-medium">{doc.customer.displayName}</p>
           {doc.customer.email ? (
             <p className="break-all text-label-2">{doc.customer.email}</p>
@@ -74,7 +76,7 @@ export function EstimateDocument({
         </div>
         {doc.propertyLines.length > 0 ? (
           <div>
-            <h3 className="text-footnote uppercase text-label-2">
+            <h3 className="text-footnote font-semibold text-label-2">
               Service address
             </h3>
             {doc.propertyLines.map((l) => (
@@ -95,7 +97,7 @@ export function EstimateDocument({
 
       {doc.problemPhotos.length > 0 ? (
         <section className="mt-5" aria-label="Photos of the problem">
-          <h3 className="text-footnote uppercase text-label-2">
+          <h3 className="text-footnote font-semibold text-label-2">
             What we found
           </h3>
           <div className="print-photos mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -126,21 +128,21 @@ export function EstimateDocument({
           <section
             key={o.id}
             className={cx(
-              "mt-6 rounded-xl border p-4 print:break-inside-avoid",
+              "mt-6 rounded-tile p-4 print:break-inside-avoid sm:p-5",
               chosen || (o.recommended && !approvedId)
-                ? "print-box border-accent"
-                : "border-sep",
+                ? "print-box ring-2 ring-accent"
+                : "ring-1 ring-sep",
             )}
           >
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h3 className="text-headline">
                 {o.label}
                 {chosen ? (
-                  <span className="print-strong ml-2 text-footnote font-semibold text-success">
+                  <span className="print-strong ml-2 inline-flex rounded-pill bg-[color-mix(in_srgb,var(--sys-green)_var(--tint-a),transparent)] px-2 py-0.5 align-middle text-footnote font-semibold text-success">
                     ✓ Approved
                   </span>
                 ) : o.recommended && !approvedId ? (
-                  <span className="ml-2 text-footnote font-semibold text-accent-text">
+                  <span className="ml-2 inline-flex rounded-pill bg-[color-mix(in_srgb,var(--accent)_var(--tint-a),transparent)] px-2 py-0.5 align-middle text-footnote font-semibold text-[var(--ink-accent)]">
                     Recommended
                   </span>
                 ) : null}
@@ -184,17 +186,17 @@ export function EstimateDocument({
 
       {e.warrantyText ? (
         <section className="mt-6 text-subhead">
-          <h3 className="text-footnote uppercase text-label-2">Warranty</h3>
+          <h3 className="text-footnote font-semibold text-label-2">Warranty</h3>
           <p>{e.warrantyText}</p>
         </section>
       ) : null}
 
       {doc.signature ? (
         <section
-          className="print-box mt-6 rounded-xl border border-sep p-4 text-subhead"
+          className="print-box mt-6 rounded-tile bg-fill-2 p-4 text-subhead"
           aria-label="Approval"
         >
-          <h3 className="text-footnote uppercase text-label-2">
+          <h3 className="text-footnote font-semibold text-label-2">
             {doc.signature.channel === "verbal"
               ? "Approved verbally"
               : "Signed"}
@@ -233,14 +235,12 @@ export function EstimateDocument({
               key={p.id}
               className={cx(
                 p.kind === "cooling_off" &&
-                  "print-box rounded-xl border border-sep p-3",
+                  "print-box rounded-tile bg-fill-2 p-3",
               )}
             >
-              <h3 className="font-semibold uppercase text-label-2">
+              <h3 className="font-semibold text-label-2">
                 {p.title}{" "}
-                <span className="font-normal normal-case text-label-3">
-                  v{p.version}
-                </span>
+                <span className="font-normal text-label-3">v{p.version}</span>
               </h3>
               <p className="whitespace-pre-line text-label-2">
                 {p.body.replaceAll("{company}", doc.company.name)}

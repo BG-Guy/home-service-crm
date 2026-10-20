@@ -1,7 +1,9 @@
-import { CircleCheck, PhoneCall } from "lucide-react";
+import { PhoneCall } from "lucide-react";
 import type { Metadata } from "next";
 import { formatPhoneDisplay } from "@/lib/phone-display";
 import { findCompany, getSettings } from "@/lib/settings";
+import { SuccessCheck } from "@/ui/components/SuccessCheck";
+import { toneStyle } from "@/ui/tone";
 
 export const metadata: Metadata = {
   title: "Thanks!",
@@ -20,24 +22,19 @@ export default async function LeadThanksPage({
   const [settings, company] = await Promise.all([getSettings(), findCompany()]);
   const phone = settings.company.emergency_phone || company?.phone;
   return (
-    <div className="list-card mt-4 flex flex-col items-center gap-3 px-6 py-10 text-center">
+    <div className="card mt-4 flex flex-col items-center gap-3 px-6 py-10 text-center">
       {busy ? (
-        <PhoneCall
-          size={52}
-          strokeWidth={1.6}
-          className="text-[var(--sys-orange)]"
-          aria-hidden
-        />
+        <span
+          className="tint-bg tint-fg inline-flex size-16 items-center justify-center rounded-full"
+          style={toneStyle("orange")}
+        >
+          <PhoneCall size={30} aria-hidden />
+        </span>
       ) : (
-        <CircleCheck
-          size={52}
-          strokeWidth={1.6}
-          className="text-[var(--sys-green)]"
-          aria-hidden
-        />
+        <SuccessCheck size={64} label="Request received" />
       )}
-      <h1 className="text-title2 font-bold">
-        {busy ? "We couldn't take that just now" : "Thanks — we got it!"}
+      <h1 className="mt-2 text-title1">
+        {busy ? "We couldn't take that just now" : "Thanks, we got it!"}
       </h1>
       <p className="max-w-[40ch] text-body text-label-2">
         {busy
@@ -47,7 +44,8 @@ export default async function LeadThanksPage({
       {phone && (
         <a
           href={`tel:${phone}`}
-          className="pressable mt-2 flex min-h-11 items-center gap-2 rounded-full bg-accent/15 px-5 font-semibold text-accent-text"
+          // buttonClass() output, inlined: importing Button.tsx pulls next/link's client chunk
+          className={`btn pressable btn-lg mt-3 select-none ${busy ? "btn-primary" : "btn-secondary"}`}
         >
           <PhoneCall size={18} aria-hidden /> Call {formatPhoneDisplay(phone)}
         </a>

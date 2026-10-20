@@ -1,9 +1,8 @@
 import type { ReactNode } from "react";
 import { cx } from "../cx";
 import { iconFor } from "../icons";
-import { Avatar } from "./Avatar";
-import { NavTitlesProvider } from "./NavTitles";
 import { type NavTitle, uniqueTitles } from "./nav-titles";
+import { NavTitlesProvider } from "./nav-titles-context";
 import { Sidebar } from "./Sidebar";
 import { TabBar, type TabItem } from "./TabBar";
 
@@ -38,15 +37,31 @@ export interface ShellUser {
 /** Badge keys that render red (BUILD_PLAN Appendix D). */
 export const CRITICAL_BADGES: readonly string[] = ["disputes.open"];
 
+// No Avatar import here: client code imports `Page` from this module, and every
+// import of it would ride along into those chunks.
+const initialsOf = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
 /**
  * App chrome (Server Component): floating TabBar below 1024 px, Sidebar at
  * ≥ 1024 px, skip link, and a `<main>` that clears the tab bar. Data comes in
  * as props — the integrator resolves permissions/flags/badges in the
  * `(app)/layout.tsx` and passes plain values.
  *
+ * The banner and `<main>` sit in `.shell-stage`, the layer that scales back
+ * behind a large phone sheet (M4 card stack). Fixed-position chrome (sync
+ * capsule, install nudge, location pill) goes in `overlays`, outside that layer,
+ * so it never moves with it.
+ *
  * ```tsx
  * <AppShell user={{ id, name, roleLabel }} nav={nav} badges={{ "leads.new": 3 }}
- *   brand={company.name} banner={<OfflineBanner />}>{children}</AppShell>
+ *   brand={company.name} overlays={<ShellDeferred />}>{children}</AppShell>
  * ```
  */
 export function AppShell({
@@ -56,6 +71,7 @@ export function AppShell({
   criticalBadges = CRITICAL_BADGES,
   brand,
   banner,
+  overlays,
   sidebarFooter,
   titles,
   children,
@@ -66,8 +82,10 @@ export function AppShell({
   criticalBadges?: readonly string[];
   /** Company name or logo node for the sidebar header. */
   brand?: ReactNode;
-  /** Global banner slot above page content (e.g. `<OfflineBanner />`). */
+  /** In-flow banner slot above page content. */
   banner?: ReactNode;
+  /** Fixed-position overlays (e.g. `<OfflineBanner />`), outside the scaling stage. */
+  overlays?: ReactNode;
   /** Replaces the default user row at the bottom of the sidebar. */
   sidebarFooter?: ReactNode;
   /**
@@ -116,12 +134,12 @@ export function AppShell({
         footer={
           sidebarFooter ?? (
             <div className="flex items-center gap-3 px-2">
-              <Avatar
-                name={user.name}
-                src={user.avatarUrl}
-                seed={user.id}
-                size={32}
-              />
+              <span
+                aria-hidden
+                className="flex size-8 shrink-0 items-center justify-center rounded-full bg-fill text-footnote font-semibold"
+              >
+                {initialsOf(user.name)}
+              </span>
               <div className="min-w-0">
                 <div className="truncate text-subhead font-medium">
                   {user.name}
@@ -136,7 +154,7 @@ export function AppShell({
           )
         }
       />
-      <div className="min-w-0">
+      <div className="shell-stage min-w-0">
         {banner}
         <main
           id="main"
@@ -156,13 +174,14 @@ export function AppShell({
         className="lg:hidden"
         items={nav.tabs.slice(0, 5).map((t) => toTab(t, 24))}
       />
+      {overlays}
     </div>
   );
 }
 
 /**
- * Page content container: side gutters (16/20 px), max width 1100 px
- * (`wide` for the schedule board and map), bottom spacing.
+ * Page content container: side gutters (16 / 24 at ≥ 768 / 32 at ≥ 1200), max
+ * width 1200 px (`wide` for the schedule board and map), bottom spacing.
  */
 export function Page({
   children,
@@ -182,6 +201,62 @@ export function Page({
       )}
     >
       {children}
+    </div>
+  );
+}
+
+/**
+ * Detail page layout (docs/DESIGN.md §6). At ≥ 1200 px: two columns,
+ * `minmax(0,1fr) 360px`, the right rail sticky under the nav bar. Below that the
+ * columns stack: main, then the rail cards (or none, `railOnPhone="hide"`), and
+ * `bar` becomes the sticky bottom action bar, last in the flow so it never
+ * covers content. On desktop `bar` is the first card of the rail.
+ *
+ * ```tsx
+ * <DetailLayout
+ *   rail={<><StatusCard /><MoneyCard /><TechCard … /></>}
+ *   bar={<BottomBar summary={<BarSummary title="$334.54" subtitle="Balance" />}
+ *          action={<Button>Collect</Button>} />}>
+ *   <Hero /> <Tabs />
+ * </DetailLayout>
+ * ```
+ * Server Component (no JS). Put it inside `<Page>`.
+ */
+export function DetailLayout({
+  children,
+  rail,
+  bar,
+  railOnPhone = "stack",
+  railLabel = "Summary",
+  className,
+}: {
+  /** Main column (hero, tabs, content). */
+  children: ReactNode;
+  /** Right-rail cards on desktop (status, next action, money, people). */
+  rail?: ReactNode;
+  /** A `<BottomBar>`: sticky bottom bar on phone, first rail card on desktop. */
+  bar?: ReactNode;
+  /** Below 1200 px the rail cards stack under main (`stack`) or hide (`hide`). */
+  railOnPhone?: "stack" | "hide";
+  /** Accessible name of the rail (`<aside>`). */
+  railLabel?: string;
+  className?: string;
+}) {
+  return (
+    <div className={cx("detail-layout", className)}>
+      <div className="detail-main">{children}</div>
+      {rail || bar ? (
+        <aside className="detail-rail" aria-label={railLabel}>
+          <div className="detail-rail-in">
+            {bar}
+            {rail ? (
+              <div className="detail-rail-body" data-phone={railOnPhone}>
+                {rail}
+              </div>
+            ) : null}
+          </div>
+        </aside>
+      ) : null}
     </div>
   );
 }

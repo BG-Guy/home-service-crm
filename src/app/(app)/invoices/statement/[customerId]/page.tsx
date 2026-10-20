@@ -52,7 +52,7 @@ export default async function InvoicesStatementCustomerIdPage({
             ]}
           />
           <section className="mt-6 text-subhead">
-            <h3 className="text-footnote uppercase text-label-2">Account</h3>
+            <h3 className="text-subhead font-semibold text-label-2">Account</h3>
             <p className="font-medium">{data.customer.displayName}</p>
             {data.customer.companyName &&
               data.customer.companyName !== data.customer.displayName && (
@@ -75,7 +75,7 @@ export default async function InvoicesStatementCustomerIdPage({
           ) : (
             <table className="mt-6 w-full border-collapse text-subhead">
               <thead>
-                <tr className="border-b border-sep text-left text-footnote uppercase text-label-2">
+                <tr className="border-b border-sep text-left text-subhead font-semibold text-label-2">
                   <th scope="col" className="py-2 pr-2 font-medium">
                     Invoice
                   </th>

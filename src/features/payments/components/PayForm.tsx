@@ -35,10 +35,14 @@ export function PayForm({
       <input type="hidden" name="token" value={token} />
       <input type="hidden" name="tipPct" value={pct} />
       {allowTip && (
-        <fieldset className="flex flex-col gap-2">
-          <legend className="px-1 pb-2 text-footnote uppercase text-label-2">
-            Add a tip for your technician?
-          </legend>
+        <fieldset className="card flex flex-col gap-3 p-5">
+          <legend className="sr-only">Add a tip for your technician?</legend>
+          <div aria-hidden>
+            <p className="text-headline">Add a tip?</p>
+            <p className="text-footnote text-label-2">
+              Tips go 100% to your technician.
+            </p>
+          </div>
           <div className="grid grid-cols-4 gap-2">
             {tipPresets.map((p) => {
               const cents = tipForPreset({
@@ -54,10 +58,8 @@ export function PayForm({
                   aria-pressed={pct === p}
                   onClick={() => setPct(p)}
                   className={cx(
-                    "pressable flex min-h-12 flex-col items-center justify-center rounded-[12px] text-subhead font-semibold",
-                    pct === p
-                      ? "bg-accent text-on-accent"
-                      : "bg-card text-label",
+                    "pressable flex min-h-14 flex-col items-center justify-center rounded-control text-subhead font-semibold transition-colors duration-[var(--dur-quick)]",
+                    pct === p ? "bg-label text-bg" : "bg-field text-label",
                   )}
                 >
                   {p === 0 ? "No tip" : `${p}%`}
@@ -70,16 +72,13 @@ export function PayForm({
               );
             })}
           </div>
-          <p className="px-1 text-footnote text-label-2">
-            Tips go 100% to your technician.
-          </p>
         </fieldset>
       )}
       {state && !state.ok && <Banner tone="error">{state.error}</Banner>}
-      <SubmitButton size="lg" fullWidth icon={<Lock size={18} />}>
+      <SubmitButton size="lg" block icon={<Lock size={18} />}>
         Pay {formatMoney(dueCents + tip)} by card
       </SubmitButton>
-      <p className="text-center text-footnote text-label-2">
+      <p className="-mt-1 text-center text-footnote text-label-2">
         You'll finish on a secure card page. We never see your card number.
       </p>
     </form>

@@ -82,7 +82,7 @@ export default async function TheftReportPage({
       <Page className="pt-4 print:p-0">
         <article className="list-card flex flex-col gap-5 p-6 print:shadow-none">
           <header className="flex flex-col gap-1">
-            <p className="text-footnote uppercase text-label-2">
+            <p className="text-subhead font-semibold text-label-2">
               Property loss / theft report
             </p>
             <h1 className="text-title1 font-bold">{t.name}</h1>

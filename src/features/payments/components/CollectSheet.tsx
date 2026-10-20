@@ -352,7 +352,7 @@ function CollectForm({
         aria-label="Amount due"
         className="flex flex-col gap-1 rounded-card bg-card-2 p-4 text-center"
       >
-        <p className="text-footnote uppercase text-label-2">
+        <p className="text-subhead font-semibold text-label-2">
           {target === "deposit"
             ? "Deposit due"
             : target === "prepay"
@@ -398,7 +398,7 @@ function CollectForm({
       )}
 
       <fieldset className="flex flex-col gap-2">
-        <legend className="px-1 pb-2 text-footnote uppercase text-label-2">
+        <legend className="px-1 pb-2 text-subhead font-semibold text-label-2">
           Method
         </legend>
         <div className="grid grid-cols-3 gap-2">{methods.map(tile)}</div>
@@ -432,7 +432,7 @@ function CollectForm({
           />
           {tipsOn && (
             <fieldset className="flex flex-col gap-2">
-              <legend className="px-1 pb-2 text-footnote uppercase text-label-2">
+              <legend className="px-1 pb-2 text-subhead font-semibold text-label-2">
                 Tip
               </legend>
               <div className="flex flex-wrap gap-2">
@@ -456,7 +456,7 @@ function CollectForm({
                       className={cx(
                         "pressable flex min-h-11 min-w-[64px] flex-col items-center justify-center rounded-[10px] px-3 text-subhead font-semibold",
                         on
-                          ? "bg-accent text-on-accent"
+                          ? "bg-accent-fill text-on-accent"
                           : "bg-fill-2 text-label",
                       )}
                     >

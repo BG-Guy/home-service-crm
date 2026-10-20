@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Button } from "@/ui/components/Button";
+import { StickySave } from "@/features/settings/components/form";
 import { Select, TextField } from "@/ui/components/Field";
 import { ListSection } from "@/ui/components/List";
 import { MoneyField } from "@/ui/components/MoneyField";
@@ -203,9 +203,7 @@ export function PartsSettingsForm({
           </div>
         </div>
       </ListSection>
-      <Button type="submit" loading={pending} className="mx-4 self-start">
-        Save
-      </Button>
+      <StickySave pending={pending} label="Save changes" />
     </form>
   );
 }

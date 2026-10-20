@@ -334,3 +334,66 @@ export async function getTechStats(
     rank: ranks && pos >= 0 ? { position: pos + 1, of: ranks.length } : null,
   };
 }
+
+/* ------------------------------------------------------------------ office: by-tech strip */
+
+export interface TechDayJob {
+  id: string;
+  number: string;
+  title: string | null;
+  status: string;
+  windowStart: Date | null;
+}
+
+export interface TechDay {
+  id: string;
+  name: string;
+  color: string | null;
+  clockedIn: boolean;
+  jobs: TechDayJob[];
+}
+
+/** Active techs with today's jobs in order (the compact schedule strip on Today). */
+export async function getTechDay(): Promise<TechDay[]> {
+  const tz = await getCompanyTimezone();
+  const today = dateKey(new Date(), tz);
+  const from = zonedTimeToUtc(parseDateKey(today), tz);
+  const to = zonedTimeToUtc(parseDateKey(addDaysToKey(today, 1)), tz);
+  const rows = await execRows<Record<string, unknown>>(sql`
+    select u.id as user_id, u.name, u.color,
+      exists (select 1 from time_entries t where t.user_id = u.id and t.clock_out_at is null) as clocked_in,
+      j.id, j.number, j.title, j.status, coalesce(j.window_start, j.scheduled_start) as window_start
+    from users u join roles ro on ro.key = u.role
+    left join lateral (
+      select j.* from job_assignments a join jobs j on j.id = a.job_id
+      where a.user_id = u.id and j.status <> 'cancelled'
+        and j.scheduled_start >= ${ts(from)} and j.scheduled_start < ${ts(to)}
+    ) j on true
+    where ro.base_role = 'tech' and u.status = 'active'
+    order by u.name, coalesce(j.window_start, j.scheduled_start) nulls last
+    limit 200`);
+  const byTech = new Map<string, TechDay>();
+  for (const r of rows) {
+    const id = String(r.user_id);
+    let t = byTech.get(id);
+    if (!t) {
+      t = {
+        id,
+        name: String(r.name ?? ""),
+        color: (r.color as string | null) ?? null,
+        clockedIn: !!r.clocked_in,
+        jobs: [],
+      };
+      byTech.set(id, t);
+    }
+    if (r.id)
+      t.jobs.push({
+        id: String(r.id),
+        number: String(r.number ?? ""),
+        title: (r.title as string | null) ?? null,
+        status: String(r.status),
+        windowStart: r.window_start ? new Date(r.window_start as string) : null,
+      });
+  }
+  return [...byTech.values()];
+}

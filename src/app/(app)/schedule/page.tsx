@@ -2,15 +2,16 @@ import { CalendarX2, ChevronLeft, ChevronRight } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { HeaderActions } from "@/app/(app)/_components/HeaderActions";
+import { AssignJobButton } from "@/features/jobs/components/AssignJobButton";
 import {
   ParamSegmented,
   ParamSelect,
 } from "@/features/jobs/components/ParamControls";
 import { BoardJobRow } from "@/features/jobs/components/schedule/BoardJobRow";
 import { ConfirmJobButton } from "@/features/jobs/components/schedule/ConfirmJobButton";
+import { techColor } from "@/features/jobs/components/schedule/colors";
 import { DesktopBoard } from "@/features/jobs/components/schedule/DesktopBoard";
 import { type BoardJob, loadBoard } from "@/features/jobs/schedule-queries";
-import { AssignJobButton } from "@/features/jobs/slots.client";
 import { requireUser } from "@/lib/auth/current";
 import { addDaysToKey, formatDateKey } from "@/lib/time";
 import { Page } from "@/ui/components/AppShell";
@@ -78,27 +79,28 @@ export default async function SchedulePage({
     ) : undefined;
 
   const navBtn = buttonClass({
-    variant: "gray",
-    size: "sm",
-    className: "px-2.5",
+    variant: "secondary",
+    size: "md",
+    className: "hit-44 w-11 shrink-0 px-0",
   });
   const sections =
     data.view === "day"
       ? data.techs.map((t) => ({
           key: t.id,
           header: (
-            <span className="flex items-center gap-2 normal-case">
+            <span className="flex items-center gap-2.5">
               <Avatar
                 name={t.name}
                 seed={t.id}
-                size={20}
-                status={t.clockedIn ? "online" : "offline"}
+                size={32}
+                presence={t.clockedIn}
               />
-              {t.name}
+              <span className="min-w-0 truncate">{t.name}</span>
             </span>
           ),
           jobs: data.jobs.filter((j) => j.techIds.includes(t.id)),
           techs: false,
+          edge: techColor(t, t.id) as string | undefined,
         }))
       : data.days.map((d) => ({
           key: d,
@@ -109,6 +111,7 @@ export default async function SchedulePage({
           }),
           jobs: data.jobs.filter((j) => j.dayKey === d),
           techs: true,
+          edge: undefined as string | undefined,
         }));
   const unassignedInRange =
     data.view === "day" ? data.jobs.filter((j) => j.techIds.length === 0) : [];
@@ -142,13 +145,25 @@ export default async function SchedulePage({
               aria-label="Previous"
               href={hrefWith(sp, { date: addDaysToKey(data.date, -step) })}
               replace
+              transitionTypes={["nav-back"]}
             >
               <ChevronLeft size={18} />
             </Link>
             <Link
-              className={navBtn}
+              className={buttonClass({
+                variant: "secondary",
+                size: "md",
+                className: "shrink-0 px-4",
+              })}
               href={hrefWith(sp, { date: null })}
               replace
+              transitionTypes={
+                data.date < data.todayKey
+                  ? ["nav-forward"]
+                  : data.date > data.todayKey
+                    ? ["nav-back"]
+                    : undefined
+              }
             >
               Today
             </Link>
@@ -157,6 +172,7 @@ export default async function SchedulePage({
               aria-label="Next"
               href={hrefWith(sp, { date: addDaysToKey(data.date, step) })}
               replace
+              transitionTypes={["nav-forward"]}
             >
               <ChevronRight size={18} />
             </Link>
@@ -192,7 +208,7 @@ export default async function SchedulePage({
           <DesktopBoard data={data} colorBy={colorBy} />
         </div>
 
-        <div className="flex flex-col gap-[var(--section-gap)] lg:hidden">
+        <div className="enter-stagger flex flex-col gap-[var(--section-gap)] lg:hidden">
           {data.jobs.length === 0 && (
             <div className="list-card">
               <EmptyState
@@ -208,7 +224,7 @@ export default async function SchedulePage({
             </div>
           )}
           {unassignedInRange.length > 0 && (
-            <ListSection header="Needs a technician">
+            <ListSection variant="title" header="Needs a technician">
               {unassignedInRange.map((j) => (
                 <BoardJobRow
                   key={j.id}
@@ -224,6 +240,7 @@ export default async function SchedulePage({
             .map((s) => (
               <ListSection
                 key={s.key}
+                variant="title"
                 header={s.header}
                 trailing={
                   <span className="num text-footnote text-label-2">
@@ -238,6 +255,7 @@ export default async function SchedulePage({
                     tz={data.tz}
                     techs={data.techs}
                     showTechs={s.techs}
+                    edge={s.edge}
                     trailing={assign(j)}
                   />
                 ))}
@@ -247,7 +265,7 @@ export default async function SchedulePage({
           {data.view !== "day" &&
             emptyDays.length > 0 &&
             data.jobs.length > 0 && (
-              <ListSection header="No jobs">
+              <ListSection variant="title" header="No jobs">
                 <p className="px-4 py-3 text-subhead text-label-2">
                   {emptyDays
                     .map((d) =>
@@ -276,6 +294,7 @@ export default async function SchedulePage({
               </p>
             )}
           <ListSection
+            variant="title"
             header="Unscheduled"
             trailing={
               <span className="num text-footnote text-label-2">
@@ -284,7 +303,7 @@ export default async function SchedulePage({
             }
           >
             {data.unscheduled.length === 0 ? (
-              <p className="px-4 py-3 text-subhead text-label-3">
+              <p className="px-4 py-3 text-subhead text-label-2">
                 Every job has a time. Nice.
               </p>
             ) : (
@@ -299,7 +318,7 @@ export default async function SchedulePage({
             )}
           </ListSection>
           {data.onHold.length > 0 && (
-            <ListSection header="On hold">
+            <ListSection variant="title" header="On hold">
               {data.onHold.map((j) => (
                 <BoardJobRow
                   key={j.id}
@@ -317,6 +336,7 @@ export default async function SchedulePage({
         {data.unconfirmedTomorrow.length > 0 && (
           <div className="mt-[var(--section-gap)] lg:hidden">
             <ListSection
+              variant="title"
               header="Unconfirmed tomorrow"
               footer="Customers who haven't confirmed yet. Mark a phone confirmation here."
             >

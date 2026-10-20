@@ -73,9 +73,11 @@ export function Block({
       className={cx("scroll-mt-24", className)}
       aria-label={title}
     >
-      <div className="flex items-end justify-between gap-3 px-4 pb-1.5">
-        <h2 className="text-footnote uppercase text-label-2">{title}</h2>
-        {trailing && <div className="text-footnote">{trailing}</div>}
+      <div className="flex items-baseline justify-between gap-3 px-1 pb-3">
+        <h2 className="text-title3 text-label">{title}</h2>
+        {trailing && (
+          <div className="shrink-0 text-subhead font-semibold">{trailing}</div>
+        )}
       </div>
       {children}
     </section>
@@ -112,7 +114,5 @@ export function Card({
   children: ReactNode;
   className?: string;
 }) {
-  return (
-    <div className={cx("rounded-card bg-card p-4", className)}>{children}</div>
-  );
+  return <div className={cx("card p-4", className)}>{children}</div>;
 }

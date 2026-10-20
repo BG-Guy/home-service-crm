@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { type ReactNode, Suspense } from "react";
 import { CustomerCard } from "@/features/customers/slots";
 import { NotesPanel } from "@/features/jobs/slots";
+import { LazyLeadComposer } from "@/features/leads/components/LazyLeadComposer";
 import { LeadActions } from "@/features/leads/components/LeadActions";
 import { LeadEditSheet } from "@/features/leads/components/LeadEditSheet";
 import {
@@ -18,7 +19,6 @@ import {
   spamSignals,
 } from "@/features/leads/labels";
 import { getLeadDetail, listActiveSources } from "@/features/leads/queries";
-import { MessageComposer } from "@/features/messaging/slots.client";
 import { ActivityTimeline } from "@/features/notify/slots";
 import {
   getCustomFieldDefs,
@@ -32,11 +32,18 @@ import { getCompanyTimezone, getSettings, isEnabled } from "@/lib/settings";
 import { formatDateKey, formatDateTime } from "@/lib/time";
 import { Page, SplitView } from "@/ui/components/AppShell";
 import { Banner } from "@/ui/components/Banner";
-import { ListGroup, ListRow, ListSection } from "@/ui/components/List";
+import { Card } from "@/ui/components/Card";
+import {
+  ListGroup,
+  ListRow,
+  ListSection,
+  SectionHeader,
+} from "@/ui/components/List";
 import { MoneyText } from "@/ui/components/MoneyText";
 import { NavBar } from "@/ui/components/NavBar";
 import { SkeletonCard } from "@/ui/components/Skeleton";
 import { Pill, StatusPill } from "@/ui/components/StatusPill";
+import { Morph } from "@/ui/motion/Morph";
 import { PageTransition } from "@/ui/motion/PageTransition";
 
 export const metadata: Metadata = { title: "Lead" };
@@ -149,57 +156,77 @@ export default async function LeadDetailPage({
       />
       <Page className="pt-2">
         <ListGroup>
-          <section className="list-card flex flex-col gap-3 px-4 py-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <h1 className="text-title2 font-bold">{lead.name}</h1>
+          <Card
+            as="section"
+            padding="lg"
+            aria-label="Lead"
+            className="flex flex-col gap-4"
+          >
+            <div className="flex items-start gap-3">
+              {(open || lead.firstResponseAt) && (
+                <SlaTimer
+                  variant="ring"
+                  createdAt={lead.createdAt}
+                  respondedAt={lead.firstResponseAt}
+                />
+              )}
+              <div className="min-w-0 flex-1">
+                <Morph name={`lead-${lead.id}-title`}>
+                  <h1 className="inline-block max-w-full text-title2 text-label [overflow-wrap:anywhere]">
+                    {lead.name}
+                  </h1>
+                </Morph>
                 <p className="text-subhead text-label-2">
                   {lead.service ?? "Service not given"}
                   {lead.sourceName ? ` · ${lead.sourceName}` : ""}
                 </p>
               </div>
-              <div className="flex flex-col items-end gap-1.5">
-                <StatusPill
-                  kind="lead"
-                  status={lead.status}
-                  label={
-                    lead.status === "lost" && lead.lostReason
-                      ? `Lost · ${lostReasonLabel(lead.lostReason)}`
-                      : undefined
-                  }
-                />
-                {(open || lead.firstResponseAt) && (
-                  <SlaTimer
-                    createdAt={lead.createdAt}
-                    respondedAt={lead.firstResponseAt}
+              <StatusPill
+                kind="lead"
+                status={lead.status}
+                label={
+                  lead.status === "lost" && lead.lostReason
+                    ? `Lost · ${lostReasonLabel(lead.lostReason)}`
+                    : undefined
+                }
+              />
+            </div>
+            {(lead.quotedPriceCents != null ||
+              lead.isReturning ||
+              lead.isTest ||
+              lead.inServiceArea === false ||
+              lead.assignedName) && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                {lead.quotedPriceCents != null && (
+                  <MoneyText
+                    cents={lead.quotedPriceCents}
+                    className="mr-1 text-headline"
                   />
                 )}
+                {lead.isReturning && (
+                  <Pill tone="indigo" size="sm">
+                    Returning customer
+                  </Pill>
+                )}
+                {lead.isTest && (
+                  <Pill tone="gray" size="sm">
+                    Test lead
+                  </Pill>
+                )}
+                {lead.inServiceArea === false && (
+                  <Pill tone="red" size="sm">
+                    Outside service area
+                  </Pill>
+                )}
+                {lead.assignedName && (
+                  <Pill tone="blue" dot={false} size="sm">
+                    {lead.assignedUserId === user.id
+                      ? "Yours"
+                      : lead.assignedName}
+                  </Pill>
+                )}
               </div>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {lead.isReturning && (
-                <Pill tone="indigo" size="sm">
-                  Returning customer
-                </Pill>
-              )}
-              {lead.isTest && (
-                <Pill tone="gray" size="sm">
-                  Test lead
-                </Pill>
-              )}
-              {lead.inServiceArea === false && (
-                <Pill tone="red" size="sm">
-                  Outside service area
-                </Pill>
-              )}
-              {lead.assignedName && (
-                <Pill tone="blue" dot={false} size="sm">
-                  {lead.assignedUserId === user.id
-                    ? "Yours"
-                    : lead.assignedName}
-                </Pill>
-              )}
-            </div>
+            )}
             <LeadActions
               leadId={lead.id}
               status={lead.status}
@@ -214,7 +241,7 @@ export default async function LeadDetailPage({
               estimatesOn={estimatesOn}
               lostReasons={settings.leads.lost_reasons}
             />
-          </section>
+          </Card>
 
           {lead.flagged && (
             <Banner
@@ -235,7 +262,7 @@ export default async function LeadDetailPage({
             </Banner>
           )}
           {(lead.convertedJobId || lead.convertedEstimateId) && (
-            <ListSection header="Booked">
+            <ListSection variant="title" header="Booked">
               {lead.convertedJobId && (
                 <ListRow
                   title={`Job ${lead.convertedJobNumber ?? ""}`}
@@ -251,7 +278,7 @@ export default async function LeadDetailPage({
             </ListSection>
           )}
 
-          <ListSection header="Request">
+          <ListSection variant="title" header="Request">
             {lead.phoneDisplay && (
               <ListRow
                 title="Phone"
@@ -329,16 +356,12 @@ export default async function LeadDetailPage({
           </ListSection>
 
           {lead.customerId && open && canEdit && (
-            <section className="flex flex-col gap-2">
-              <h2 className="px-4 text-footnote uppercase text-label-2">
-                Text them
-              </h2>
+            <section aria-labelledby="lead-text-h">
+              <SectionHeader id="lead-text-h" title="Text them" />
               <div className="list-card px-3 py-3">
-                <MessageComposer
+                <LazyLeadComposer
                   customerId={lead.customerId}
                   leadId={lead.id}
-                  defaultChannel="sms"
-                  compact
                 />
               </div>
             </section>
@@ -355,6 +378,7 @@ export default async function LeadDetailPage({
           )}
 
           <ListSection
+            variant="title"
             header="Source & attribution"
             footer={
               lead.smsConsent
@@ -408,7 +432,7 @@ export default async function LeadDetailPage({
 
           {(customDefs.length > 0 && Object.keys(custom).length > 0) ||
           extra.length > 0 ? (
-            <ListSection header="More details">
+            <ListSection variant="title" header="More details">
               {customDefs
                 .filter((d) => custom[d.key] != null && custom[d.key] !== "")
                 .map((d) => (
@@ -434,18 +458,15 @@ export default async function LeadDetailPage({
           ) : null}
 
           {canEdit && (
-            <section className="flex flex-col gap-2">
-              <h2 className="px-4 text-footnote uppercase text-label-2">
-                Tags
-              </h2>
-              <div className="list-card px-4 py-3">
+            <ListSection variant="title" header="Tags">
+              <div className="px-4 py-3">
                 <TagEditor
                   entityType="lead"
                   entityId={lead.id}
                   initial={tags}
                 />
               </div>
-            </section>
+            </ListSection>
           )}
 
           <Slot>
@@ -457,7 +478,7 @@ export default async function LeadDetailPage({
           </Slot>
 
           {lead.events.length > 0 && (
-            <ListSection header="Intake log">
+            <ListSection variant="title" header="Intake log">
               {lead.events.map((e) => (
                 <ListRow
                   key={e.id}

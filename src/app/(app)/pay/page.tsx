@@ -12,8 +12,8 @@ import { HeaderActions } from "@/app/(app)/_components/HeaderActions";
 import {
   ConfirmRemittanceButtons,
   RemitCashButton,
-} from "@/features/payroll/components/PayActions";
-import { WhyAmount } from "@/features/payroll/components/WhyAmount";
+  WhyAmount,
+} from "@/features/payroll/components/islands";
 import { getPayOverview, LEDGER_TYPE_LABEL } from "@/features/payroll/queries";
 import { requireUser } from "@/lib/auth/current";
 import { formatMoney } from "@/lib/money";
@@ -112,18 +112,27 @@ export default async function PayPage() {
           )}
 
           <section
-            className="list-card flex flex-col gap-3 p-4"
-            aria-label="This pay period"
+            className="card flex flex-col gap-4 bg-[linear-gradient(180deg,color-mix(in_srgb,var(--accent)_8%,transparent),transparent_70%)] p-[var(--card-pad)]"
+            aria-labelledby="period-h"
           >
-            <p className="text-footnote font-semibold uppercase tracking-wide text-label-2">
-              So far this period
-            </p>
-            <MoneyText
-              cents={o.netCents}
-              className="text-large-title font-bold"
-              colorize
-            />
-            <div className="grid grid-cols-2 gap-2 text-subhead sm:grid-cols-4">
+            <div>
+              <h2
+                id="period-h"
+                className="text-subhead font-medium text-label-2"
+              >
+                So far this period
+              </h2>
+              <MoneyText
+                cents={o.netCents}
+                className="mt-1 block text-large-title font-bold"
+                colorize
+              />
+              <p className="mt-1 text-footnote text-label-2">
+                {o.planName ? `${o.planName} · ` : ""}
+                {o.workerType === "w2" ? "W-2" : "1099"}
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               <Stat label="Earnings" value={m(wages)} />
               <Stat label="Reimbursements" value={m(reimb)} />
               {netting ? (
@@ -134,13 +143,13 @@ export default async function PayPage() {
               <Stat label="Jobs" value={String(o.jobLines.length)} />
             </div>
             <p className="text-footnote text-label-2">
-              {o.planName ? `${o.planName} · ` : ""}
-              {o.workerType === "w2" ? "W-2" : "1099"} · Year to date{" "}
-              {m(o.ytd.wagesCents)} earned, {m(o.ytd.paidCents)} paid
+              Year to date: {m(o.ytd.wagesCents)} earned, {m(o.ytd.paidCents)}{" "}
+              paid
             </p>
           </section>
 
           <ListSection
+            variant="title"
             header="Jobs this period"
             footer={
               o.jobLines.length
@@ -191,7 +200,7 @@ export default async function PayPage() {
           </ListSection>
 
           {o.otherLines.length > 0 && (
-            <ListSection header="Other lines">
+            <ListSection variant="title" header="Other lines">
               {o.otherLines.map((l) => (
                 <ListRow
                   key={l.id}
@@ -210,6 +219,7 @@ export default async function PayPage() {
           )}
           {o.pendingReviewLines.length > 0 && (
             <ListSection
+              variant="title"
               header="Under review"
               footer="These lines count only after an admin reviews them."
             >
@@ -226,6 +236,7 @@ export default async function PayPage() {
           )}
 
           <ListSection
+            variant="title"
             header="Cash on hand"
             id="cash"
             footer={
@@ -274,6 +285,7 @@ export default async function PayPage() {
 
           {o.toConfirm.length > 0 && (
             <ListSection
+              variant="title"
               header="Hand-ins to confirm"
               footer="Confirm only after you've counted the cash or seen the deposit."
             >
@@ -293,7 +305,7 @@ export default async function PayPage() {
           )}
 
           {o.pendingParts.length > 0 && (
-            <ListSection header="Receipts waiting for approval">
+            <ListSection variant="title" header="Receipts waiting for approval">
               {o.pendingParts.map((p) => (
                 <ListRow
                   key={p.id}
@@ -307,21 +319,24 @@ export default async function PayPage() {
             </ListSection>
           )}
 
-          <ListSection>
+          <ListSection variant="title" header="Statements and setup">
             <ListRow
               icon={<FileText size={18} aria-hidden />}
+              iconTone="blue"
               title="Statements"
               href="/pay/statements"
               badge={o.toAck.length || undefined}
             />
             <ListRow
               icon={<Landmark size={18} aria-hidden />}
+              iconTone="green"
               title="Direct deposit"
               detail={o.bank?.last4 ? `••${o.bank.last4}` : "Not set up"}
               href="/pay/bank"
             />
             <ListRow
               icon={<FileSignature size={18} aria-hidden />}
+              iconTone="indigo"
               title="Pay agreement"
               detail={
                 o.agreement?.required
@@ -341,9 +356,9 @@ export default async function PayPage() {
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-control bg-fill-2 px-3 py-2">
-      <p className="text-footnote text-label-2">{label}</p>
-      <p className="num font-semibold">{value}</p>
+    <div className="rounded-[14px] bg-card-2 px-3 py-2.5">
+      <p className="truncate text-footnote text-label-2">{label}</p>
+      <p className="num whitespace-nowrap text-headline">{value}</p>
     </div>
   );
 }

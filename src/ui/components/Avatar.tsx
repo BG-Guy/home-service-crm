@@ -22,11 +22,14 @@ const STATUS_TONE: Record<AvatarStatus, Tone> = {
 };
 
 /**
- * Photo or initials avatar with a deterministic color (SPEC §12.6).
+ * Photo or initials avatar (DESIGN.md §5): initials on a soft two-stop gradient
+ * of the person's deterministic color.
  *
  * @param seed stable string for the color (user id); defaults to `name`.
  * @param size 24–64 px (default 40).
- * @param status small presence dot; `ring` draws a colored ring instead (e.g. tech on a job).
+ * @param status small presence dot.
+ * @param ring presence ring in a tone, drawn outside with a 2 px gap (clocked in, live).
+ * @param presence shorthand for a green ring (clocked in / on shift).
  */
 export function Avatar({
   name,
@@ -35,6 +38,7 @@ export function Avatar({
   size = 40,
   status,
   ring,
+  presence,
   className,
 }: {
   name: string;
@@ -43,11 +47,14 @@ export function Avatar({
   size?: number;
   status?: AvatarStatus;
   ring?: Tone;
+  presence?: boolean;
   className?: string;
 }) {
   const tone = toneFor(seed ?? name);
-  const font = Math.round(size * 0.4);
+  const font = Math.round(size * 0.38);
   const dot = Math.max(8, Math.round(size * 0.26));
+  const ringTone = ring ?? (presence ? "green" : undefined);
+  const c = TONE_VAR[tone];
   return (
     <span
       className={cx("relative inline-flex shrink-0", className)}
@@ -68,20 +75,22 @@ export function Avatar({
         <span
           role="img"
           aria-label={name}
-          className="flex size-full select-none items-center justify-center rounded-full font-semibold text-white"
+          className="flex size-full select-none items-center justify-center rounded-full font-semibold tracking-[0.01em] text-white"
           style={{
             fontSize: font,
-            background: `linear-gradient(180deg, color-mix(in srgb, ${TONE_VAR[tone]} 80%, #fff), ${TONE_VAR[tone]})`,
+            background: `linear-gradient(145deg, color-mix(in srgb, ${c} 70%, #fff), ${c} 55%, color-mix(in srgb, ${c} 82%, #000))`,
           }}
         >
           <span aria-hidden>{initials(name)}</span>
         </span>
       )}
-      {ring && (
+      {ringTone && (
         <span
           aria-hidden
-          className="pointer-events-none absolute -inset-[3px] rounded-full border-2"
-          style={{ borderColor: TONE_VAR[ring] }}
+          className="pointer-events-none absolute -inset-1 rounded-full"
+          style={{
+            boxShadow: `inset 0 0 0 2px ${TONE_VAR[ringTone]}`,
+          }}
         />
       )}
       {status && (

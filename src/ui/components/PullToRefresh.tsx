@@ -155,7 +155,7 @@ export function PullToRefresh({
       aria-hidden
       className="pointer-events-none fixed inset-x-0 top-[env(safe-area-inset-top)] z-[var(--z-bar)] flex justify-center text-label-2 opacity-0"
     >
-      <span className="mt-2 flex size-9 items-center justify-center rounded-full bg-card shadow-[var(--shadow-float)]">
+      <span className="glass-chrome mt-2 flex size-9 items-center justify-center rounded-full">
         <Spinner size={20} />
       </span>
     </div>

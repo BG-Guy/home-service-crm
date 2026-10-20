@@ -6,24 +6,30 @@ import { Button, type ButtonProps } from "./Button";
 
 /**
  * Submit button that shows a spinner while its parent `<form action={…}>` is
- * pending (React `useFormStatus`). Must be rendered inside the form.
+ * pending (React `useFormStatus`). Must be rendered inside the form. The label
+ * keeps its width under the spinner; `pendingLabel` shows text next to it instead.
  *
  * ```tsx
- * <form action={save}>…<SubmitButton size="lg" fullWidth>Save</SubmitButton></form>
+ * <form action={save}>…<SubmitButton size="lg" block>Save</SubmitButton></form>
  * ```
  */
 export function SubmitButton({
   pendingLabel,
   children,
   ...props
-}: Omit<ButtonProps, "type" | "loading"> & {
-  /** Label while pending (defaults to `children`). */
+}: Omit<ButtonProps, "type" | "loading" | "loadingText"> & {
+  /** Label while pending, shown next to the spinner (defaults to the spinner alone). */
   pendingLabel?: ReactNode;
 }) {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" loading={pending} {...props}>
-      {pending && pendingLabel != null ? pendingLabel : children}
+    <Button
+      type="submit"
+      loading={pending}
+      loadingText={pendingLabel}
+      {...props}
+    >
+      {children}
     </Button>
   );
 }

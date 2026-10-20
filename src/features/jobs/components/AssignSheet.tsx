@@ -316,7 +316,7 @@ export default function AssignSheet({
                       className={cx(
                         "flex size-6 shrink-0 items-center justify-center rounded-full border-[1.5px] transition-colors duration-200",
                         pick
-                          ? "border-transparent bg-accent text-on-accent"
+                          ? "border-transparent bg-accent-fill text-on-accent"
                           : "border-label-3",
                       )}
                     >

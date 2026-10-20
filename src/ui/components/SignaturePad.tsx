@@ -156,7 +156,7 @@ export function SignaturePad({
   return (
     <div
       className={cx(
-        "relative overflow-hidden rounded-card bg-white shadow-[inset_0_0_0_0.5px_var(--sep)]",
+        "relative overflow-hidden rounded-card bg-white shadow-[inset_0_0_0_1px_rgb(0_0_0/0.08)]",
         disabled && "pointer-events-none opacity-50",
         className,
       )}

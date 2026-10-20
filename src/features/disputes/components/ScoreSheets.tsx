@@ -1,14 +1,29 @@
 "use client";
 
-import { ShieldCheck } from "lucide-react";
-import { Button } from "@/ui/components/Button";
-import {
-  ReadinessRing,
-  RiskChip,
-  ScoreBreakdown,
-  type ScoreItem,
-} from "@/ui/components/Score";
-import { Sheet, useSheetState } from "@/ui/components/Sheet";
+import dynamic from "next/dynamic";
+import { useState } from "react";
+import { ReadinessRing, RiskChip, type ScoreItem } from "@/ui/components/Score";
+
+// The sheets load on hover/focus or the first tap (DESIGN.md §2).
+const load = () => import("./ScoreWhySheets");
+const RiskWhySheet = dynamic(() => load().then((m) => m.RiskWhySheet), {
+  ssr: false,
+});
+const ReadinessWhySheet = dynamic(
+  () => load().then((m) => m.ReadinessWhySheet),
+  { ssr: false },
+);
+const prefetch = () => void load();
+
+function useLazyOpen() {
+  const [open, setOpenState] = useState(false);
+  const [armed, setArmed] = useState(false);
+  const setOpen = (v: boolean) => {
+    if (v) setArmed(true);
+    setOpenState(v);
+  };
+  return { open, armed, setOpen };
+}
 
 export interface RiskSignalView {
   key: string;
@@ -33,7 +48,7 @@ export function RiskWhyButton({
   computedAt: string | null;
   showWhy: boolean;
 }) {
-  const sheet = useSheetState();
+  const { open, armed, setOpen } = useLazyOpen();
   const chip = <RiskChip band={band} score={score} />;
   if (!showWhy) return chip;
   const items: ScoreItem[] = signals.map((s) => ({
@@ -46,67 +61,26 @@ export function RiskWhyButton({
     <>
       <button
         type="button"
-        onClick={sheet.show}
+        onClick={() => setOpen(true)}
+        onPointerEnter={prefetch}
+        onFocus={prefetch}
         className="pressable hit-44 rounded-pill outline-offset-2"
         aria-label={`Risk ${band}, score ${score}. Show why`}
         aria-haspopup="dialog"
       >
         {chip}
       </button>
-      <Sheet
-        {...sheet.props}
-        title="Why this risk score"
-        detents={["medium", "large"]}
-        trailing={
-          <Button size="sm" variant="plain" onClick={sheet.hide}>
-            Done
-          </Button>
-        }
-      >
-        <div className="flex flex-col gap-5 p-4">
-          <div className="flex items-center gap-3">
-            <RiskChip band={band} score={score} />
-            <p className="text-subhead text-label-2">
-              Score {score} of 100
-              {computedAt ? ` · updated ${computedAt}` : ""}
-            </p>
-          </div>
-          {items.length ? (
-            <section className="flex flex-col gap-1.5">
-              <h3 className="px-4 text-footnote uppercase text-label-2">
-                Signals
-              </h3>
-              <ScoreBreakdown items={items} />
-            </section>
-          ) : (
-            <p className="text-subhead text-label-2">
-              No risk signals: standard flow.
-            </p>
-          )}
-          {controls.length > 0 && (
-            <section className="flex flex-col gap-1.5">
-              <h3 className="px-4 text-footnote uppercase text-label-2">
-                Required for this job
-              </h3>
-              <ul className="list-card">
-                {controls.map((c) => (
-                  <li
-                    key={c}
-                    className="list-row flex min-h-11 items-center gap-3 px-4 py-2.5 text-body"
-                  >
-                    <ShieldCheck
-                      aria-hidden
-                      size={18}
-                      className="shrink-0 text-accent-text"
-                    />
-                    {c}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-        </div>
-      </Sheet>
+      {armed && (
+        <RiskWhySheet
+          open={open}
+          onOpenChange={setOpen}
+          band={band}
+          score={score}
+          items={items}
+          controls={controls}
+          computedAt={computedAt}
+        />
+      )}
     </>
   );
 }
@@ -132,7 +106,7 @@ export function ReadinessWhyButton({
   size: number;
   showWhy: boolean;
 }) {
-  const sheet = useSheetState();
+  const { open, armed, setOpen } = useLazyOpen();
   const ring = <ReadinessRing score={score} size={size} />;
   if (!showWhy) return ring;
   const missing = items.filter((i) => i.applicable && !i.earned);
@@ -147,35 +121,24 @@ export function ReadinessWhyButton({
     <>
       <button
         type="button"
-        onClick={sheet.show}
+        onClick={() => setOpen(true)}
+        onPointerEnter={prefetch}
+        onFocus={prefetch}
         className="pressable rounded-full outline-offset-2"
         aria-label={`Dispute readiness ${score} of 100${missing.length ? `, ${missing.length} missing` : ""}. Show details`}
         aria-haspopup="dialog"
       >
         {ring}
       </button>
-      <Sheet
-        {...sheet.props}
-        title="Dispute readiness"
-        detents={["medium", "large"]}
-        trailing={
-          <Button size="sm" variant="plain" onClick={sheet.hide}>
-            Done
-          </Button>
-        }
-      >
-        <div className="flex flex-col gap-5 p-4">
-          <div className="flex items-center gap-4">
-            <ReadinessRing score={score} size={56} />
-            <p className="text-subhead text-label-2">
-              {missing.length === 0
-                ? "This job is fully documented. If the customer disputes the charge, the evidence pack is ready."
-                : `${missing.length} item${missing.length === 1 ? "" : "s"} missing. Each one you add makes a chargeback easier to win.`}
-            </p>
-          </div>
-          <ScoreBreakdown items={rows} />
-        </div>
-      </Sheet>
+      {armed && (
+        <ReadinessWhySheet
+          open={open}
+          onOpenChange={setOpen}
+          score={score}
+          missingCount={missing.length}
+          rows={rows}
+        />
+      )}
     </>
   );
 }

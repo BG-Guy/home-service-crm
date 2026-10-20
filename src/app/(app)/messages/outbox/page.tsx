@@ -71,7 +71,7 @@ export default async function OutboxPage({
           <section aria-labelledby="inbox-outbox-h">
             <h2
               id="inbox-outbox-h"
-              className="px-4 pb-1.5 text-footnote uppercase text-label-2"
+              className="px-4 pb-2 text-subhead font-semibold text-label-2"
             >
               Texts to send
             </h2>

@@ -2,10 +2,10 @@ import type { Metadata } from "next";
 import { type ReactNode, Suspense } from "react";
 import { JobRow } from "@/features/jobs/components/JobRow";
 import { listLeftOpen } from "@/features/jobs/queries";
-import { OutboxCountBadge } from "@/features/messaging/slots";
 import { UnreceiptedPartsSection } from "@/features/parts/slots";
 import { CashCheckSection } from "@/features/payroll/slots";
-import { ClockCard } from "@/features/tech/components/ClockCard";
+import { ClockCard } from "@/features/tech/components/islands";
+import { OutboxRow } from "@/features/tech/components/OutboxRow";
 import { SyncStatusCard } from "@/features/tech/components/SyncStatusCard";
 import { getOpenEntry } from "@/features/time/queries";
 import { EndOdometerSection } from "@/features/vehicles/slots";
@@ -25,7 +25,9 @@ function Step({ title, children }: { title?: string; children: ReactNode }) {
   return (
     <section aria-label={title} className="flex flex-col gap-2 empty:hidden">
       {title && (
-        <h2 className="px-4 text-footnote uppercase text-label-2">{title}</h2>
+        <h2 className="px-4 text-subhead font-semibold text-label-2">
+          {title}
+        </h2>
       )}
       {children}
     </section>
@@ -47,20 +49,20 @@ export default async function TodayFinishPage() {
       <Page className="pt-4 pb-16">
         <div className="mx-auto flex max-w-[640px] flex-col gap-[var(--section-gap)]">
           <Step title="Sync this phone">
-            <div className="list-card">
+            <div className="card overflow-hidden">
               <SyncStatusCard />
             </div>
           </Step>
           <Step title="Customer texts to send">
-            <div className="list-card">
+            <div className="card overflow-hidden">
               <Suspense fallback={<SkeletonCard lines={1} />}>
-                <OutboxCountBadge scope="mine" />
+                <OutboxRow user={user} />
               </Suspense>
             </div>
           </Step>
           <Step title="Jobs still open">
             {left.length === 0 ? (
-              <div className="list-card px-4 py-3 text-subhead text-label-2">
+              <div className="card px-4 py-3 text-subhead text-label-2">
                 No jobs left on the way or in progress.
               </div>
             ) : (

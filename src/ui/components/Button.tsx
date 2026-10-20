@@ -8,25 +8,42 @@ import type {
 import { cx } from "../cx";
 import { Spinner } from "./Spinner";
 
+/**
+ * `primary` accent fill (the one next step per view) · `secondary` neutral fill ·
+ * `tinted` accent wash · `plain` accent text · `destructive` red fill (confirm
+ * step only). Legacy names: `filled` = primary, `gray` = secondary.
+ */
 export type ButtonVariant =
-  | "filled"
+  | "primary"
+  | "secondary"
   | "tinted"
-  | "gray"
   | "plain"
-  | "destructive";
+  | "destructive"
+  | "filled"
+  | "gray";
 export type ButtonSize = "sm" | "md" | "lg";
 
 interface ButtonOwnProps {
-  /** Visual style (SPEC §12.6). Default `filled`. */
+  /** Visual style (DESIGN.md §5). Default `primary`. */
   variant?: ButtonVariant;
-  /** `sm` 34 px (hit area still 44), `md` 44 px, `lg` 50 px. Default `md`. */
+  /** `sm` 34 px (hit area still 44), `md` 44 px, `lg` 52 px. Default `md`. */
   size?: ButtonSize;
-  /** Shows a spinner, sets `aria-busy` and disables the button. */
+  /**
+   * Destructive role: recolors any variant red (`plain` → red text, `secondary` →
+   * red text on the neutral fill, `tinted` → red wash). A red fill is
+   * `variant="destructive"`, for the confirm step only.
+   */
+  destructive?: boolean;
+  /** Shows a spinner (the label keeps its width), sets `aria-busy` and disables the button. */
   loading?: boolean;
+  /** Text shown next to the spinner while `loading` (e.g. "Saving…"); the width may change. */
+  loadingText?: ReactNode;
   /** Leading icon (e.g. a lucide icon at 18–20 px). */
   icon?: ReactNode;
   /** Stretch to the container width. */
   fullWidth?: boolean;
+  /** Same as `fullWidth`. */
+  block?: boolean;
   className?: string;
   children?: ReactNode;
 }
@@ -50,65 +67,78 @@ export type ButtonLinkProps = ButtonOwnProps &
     ref?: Ref<HTMLAnchorElement>;
   };
 
-const base =
-  "pressable relative inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-pill font-semibold outline-offset-2 disabled:pointer-events-none disabled:opacity-40 aria-disabled:pointer-events-none aria-disabled:opacity-40";
-
-const sizes: Record<ButtonSize, string> = {
-  // 34 px visual; the ::before extends the hit target to 44 px.
-  sm: "h-[34px] px-3.5 text-subhead before:absolute before:inset-x-0 before:-inset-y-[5px] before:content-['']",
-  md: "min-h-11 px-5 text-body",
-  lg: "min-h-[50px] px-6 text-body",
-};
-
-const variants: Record<ButtonVariant, string> = {
-  filled: "bg-accent text-on-accent hover:brightness-110",
-  tinted: "bg-accent/15 text-accent-text hover:bg-accent/20",
-  gray: "bg-fill-2 text-accent-text hover:bg-fill",
-  plain: "bg-transparent text-accent-text hover:bg-fill-2",
-  destructive: "bg-danger text-white hover:brightness-110",
+const VARIANT_CLASS: Record<ButtonVariant, string> = {
+  primary: "btn-primary",
+  filled: "btn-primary",
+  secondary: "btn-secondary",
+  gray: "btn-secondary",
+  tinted: "btn-tinted",
+  plain: "btn-plain",
+  destructive: "btn-primary",
 };
 
 /** Class string for elements that should look like a Button (e.g. a `<label>`). */
 export function buttonClass({
-  variant = "filled",
+  variant = "primary",
   size = "md",
+  destructive,
   fullWidth,
+  block,
   className,
-}: Pick<ButtonOwnProps, "variant" | "size" | "fullWidth" | "className"> = {}) {
+}: Pick<
+  ButtonOwnProps,
+  "variant" | "size" | "destructive" | "fullWidth" | "block" | "className"
+> = {}) {
   return cx(
-    base,
-    sizes[size],
-    variants[variant],
-    fullWidth && "w-full",
+    "btn pressable select-none",
+    `btn-${size}`,
+    VARIANT_CLASS[variant],
+    (variant === "destructive" || destructive) && "btn-destructive",
+    (fullWidth || block) && "w-full",
     className,
   );
 }
 
+/** Overlay spinner (keeps the width) unless a loading text replaces the label. */
+const busyClass = (loading?: boolean, loadingText?: ReactNode) =>
+  loading && loadingText == null ? "btn-busy" : undefined;
+
 function Inner({
   loading,
+  loadingText,
   icon,
   children,
   size,
-}: Pick<ButtonOwnProps, "loading" | "icon" | "children" | "size">) {
+}: Pick<
+  ButtonOwnProps,
+  "loading" | "loadingText" | "icon" | "children" | "size"
+>) {
   const spin = <Spinner size={size === "sm" ? 16 : 18} />;
+  if (loading && loadingText != null) {
+    return (
+      <>
+        <span className="-ml-0.5 flex shrink-0">{spin}</span>
+        <span className="truncate">{loadingText}</span>
+      </>
+    );
+  }
   return (
     <>
-      {loading ? (
-        spin
-      ) : icon ? (
-        <span className="-ml-0.5 flex">{icon}</span>
-      ) : null}
+      {icon ? <span className="-ml-0.5 flex shrink-0">{icon}</span> : null}
       {children != null && <span className="truncate">{children}</span>}
+      {loading && <span className="btn-spin">{spin}</span>}
     </>
   );
 }
 
 /**
- * iOS button. Server-renderable; renders a Next `<Link>` when `href` is set.
+ * Pill button (DESIGN.md §5). Server-renderable; renders a Next `<Link>` when
+ * `href` is set. One `primary` per view; everything else secondary, tinted or plain.
  *
  * ```tsx
- * <Button variant="filled" size="lg" fullWidth loading={pending}>Save</Button>
+ * <Button size="lg" block loading={pending}>Save</Button>
  * <Button href="/jobs/new" variant="tinted" icon={<Plus size={18} />}>New job</Button>
+ * <Button variant="plain" destructive>Delete</Button>
  * ```
  */
 export function Button(props: ButtonProps | ButtonLinkProps) {
@@ -116,9 +146,12 @@ export function Button(props: ButtonProps | ButtonLinkProps) {
     const {
       variant,
       size,
+      destructive,
       loading,
+      loadingText,
       icon,
       fullWidth,
+      block,
       className,
       children,
       href,
@@ -137,10 +170,22 @@ export function Button(props: ButtonProps | ButtonLinkProps) {
         }
         aria-disabled={loading || undefined}
         aria-busy={loading || undefined}
-        className={buttonClass({ variant, size, fullWidth, className })}
+        className={buttonClass({
+          variant,
+          size,
+          destructive,
+          fullWidth,
+          block,
+          className: cx(busyClass(loading, loadingText), className),
+        })}
         {...rest}
       >
-        <Inner loading={loading} icon={icon} size={size}>
+        <Inner
+          loading={loading}
+          loadingText={loadingText}
+          icon={icon}
+          size={size}
+        >
           {children}
         </Inner>
       </Link>
@@ -149,9 +194,12 @@ export function Button(props: ButtonProps | ButtonLinkProps) {
   const {
     variant,
     size,
+    destructive,
     loading,
+    loadingText,
     icon,
     fullWidth,
+    block,
     className,
     children,
     type = "button",
@@ -163,10 +211,22 @@ export function Button(props: ButtonProps | ButtonLinkProps) {
       type={type}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
-      className={buttonClass({ variant, size, fullWidth, className })}
+      className={buttonClass({
+        variant,
+        size,
+        destructive,
+        fullWidth,
+        block,
+        className: cx(busyClass(loading, loadingText), className),
+      })}
       {...rest}
     >
-      <Inner loading={loading} icon={icon} size={size}>
+      <Inner
+        loading={loading}
+        loadingText={loadingText}
+        icon={icon}
+        size={size}
+      >
         {children}
       </Inner>
     </button>

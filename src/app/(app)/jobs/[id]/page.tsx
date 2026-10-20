@@ -1,6 +1,5 @@
 import {
   CalendarClock,
-  ClipboardList,
   FileText,
   History,
   Images,
@@ -20,10 +19,23 @@ import { JobReadinessRing, JobRiskChip } from "@/features/disputes/slots";
 import { JobEstimatePanel } from "@/features/estimates/slots";
 import { getInvoiceForJob, listJobLines } from "@/features/invoices/api";
 import { JobInvoicePanel } from "@/features/invoices/slots";
-import { ActionBar } from "@/features/jobs/components/ActionBar";
-import { ChecklistClient } from "@/features/jobs/components/ChecklistClient";
+import { AssignJobButton } from "@/features/jobs/components/AssignJobButton";
 import { JobHeaderCard } from "@/features/jobs/components/JobHeaderCard";
-import { JobOfficeMenu } from "@/features/jobs/components/JobOfficeMenu";
+import { JobOfficeMenuButton } from "@/features/jobs/components/JobOfficeMenuButton";
+import {
+  JobMoneyCard,
+  JobProgressCard,
+  JobTechCards,
+} from "@/features/jobs/components/JobRail";
+import { JobTabs } from "@/features/jobs/components/JobTabs";
+import {
+  LazyActionBar as ActionBar,
+  LazyAddPartButton as AddPartButton,
+  LazyChecklist as ChecklistClient,
+  LazyCollectPaymentButton as CollectPaymentButton,
+  LazyRequestReviewButton as RequestReviewButton,
+  LazyTagEditor as TagEditor,
+} from "@/features/jobs/components/lazy-islands";
 import { StatusEventList } from "@/features/jobs/components/StatusEventList";
 import type { GuardMiss } from "@/features/jobs/machine";
 import {
@@ -38,32 +50,34 @@ import {
   nextJobAfter,
 } from "@/features/jobs/queries";
 import { NotesPanel } from "@/features/jobs/slots";
-import { AssignJobButton } from "@/features/jobs/slots.client";
 import { checkTransition } from "@/features/jobs/transition";
 import { JobPhotosPanel } from "@/features/media/slots";
 import { JobMessagesPanel } from "@/features/messaging/slots";
 import { ActivityTimeline } from "@/features/notify/slots";
 import { JobPartsPanel } from "@/features/parts/slots";
-import { AddPartButton } from "@/features/parts/slots.client";
 import { DepositChip, JobPaymentsPanel } from "@/features/payments/slots";
-import { CollectPaymentButton } from "@/features/payments/slots.client";
 import { JobEarningsPanel } from "@/features/payroll/slots";
-import { RequestReviewButton } from "@/features/reviews/slots.client";
 import {
   getCustomFieldDefs,
   getEntityTags,
   listServiceTypes,
 } from "@/features/settings/api";
-import { TagEditor } from "@/features/settings/slots.client";
 import { actorOf, requireAnyPerm } from "@/lib/auth/current";
 import { formatMoney } from "@/lib/money";
 import { getCurrentPolicy } from "@/lib/policies";
 import { getCompanyTimezone, getSettings, isEnabled } from "@/lib/settings";
-import { dateKey, formatDate, formatDateTime } from "@/lib/time";
+import {
+  dateKey,
+  formatDate,
+  formatDateTime,
+  formatDayShort,
+  formatInTz,
+  formatTimeRange,
+} from "@/lib/time";
 import type { SessionUser } from "@/lib/types";
-import { Page } from "@/ui/components/AppShell";
+import { DetailLayout, Page } from "@/ui/components/AppShell";
 import { Banner } from "@/ui/components/Banner";
-import { Chip, ChipRow } from "@/ui/components/Chip";
+import { BarSummary, BottomBar } from "@/ui/components/BottomBar";
 import { type KeyValueItem, KeyValueList } from "@/ui/components/KeyValueList";
 import { ListRow, ListSection } from "@/ui/components/List";
 import { NavBar } from "@/ui/components/NavBar";
@@ -259,13 +273,14 @@ export default async function JobPage({
   // In progress: the sign-off summary (lines + total), the "no items on the
   // invoice yet" warning and the recommended-photos row of the Complete sheet.
   const inProgressBar = showActionBar && job.status === "in_progress";
-  const [jobLines, draftInvoice, photoCounts] = inProgressBar
-    ? await Promise.all([
-        listJobLines(job.id).catch(() => null),
-        getInvoiceForJob(job.id).catch(() => null),
-        photosOn ? jobPhotoCounts(job.id).catch(() => null) : null,
-      ])
-    : [null, null, null];
+  // The invoice feeds the in-progress sign-off total, the completed bar's
+  // balance and the desktop money card (one summary read, no lines).
+  const wantInvoice = inProgressBar || has("invoices.view");
+  const [jobLines, draftInvoice, photoCounts] = await Promise.all([
+    inProgressBar ? listJobLines(job.id).catch(() => null) : null,
+    wantInvoice ? getInvoiceForJob(job.id).catch(() => null) : null,
+    inProgressBar && photosOn ? jobPhotoCounts(job.id).catch(() => null) : null,
+  ]);
   const invoiceSummary = jobLines ? summarizeLines(jobLines) : null;
   const esignText = esign?.body ?? DEFAULT_ESIGN;
   const todayKey = dateKey(new Date(), tz);
@@ -475,7 +490,7 @@ export default async function JobPage({
         />
       </Slot>
       {job.checklist.length > 0 && (
-        <ListSection header="Checklist" id="checklist">
+        <ListSection variant="title" header="Checklist" id="checklist">
           <ChecklistClient
             jobId={job.id}
             items={job.checklist}
@@ -487,11 +502,11 @@ export default async function JobPage({
           />
         </ListSection>
       )}
-      <ListSection header="Details">
+      <ListSection variant="title" header="Details">
         <KeyValueList items={details} card={false} />
       </ListSection>
       {customItems.length > 0 && (
-        <ListSection header="More info">
+        <ListSection variant="title" header="More info">
           <KeyValueList items={customItems} card={false} />
         </ListSection>
       )}
@@ -504,7 +519,7 @@ export default async function JobPage({
         />
       </Slot>
       {!techView && (
-        <ListSection header="Tags">
+        <ListSection variant="title" header="Tags">
           <div className="px-4 py-3">
             <TagEditor
               entityType="job"
@@ -532,7 +547,7 @@ export default async function JobPage({
           </div>
         )}
       {techView && (
-        <ListSection header="On this job">
+        <ListSection variant="title" header="On this job">
           {visibleTabs
             .filter((t) => t !== "overview")
             .map((t) => (
@@ -613,7 +628,11 @@ export default async function JobPage({
     ),
     history: (
       <div className="flex flex-col gap-[var(--section-gap)]">
-        <ListSection header="Status & geostamps" id="status-events">
+        <ListSection
+          variant="title"
+          header="Status & geostamps"
+          id="status-events"
+        >
           <StatusEventList events={events} tz={tz} />
         </ListSection>
         <Slot>
@@ -623,6 +642,175 @@ export default async function JobPage({
     ),
   };
 
+  const start = job.windowStart ?? job.scheduledStart;
+  const end = job.windowEnd ?? job.scheduledEnd;
+  const clock = (iso: string) =>
+    formatInTz(iso, tz, { hour: "numeric", minute: "2-digit" });
+  const windowLabel = start
+    ? `${dateKey(new Date(start), tz) === todayKey ? "Today" : formatDayShort(start, tz)} · ${end ? formatTimeRange(start, end, tz) : clock(start)}`
+    : null;
+  const canAssign =
+    has("jobs.assign") &&
+    !["completed", "closed", "cancelled"].includes(job.status);
+  // Office view without the field dock: the bar carries the office's next step
+  // (collect a balance, or schedule an unassigned job).
+  const collectBar =
+    !showActionBar &&
+    !techView &&
+    job.status === "completed" &&
+    canCollect &&
+    job.paymentStatus !== "paid";
+  const assignBar =
+    !showActionBar &&
+    !collectBar &&
+    canAssign &&
+    (job.status === "unscheduled" || job.assignees.length === 0);
+  const bar = showActionBar ? (
+    <ActionBar
+      job={{
+        id: job.id,
+        number: job.number,
+        status: job.status,
+        customerName: job.customerName,
+        customerFirstName: job.customerFirstName,
+        windowStart: job.windowStart,
+        arrivedAt: job.arrivedAt,
+        paymentStatus: job.paymentStatus,
+      }}
+      navUrl={job.addressMasked ? null : navUrl(ua, job)}
+      phone={brief?.contactRevealed ? brief.phone : null}
+      perms={{
+        field: fieldPerm,
+        cancel: has("jobs.cancel"),
+        cancelAfterArrival: has("jobs.cancel_after_arrival"),
+        reviewCancellations: has("jobs.review_cancellations"),
+        override: has("jobs.override_requirements"),
+        photos: photosOn && has("photos.upload"),
+        estimates: estimatesOn && has("estimates.create"),
+      }}
+      startMissing={startMissing}
+      completeMissing={completeMissing}
+      windowLengths={settings.jobs.window_lengths_min}
+      defaultWindow={settings.jobs.default_window_min}
+      todayKey={todayKey}
+      policy={settings.jobs.cancellation_policy}
+      esignText={esignText}
+      nextJobId={nextJob?.id ?? null}
+      beforeAfter={beforeAfter}
+      hasChecklist={job.checklist.length > 0}
+      signed={!!custom.completion_signature_id}
+      invoice={
+        invoiceSummary
+          ? {
+              lines: invoiceSummary,
+              totalCents:
+                draftInvoice?.totalCents ??
+                (jobLines ?? []).reduce((a, l) => a + l.totalCents, 0),
+            }
+          : null
+      }
+      photoCounts={photoCounts}
+      initialSheet={action === "complete" ? "complete" : null}
+      summary={{
+        window: windowLabel,
+        eta: job.etaAt ? `ETA ${clock(job.etaAt)}` : null,
+        hold: HOLD_REASON_LABEL[job.holdReason ?? ""] ?? job.holdReason,
+        balanceCents: draftInvoice?.balanceCents ?? null,
+      }}
+      slots={{
+        readiness: <JobReadinessRing jobId={job.id} size={56} showWhy />,
+        collect: canCollect ? (
+          <CollectPaymentButton jobId={job.id} size="lg" />
+        ) : undefined,
+        collectDeposit: canCollect ? (
+          <CollectPaymentButton
+            jobId={job.id}
+            allowDeposit
+            label="Collect deposit"
+            variant="tinted"
+          />
+        ) : undefined,
+        addPart:
+          partsOn && has("parts.add_to_job") ? (
+            <AddPartButton
+              jobId={job.id}
+              label="Parts"
+              variant="gray"
+              size="sm"
+            />
+          ) : undefined,
+        orderPart:
+          partsOn && has("parts.add_to_job") ? (
+            <AddPartButton
+              jobId={job.id}
+              mode="special_order"
+              label="Order part"
+              variant="gray"
+              size="sm"
+            />
+          ) : undefined,
+      }}
+    />
+  ) : collectBar ? (
+    <BottomBar
+      label={`${job.number} actions`}
+      summary={
+        <BarSummary
+          title={
+            draftInvoice && draftInvoice.balanceCents > 0
+              ? formatMoney(draftInvoice.balanceCents)
+              : "Job complete"
+          }
+          subtitle={
+            draftInvoice && draftInvoice.balanceCents > 0
+              ? "Balance due"
+              : "Not paid yet"
+          }
+        />
+      }
+      action={<CollectPaymentButton jobId={job.id} size="lg" />}
+    />
+  ) : assignBar ? (
+    <BottomBar
+      label={`${job.number} actions`}
+      summary={
+        <BarSummary
+          title={windowLabel ?? "Not scheduled"}
+          subtitle="No technician yet"
+        />
+      }
+      action={
+        <AssignJobButton
+          jobId={job.id}
+          label={job.status === "unscheduled" ? "Schedule" : "Assign"}
+          variant="filled"
+          size="lg"
+        />
+      }
+    />
+  ) : null;
+
+  const rail = (
+    <>
+      <JobProgressCard job={job} tz={tz} />
+      {has("invoices.view") && (
+        <JobMoneyCard
+          jobId={job.id}
+          invoice={
+            draftInvoice
+              ? {
+                  number: draftInvoice.number,
+                  totalCents: draftInvoice.totalCents,
+                  balanceCents: draftInvoice.balanceCents,
+                }
+              : null
+          }
+        />
+      )}
+      <JobTechCards job={job} />
+    </>
+  );
+
   return (
     <PageTransition>
       <NavBar
@@ -630,7 +818,7 @@ export default async function JobPage({
         back={{ href: backHref, label: techView ? "Today" : "Jobs" }}
         trailing={
           office ? (
-            <JobOfficeMenu
+            <JobOfficeMenuButton
               job={{
                 id: job.id,
                 number: job.number,
@@ -670,18 +858,17 @@ export default async function JobPage({
           ) : undefined
         }
       />
-      <Page
-        className={
-          showActionBar
-            ? // Clear the floating dock: its measured height (ActionBar publishes --dock-h).
-              "pt-3 pb-[calc(var(--dock-h,128px)+24px)] lg:pb-[calc(var(--dock-h,128px)+40px)]"
-            : "pt-3"
-        }
-      >
-        <div className="flex flex-col gap-[var(--section-gap)]">
+      <Page className="pt-3">
+        <DetailLayout
+          rail={rail}
+          bar={bar}
+          railOnPhone="hide"
+          railLabel="Job summary"
+        >
           <JobHeaderCard
             job={job}
             tz={tz}
+            navHref={job.addressMasked ? null : navUrl(ua, job)}
             chips={
               <>
                 <Suspense fallback={null}>
@@ -697,13 +884,12 @@ export default async function JobPage({
               job.status === "completed" ||
               job.status === "closed" ? (
                 <Suspense fallback={null}>
-                  <JobReadinessRing jobId={job.id} size={40} showWhy />
+                  <JobReadinessRing jobId={job.id} size={44} showWhy />
                 </Suspense>
               ) : null
             }
             assign={
-              has("jobs.assign") &&
-              !["completed", "closed", "cancelled"].includes(job.status) ? (
+              canAssign && !assignBar ? (
                 <AssignJobButton
                   jobId={job.id}
                   label={job.assignees.length ? "Reassign" : "Assign"}
@@ -721,117 +907,19 @@ export default async function JobPage({
           {banners.length > 0 && (
             <div className="flex flex-col gap-2">{banners}</div>
           )}
-          {!techView &&
-            job.status === "completed" &&
-            canCollect &&
-            job.paymentStatus !== "paid" &&
-            !showActionBar && (
-              <CollectPaymentButton jobId={job.id} size="lg" fullWidth />
-            )}
           {visibleTabs.length > 1 && (!techView || tab !== "overview") && (
-            <ChipRow
-              label="Job sections"
-              className="-mx-[var(--gutter)] px-[var(--gutter)]"
-            >
-              {visibleTabs.map((t) => (
-                <Chip
-                  key={t}
-                  replace
-                  selected={tab === t}
-                  href={`/jobs/${job.id}${t === "overview" ? "" : `?tab=${t}`}`}
-                  icon={
-                    t === "overview" ? <ClipboardList size={14} /> : undefined
-                  }
-                >
-                  {TAB_LABEL[t]}
-                </Chip>
-              ))}
-            </ChipRow>
+            <JobTabs
+              active={tab}
+              tabs={visibleTabs.map((t) => ({
+                key: t,
+                label: TAB_LABEL[t],
+                href: `/jobs/${job.id}${t === "overview" ? "" : `?tab=${t}`}`,
+              }))}
+            />
           )}
           {content[tab]}
-        </div>
+        </DetailLayout>
       </Page>
-      {showActionBar && (
-        <ActionBar
-          job={{
-            id: job.id,
-            number: job.number,
-            status: job.status,
-            customerName: job.customerName,
-            customerFirstName: job.customerFirstName,
-            windowStart: job.windowStart,
-            arrivedAt: job.arrivedAt,
-            paymentStatus: job.paymentStatus,
-          }}
-          navUrl={job.addressMasked ? null : navUrl(ua, job)}
-          phone={brief?.contactRevealed ? brief.phone : null}
-          perms={{
-            field: fieldPerm,
-            cancel: has("jobs.cancel"),
-            cancelAfterArrival: has("jobs.cancel_after_arrival"),
-            reviewCancellations: has("jobs.review_cancellations"),
-            override: has("jobs.override_requirements"),
-            photos: photosOn && has("photos.upload"),
-            estimates: estimatesOn && has("estimates.create"),
-          }}
-          startMissing={startMissing}
-          completeMissing={completeMissing}
-          windowLengths={settings.jobs.window_lengths_min}
-          defaultWindow={settings.jobs.default_window_min}
-          todayKey={todayKey}
-          policy={settings.jobs.cancellation_policy}
-          esignText={esignText}
-          nextJobId={nextJob?.id ?? null}
-          beforeAfter={beforeAfter}
-          hasChecklist={job.checklist.length > 0}
-          signed={!!custom.completion_signature_id}
-          invoice={
-            invoiceSummary
-              ? {
-                  lines: invoiceSummary,
-                  totalCents:
-                    draftInvoice?.totalCents ??
-                    (jobLines ?? []).reduce((a, l) => a + l.totalCents, 0),
-                }
-              : null
-          }
-          photoCounts={photoCounts}
-          initialSheet={action === "complete" ? "complete" : null}
-          slots={{
-            readiness: <JobReadinessRing jobId={job.id} size={56} showWhy />,
-            collect: canCollect ? (
-              <CollectPaymentButton jobId={job.id} size="lg" fullWidth />
-            ) : undefined,
-            collectDeposit: canCollect ? (
-              <CollectPaymentButton
-                jobId={job.id}
-                allowDeposit
-                label="Collect deposit"
-                variant="tinted"
-              />
-            ) : undefined,
-            addPart:
-              partsOn && has("parts.add_to_job") ? (
-                <AddPartButton
-                  jobId={job.id}
-                  label="Parts"
-                  variant="gray"
-                  size="sm"
-                />
-              ) : undefined,
-            orderPart:
-              partsOn && has("parts.add_to_job") ? (
-                <AddPartButton
-                  jobId={job.id}
-                  mode="special_order"
-                  label="Order part"
-                  variant="gray"
-                  size="sm"
-                />
-              ) : undefined,
-          }}
-        />
-      )}
     </PageTransition>
   );
 }

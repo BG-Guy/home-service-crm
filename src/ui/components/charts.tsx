@@ -119,7 +119,7 @@ function Legend({
         <li key={it.label} className="flex items-center gap-1.5">
           <span
             aria-hidden
-            className="size-2.5 rounded-[3px]"
+            className="size-2.5 rounded-full"
             style={{ background: it.color }}
           />
           <span>{it.label}</span>
@@ -248,7 +248,7 @@ export function BarChart({
               <span className="truncate text-footnote text-label-2">
                 {d.label}
               </span>
-              <span className="h-2.5 overflow-hidden rounded-full bg-fill-2">
+              <span className="h-2.5 overflow-hidden rounded-full bg-fill">
                 <span
                   className="block h-full rounded-full"
                   style={{
@@ -304,7 +304,7 @@ export function BarChart({
                 className="flex h-full min-w-0 flex-1 items-end justify-center"
               >
                 <span
-                  className="block w-full max-w-7 rounded-t-[4px]"
+                  className="block w-full max-w-7 rounded-t-md"
                   style={{
                     height: `${Math.max(0, (d.value / max) * 100)}%`,
                     minHeight: d.value > 0 ? 2 : 0,
@@ -623,7 +623,7 @@ export function DonutChart({
             <li key={s.label} className="flex items-center gap-2">
               <span
                 aria-hidden
-                className="size-2.5 shrink-0 rounded-[3px]"
+                className="size-2.5 shrink-0 rounded-full"
                 style={{ background: toneColor(s.tone, i) }}
               />
               <span className="min-w-0 flex-1 truncate text-label-2">

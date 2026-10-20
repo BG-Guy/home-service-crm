@@ -131,6 +131,7 @@ export default async function ReviewsPage({
 
           {!own && leaders.length > 0 && (
             <ListSection
+              variant="title"
               header="By technician"
               footer="Clicks are counted from the review link, never by asking the customer."
             >
@@ -171,7 +172,7 @@ export default async function ReviewsPage({
               message="After a paid job, customers get one review request (plus one reminder). They show up here."
             />
           ) : (
-            <ListSection header="Recent requests">
+            <ListSection variant="title" header="Recent requests">
               {list.map((r) => (
                 <ListRow
                   key={r.id}

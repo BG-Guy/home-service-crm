@@ -21,7 +21,10 @@ export function StaticMap({
   zoom = 14,
   height = 220,
   label,
+  flush,
 }: {
+  /** Square corners, for a map that is the top of a card. */
+  flush?: boolean;
   center: { lat: number; lng: number };
   dest?: { lat: number; lng: number } | null;
   zoom?: number;
@@ -60,7 +63,7 @@ export function StaticMap({
     <div
       role="img"
       aria-label={label}
-      className="map-view relative w-full overflow-hidden rounded-card bg-fill-2"
+      className={`map-view relative w-full overflow-hidden bg-fill-2 ${flush ? "" : "rounded-card"}`}
       style={{ height }}
     >
       <div className="leaflet-tile-pane absolute inset-0">
@@ -83,24 +86,33 @@ export function StaticMap({
           />
         ))}
       </div>
+      {/* Soft fade into the card below, so the map reads as part of the hero */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-card to-transparent"
+      />
       {showDest && dOff && (
         <span
           aria-hidden
-          className="absolute size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-[var(--sys-red)] shadow"
+          className="absolute flex size-7 -translate-x-1/2 -translate-y-full items-center justify-center rounded-full rounded-br-none bg-label shadow-[var(--shadow-raised)] [rotate:45deg]"
           style={{
             left: `calc(50% + ${dOff.x}px)`,
             top: `calc(50% + ${dOff.y}px)`,
           }}
-        />
+        >
+          <span className="size-2.5 rounded-full bg-bg" />
+        </span>
       )}
       <span
         aria-hidden
-        className="absolute left-1/2 top-1/2 flex size-6 -translate-x-1/2 -translate-y-1/2"
+        className="absolute left-1/2 top-1/2 flex size-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--accent)_18%,transparent)]"
       >
-        <span className="absolute inset-0 animate-ping rounded-full bg-accent opacity-40 motion-reduce:animate-none" />
-        <span className="relative m-auto size-4 rounded-full border-[3px] border-white bg-accent shadow" />
+        <span
+          className="live-dot size-4 border-[3px] border-white shadow-[var(--shadow-raised)]"
+          style={{ ["--tone" as string]: "var(--accent)" }}
+        />
       </span>
-      <span className="absolute bottom-1 right-2 text-[10px] text-label-2">
+      <span className="absolute right-2 top-1.5 rounded-pill bg-card/80 px-1.5 text-[10px] text-label-2">
         © OpenStreetMap
       </span>
     </div>

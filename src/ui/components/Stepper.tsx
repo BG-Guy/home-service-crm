@@ -46,7 +46,7 @@ export function Stepper({
     onChange?.(next);
   };
   const btn =
-    "relative flex h-8 w-[47px] items-center justify-center text-label outline-offset-[-2px] active:bg-fill disabled:text-label-3 before:absolute before:inset-x-0 before:-inset-y-1.5 before:content-['']";
+    "relative flex h-9 w-12 items-center justify-center text-label outline-offset-[-2px] active:bg-fill disabled:text-label-3 before:absolute before:inset-x-0 before:-inset-y-1 before:content-['']";
   return (
     // biome-ignore lint/a11y/useSemanticElements: a fieldset would add unwanted chrome
     <div
@@ -62,7 +62,7 @@ export function Stepper({
           {format(current)}
         </output>
       )}
-      <div className="flex overflow-hidden rounded-[8px] bg-fill-2">
+      <div className="flex overflow-hidden rounded-pill bg-fill">
         <button
           type="button"
           aria-label={`Decrease ${label}`}
@@ -72,7 +72,7 @@ export function Stepper({
         >
           <Minus aria-hidden size={18} strokeWidth={2.5} />
         </button>
-        <span aria-hidden className="my-2 w-px bg-sep" />
+        <span aria-hidden className="my-2.5 w-px bg-sep" />
         <button
           type="button"
           aria-label={`Increase ${label}`}

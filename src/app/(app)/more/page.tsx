@@ -60,8 +60,15 @@ export default async function MorePage() {
         <ListGroup>
           <ListSection>
             <ListRow
-              leading={<Avatar name={user.name} seed={user.id} size={44} />}
-              title={<span className="text-headline">{user.name}</span>}
+              leading={
+                <Avatar
+                  name={user.name}
+                  seed={user.id}
+                  size={56}
+                  className="my-1"
+                />
+              }
+              title={<span className="text-title3">{user.name}</span>}
               subtitle={`${ROLE_LABEL[user.baseRole]} · ${user.email}`}
               href="/settings/profile"
             />

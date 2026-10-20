@@ -1,7 +1,16 @@
-import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { cx } from "../cx";
+import {
+  BACK_LINK,
+  BAR_LEADING,
+  BAR_ROW,
+  BAR_TITLE,
+  BAR_TRAILING,
+  BackChevron,
+  LARGE_HEADER,
+  LARGE_TITLE,
+} from "./bar-parts";
 import { ScrollSentinel } from "./ScrollSentinel";
 
 export interface BackTarget {
@@ -16,17 +25,8 @@ export interface BackTarget {
  */
 export function BackButton({ href, label = "Back" }: BackTarget) {
   return (
-    <Link
-      href={href}
-      transitionTypes={["nav-back"]}
-      className="pressable -ml-2 flex min-h-11 max-w-[40vw] items-center gap-0.5 rounded-control pr-2 text-body text-accent-text outline-offset-0"
-    >
-      <ChevronLeft
-        aria-hidden
-        size={28}
-        strokeWidth={2.4}
-        className="-mr-0.5 shrink-0"
-      />
+    <Link href={href} transitionTypes={["nav-back"]} className={BACK_LINK}>
+      <BackChevron />
       <span className="truncate">{label}</span>
     </Link>
   );
@@ -48,30 +48,27 @@ function BarRow({
   titleHidden?: boolean;
 }) {
   return (
-    <div className="mx-auto grid h-11 max-w-[var(--content-max)] grid-cols-[1fr_auto_1fr] items-center gap-2 px-[var(--gutter)]">
-      <div className="flex min-w-0 items-center justify-start">
+    <div className={BAR_ROW}>
+      <div className={BAR_LEADING}>
         {back ? <BackButton {...back} /> : leading}
       </div>
       <div
         aria-hidden={titleHidden || undefined}
-        className={cx(
-          "max-w-[50vw] truncate text-center text-headline lg:max-w-[480px]",
-          titleClassName,
-        )}
+        className={cx(BAR_TITLE, titleClassName)}
       >
         {title}
       </div>
-      <div className="flex min-w-0 items-center justify-end gap-1">
-        {trailing}
-      </div>
+      <div className={BAR_TRAILING}>{trailing}</div>
     </div>
   );
 }
 
 /**
- * Inline-title nav bar for pushed/detail screens (SPEC §12.6): back button,
- * centered 17 px title, trailing actions, `.material` with a hairline, sticky,
- * padded for the status bar. The title is the page's `<h1>`.
+ * Inline-title nav bar for pushed/detail screens (docs/DESIGN.md §5): back
+ * button, centered 17 px title, trailing actions, sticky, padded for the status
+ * bar. Clear over the canvas at the top; glass with a hairline once content
+ * scrolls under it (`.nav-bar` in globals.css: a scroll-driven fade, always glass
+ * where scroll timelines aren't supported). The title is the page's `<h1>`.
  */
 export function NavBar({
   title,
@@ -89,10 +86,7 @@ export function NavBar({
   return (
     <header
       data-chrome
-      className={cx(
-        "material hairline-b sticky top-0 z-[var(--z-bar)] pt-[env(safe-area-inset-top)]",
-        className,
-      )}
+      className={cx("nav-bar pt-[env(safe-area-inset-top)]", className)}
     >
       <BarRow
         back={back}
@@ -105,10 +99,11 @@ export function NavBar({
 }
 
 /**
- * Large-title header (SPEC §12.4): a 34 px title that collapses into the 17 px
- * inline bar title on scroll. Primary: CSS scroll-driven animation (range 0–52 px);
- * fallback: an IntersectionObserver sentinel sets `data-scrolled`. The bar
- * gains `.material` + hairline when scrolled. Server-rendered.
+ * Large-title header (docs/DESIGN.md §4 M17): a 34 px title that collapses into
+ * the 17 px inline bar title on scroll. Primary: CSS scroll-driven animation
+ * (range 0–52 px); fallback: an IntersectionObserver sentinel sets
+ * `data-scrolled`. The bar turns to glass with a hairline when scrolled.
+ * Server-rendered.
  *
  * ```tsx
  * <LargeTitleHeader title="Customers" trailing={<AddMenu items={…} />}
@@ -153,8 +148,8 @@ export function LargeTitleHeader({
           titleHidden
         />
       </div>
-      <header className="mx-auto max-w-[var(--content-max)] px-[var(--gutter)] pb-2">
-        <h1 className="text-large-title tracking-tight">{title}</h1>
+      <header className={LARGE_HEADER}>
+        <h1 className={LARGE_TITLE}>{title}</h1>
         {subtitle && (
           <p className="-mt-0.5 text-subhead text-label-2">{subtitle}</p>
         )}

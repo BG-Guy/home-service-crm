@@ -69,7 +69,7 @@ export function emailHtml(i: EmailLayoutInput): string {
 <body style="margin:0;padding:0;background:#f2f2f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1c1c1e">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f2f2f7;padding:24px 12px"><tr><td align="center">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:14px;padding:28px 24px">
-<tr><td style="font-size:16px">${logo}<div style="font-size:13px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;color:${accent};margin:0 0 12px">${escapeHtml(i.companyName)}</div>${paras}</td></tr>
+<tr><td style="font-size:16px">${logo}<div style="font-size:13px;font-weight:600;color:${accent};margin:0 0 12px">${escapeHtml(i.companyName)}</div>${paras}</td></tr>
 </table>
 <div style="max-width:560px;font-size:12px;line-height:1.5;color:#8e8e93;padding:14px 8px 0;text-align:center">${meta}${i.footer ? `<br>${escapeHtml(i.footer)}` : ""}</div>
 </td></tr></table></body></html>`;

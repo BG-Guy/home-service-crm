@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Camera,
   Car,
   CircleCheck,
   ClipboardCheck,
@@ -25,14 +26,12 @@ import {
   useState,
   useTransition,
 } from "react";
-import { useOutboxState } from "@/client/outbox";
-import { CameraCaptureButton } from "@/features/media/slots.client";
-import { SignatureSheet } from "@/features/signatures/slots.client";
 import { formatMoney } from "@/lib/money";
-import { ActionSheet, type ActionSheetItem } from "@/ui/components/ActionSheet";
+import type { ActionSheetItem } from "@/ui/components/ActionSheet";
+import { BarSummary } from "@/ui/components/BottomBar";
 import { Button } from "@/ui/components/Button";
+import { preloadable } from "@/ui/components/preloadable";
 import { toast } from "@/ui/components/Toast";
-import { cx } from "@/ui/cx";
 import { haptic } from "@/ui/motion/haptics";
 import {
   logJobCall,
@@ -47,20 +46,44 @@ import {
 } from "../machine";
 import { useStatusRunner } from "./sheets/use-status";
 
-// Sticky, status-aware action bar for the job screen (SPEC M06 table, BUILD_PLAN
-// §5.3 "Tech action bar → producers"). Every transition runs through the offline
-// outbox with a geostamp; requirements open the Start/Complete sheet. Sheets are
-// lazy chunks so the bar itself stays small.
+// Status-aware job dock (SPEC M06 table, BUILD_PLAN §5.3 "Tech action bar →
+// producers"), styled as the kit's booking bar (DESIGN.md §5 BottomBar): tool
+// tiles on top, then a summary on the left and the one primary on the right.
+// Phone: sticky at the bottom of DetailLayout (above the tab bar). Desktop
+// (>= 1200): the first card of the sticky right rail. Every transition runs
+// through the offline outbox with a geostamp; requirements open the
+// Start/Complete sheet. Sheets, the photo sheet, the signature sheet and the
+// More menu are lazy chunks loaded on first open, so the dock itself stays small.
 
-const EtaSheet = dynamic(() => import("./sheets/EtaSheet"), { ssr: false });
-const RequirementsSheet = dynamic(() => import("./sheets/RequirementsSheet"), {
-  ssr: false,
-});
+// The photo sheet and the next step's sheet are warmed on idle (below) and render
+// at once on tap: `preloadable` skips the Suspense round trip that would hold a
+// warmed sheet back by React's 300 ms reveal throttle.
+const EtaSheet = preloadable(() =>
+  import("./sheets/EtaSheet").then((m) => m.default),
+);
+const RequirementsSheet = preloadable(() =>
+  import("./sheets/RequirementsSheet").then((m) => m.default),
+);
 const HoldSheet = dynamic(() => import("./sheets/HoldSheet"), { ssr: false });
 const VisitSheet = dynamic(() => import("./sheets/VisitSheet"), { ssr: false });
 const CancelSheet = dynamic(() => import("./sheets/CancelSheet"), {
   ssr: false,
 });
+const ActionSheet = dynamic(
+  () => import("@/ui/components/ActionSheet").then((m) => m.ActionSheet),
+  { ssr: false },
+);
+const CameraCaptureButton = preloadable(() =>
+  import("@/features/media/components/capture").then(
+    (m) => m.CameraCaptureButton,
+  ),
+);
+const SignatureSheet = dynamic(
+  () =>
+    import("@/features/signatures/slots.client").then((m) => m.SignatureSheet),
+  { ssr: false },
+);
+const warmCamera = () => void CameraCaptureButton.preload().catch(() => {});
 
 export interface ActionBarProps {
   job: {
@@ -103,6 +126,17 @@ export interface ActionBarProps {
   photoCounts?: { before: number; after: number; total: number } | null;
   /** Deep link `?action=complete` opens the Complete sheet. */
   initialSheet?: "complete" | null;
+  /** Bar summary context, formatted in the company time zone by the page. */
+  summary?: {
+    /** "Today · 11:00 AM – 1:00 PM". */
+    window: string | null;
+    /** "ETA 2:35 PM". */
+    eta: string | null;
+    /** Hold reason label. */
+    hold: string | null;
+    /** Invoice balance (completed jobs). */
+    balanceCents: number | null;
+  };
   slots: {
     readiness?: ReactNode;
     collect?: ReactNode;
@@ -129,10 +163,68 @@ type Sheet =
 // columns: in a flex row a tile's own padding counted toward its basis, so the
 // unpadded slot wrappers came out 8 px narrower (QA2 NEW-10).
 const TILE =
-  "pressable relative flex h-12 min-w-0 flex-1 basis-0 select-none flex-col items-center justify-center gap-0.5 rounded-[14px] bg-fill-2 px-1 text-caption font-semibold text-accent-text outline-offset-2 hover:bg-fill";
+  "pressable relative flex h-[52px] min-w-0 flex-1 basis-0 select-none flex-col items-center justify-center gap-0.5 rounded-[14px] bg-fill-2 px-1 text-caption font-semibold text-label outline-offset-2 hover:bg-fill [&>svg]:text-accent-text";
 // Slot buttons (kit <Button>s from other modules) restyled as the same tile.
 const SLOT_TILE =
-  "flex min-w-0 flex-1 basis-0 [&>button]:h-12 [&>button]:w-full [&>button]:flex-col [&>button]:gap-0.5 [&>button]:rounded-[14px] [&>button]:px-1 [&>button]:text-caption [&>button>span:first-child]:ml-0";
+  "flex min-w-0 flex-1 basis-0 [&>button]:h-[52px] [&>button]:w-full [&>button]:flex-col [&>button]:gap-0.5 [&>button]:rounded-[14px] [&>button]:bg-fill-2 [&>button]:px-1 [&>button]:text-caption [&>button]:text-label [&>button>span:first-child]:ml-0";
+
+/**
+ * The dock's Photos tile: a plain button; the photo sheet (tag control, camera,
+ * library, upload pipeline) loads on first tap and is warmed on hover / touch.
+ */
+function PhotosTile({
+  jobId,
+  defaultTag,
+  allowedTags,
+}: {
+  jobId: string;
+  defaultTag: "before" | "after" | "during";
+  allowedTags: ("before" | "during" | "after" | "problem")[] | undefined;
+}) {
+  const [mounted, setMounted] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [taken, setTaken] = useState(0);
+  return (
+    <>
+      <button
+        type="button"
+        aria-haspopup="dialog"
+        aria-label={taken ? `Photos, ${taken} added` : "Photos"}
+        className={TILE}
+        onPointerEnter={warmCamera}
+        onTouchStart={warmCamera}
+        onClick={() => {
+          setMounted(true);
+          setOpen(true);
+        }}
+      >
+        <span aria-hidden className="relative flex text-accent-text">
+          <Camera size={18} />
+          {taken > 0 && (
+            <span className="badge-pop absolute -top-1.5 -right-2.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent-fill px-1 text-[10px] font-bold leading-none text-on-accent tabular-nums">
+              {taken}
+            </span>
+          )}
+        </span>
+        <span className="max-w-full truncate">Photos</span>
+      </button>
+      {mounted && (
+        <CameraCaptureButton
+          compact
+          hideTrigger
+          open={open}
+          onOpenChange={setOpen}
+          jobId={jobId}
+          defaultTag={defaultTag}
+          allowedTags={allowedTags}
+          sheetTitle="Job photos"
+          multiple
+          onQueued={() => setTaken((n) => n + 1)}
+        />
+      )}
+    </>
+  );
+}
 
 function Tool({
   icon,
@@ -200,12 +292,6 @@ export function ActionBar(p: ActionBarProps) {
   );
   const { run, pending } = useStatusRunner(job.id, (to) => setStatus(to));
   const [approving, startApproving] = useTransition();
-  const outbox = useOutboxState();
-  const bannerUp =
-    !outbox.online ||
-    (outbox.syncing && outbox.pending > 0) ||
-    outbox.uploading > 0 ||
-    (outbox.pending > 0 && !!outbox.lastError);
 
   const afterArrival = isAfterArrival({ status, arrivedAt: job.arrivedAt });
   const canCancel =
@@ -214,6 +300,34 @@ export function ActionBar(p: ActionBarProps) {
     status !== "cancelled" &&
     (afterArrival ? p.perms.cancelAfterArrival : p.perms.cancel);
   const close = () => setSheet(null);
+  // The More menu loads on first open and stays mounted for its close animation.
+  // Once the page is idle, warm the chunks this status is likely to need next
+  // (the photo sheet and the next step's sheet), so the first tap opens at
+  // once without putting them in the page's first load.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once per status
+  useEffect(() => {
+    const warm = () => {
+      if (p.perms.photos) warmCamera();
+      if (status === "scheduled" || status === "confirmed")
+        void EtaSheet.preload().catch(() => {});
+      if (status === "arrived" || status === "in_progress")
+        void RequirementsSheet.preload().catch(() => {});
+    };
+    const w = window as Window & {
+      requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    if (w.requestIdleCallback) {
+      const id = w.requestIdleCallback(warm, { timeout: 3000 });
+      return () => w.cancelIdleCallback?.(id);
+    }
+    const t = window.setTimeout(warm, 1500);
+    return () => window.clearTimeout(t);
+  }, [status]);
+  const [moreMounted, setMoreMounted] = useState(false);
+  useEffect(() => {
+    if (sheet === "more") setMoreMounted(true);
+  }, [sheet]);
 
   const call = () => {
     if (!p.phone) {
@@ -296,16 +410,11 @@ export function ActionBar(p: ActionBarProps) {
   /** One dock tile that opens the photo sheet (tag control + camera + library). */
   const cameraTile = (tag: "before" | "after" | "during") =>
     p.perms.photos ? (
-      <CameraCaptureButton
+      <PhotosTile
         key="cam"
-        compact
-        triggerClassName={TILE}
         jobId={job.id}
         defaultTag={tag}
         allowedTags={jobTags}
-        label="Photos"
-        sheetTitle="Job photos"
-        multiple
       />
     ) : null;
 
@@ -380,7 +489,6 @@ export function ActionBar(p: ActionBarProps) {
     primary = (
       <Button
         size="lg"
-        fullWidth
         icon={<Car size={20} aria-hidden />}
         loading={pending === "en_route"}
         onClick={() => setSheet("eta")}
@@ -423,7 +531,6 @@ export function ActionBar(p: ActionBarProps) {
     primary = (
       <Button
         size="lg"
-        fullWidth
         icon={<MapPinCheck size={20} aria-hidden />}
         loading={pending === "arrived"}
         onClick={() => void doRun("arrived", {}, "Arrived")}
@@ -461,12 +568,11 @@ export function ActionBar(p: ActionBarProps) {
     primary = (
       <Button
         size="lg"
-        fullWidth
         icon={<Play size={20} aria-hidden />}
         loading={pending === "in_progress"}
         onClick={startJob}
       >
-        Start job{startMissing.length ? ` · ${startMissing.length} to do` : ""}
+        Start job
       </Button>
     );
     const cam = cameraTile("before");
@@ -493,13 +599,11 @@ export function ActionBar(p: ActionBarProps) {
     primary = (
       <Button
         size="lg"
-        fullWidth
         icon={<CircleCheck size={20} aria-hidden />}
         loading={pending === "completed"}
         onClick={() => setSheet("complete")}
       >
         Complete
-        {completeMissing.length ? ` · ${completeMissing.length} to do` : ""}
       </Button>
     );
     const cam = cameraTile(p.beforeAfter ? "after" : "during");
@@ -545,12 +649,11 @@ export function ActionBar(p: ActionBarProps) {
     primary = (
       <Button
         size="lg"
-        fullWidth
         icon={<Clock size={20} aria-hidden />}
         loading={pending === "scheduled"}
         onClick={() => setSheet("visit")}
       >
-        Schedule return visit
+        Return visit
       </Button>
     );
     if (p.slots.orderPart)
@@ -580,7 +683,7 @@ export function ActionBar(p: ActionBarProps) {
       (unpaid || collectHold) && p.slots.collect ? (
         <div
           ref={collectRef}
-          className="[&>*]:w-full"
+          className="contents"
           onClickCapture={() => {
             // Only a tap that opens the sheet arms the hold; taps inside the
             // open sheet (Done) must not re-arm it after the job is paid.
@@ -593,7 +696,6 @@ export function ActionBar(p: ActionBarProps) {
       ) : p.nextJobId ? (
         <Button
           size="lg"
-          fullWidth
           href={`/jobs/${p.nextJobId}`}
           transition="push"
           icon={<StepForward size={20} aria-hidden />}
@@ -601,13 +703,7 @@ export function ActionBar(p: ActionBarProps) {
           Next job
         </Button>
       ) : (
-        <Button
-          size="lg"
-          fullWidth
-          variant="tinted"
-          href="/today"
-          transition="back"
-        >
+        <Button size="lg" variant="tinted" href="/today" transition="back">
           Back to Today
         </Button>
       );
@@ -645,55 +741,112 @@ export function ActionBar(p: ActionBarProps) {
       />,
     );
 
-  // Publish the dock's real height as --dock-h so the page pads exactly enough
-  // to scroll its last rows clear of it (plus the offline banner when it's up).
-  const dockRef = useRef<HTMLDivElement>(null);
+  // ------------------------------------------------------------ bar summary
+  const sum = p.summary;
+  const todo = (n: number, what: string) =>
+    n ? `${n} to do before you ${what}` : null;
+  let summary: { title: ReactNode; subtitle?: ReactNode } = {
+    title: job.number,
+  };
+  if (status === "scheduled" || status === "confirmed")
+    summary = {
+      title: sum?.window ?? "Not scheduled",
+      subtitle: status === "confirmed" ? "Confirmed by customer" : "Scheduled",
+    };
+  else if (status === "en_route")
+    summary = { title: "On the way", subtitle: sum?.eta ?? sum?.window };
+  else if (status === "arrived")
+    summary = {
+      title: startMissing.length
+        ? `${startMissing.length} to do`
+        : "Ready to start",
+      subtitle: todo(startMissing.length, "start") ?? "You're on site",
+    };
+  else if (status === "in_progress")
+    summary = {
+      title: completeMissing.length
+        ? `${completeMissing.length} to do`
+        : p.invoice?.lines.length
+          ? formatMoney(p.invoice.totalCents)
+          : "In progress",
+      subtitle: completeMissing.length
+        ? "Before you complete"
+        : p.invoice?.lines.length
+          ? "Job total so far"
+          : "Ready to complete",
+    };
+  else if (status === "on_hold")
+    summary = { title: "On hold", subtitle: sum?.hold ?? undefined };
+  else if (status === "completed") {
+    const owed = sum?.balanceCents ?? null;
+    const unpaid =
+      job.paymentStatus !== "paid" && job.paymentStatus !== "refunded";
+    summary =
+      unpaid && owed != null && owed > 0
+        ? { title: formatMoney(owed), subtitle: "Balance due" }
+        : { title: "Job complete", subtitle: unpaid ? "Not paid yet" : "Paid" };
+  }
+
+  // Phone: tell fixed overlays (sync capsule, toasts) the dock's real height;
+  // the kit's 84 px default assumes a bar without the tile row. In the
+  // desktop rail the dock is a plain card, so nothing lifts (0).
+  const dockRef = useRef<HTMLElement>(null);
   const hasDock = primary != null;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: re-measure when the dock mounts (hasDock) or the banner offset changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-measure when the dock mounts
   useEffect(() => {
     const el = dockRef.current;
     if (!el) return;
     const root = document.documentElement;
-    const extra = bannerUp ? 48 : 0;
+    const wide = window.matchMedia("(min-width: 1200px)");
     const publish = () =>
-      root.style.setProperty("--dock-h", `${el.offsetHeight + extra}px`);
+      root.style.setProperty(
+        "--bottombar-h",
+        wide.matches && el.closest(".detail-rail")
+          ? "0px"
+          : `${el.offsetHeight + 20}px`,
+      );
     publish();
     const ro = new ResizeObserver(publish);
     ro.observe(el);
-    return () => ro.disconnect();
-  }, [bannerUp, hasDock]);
-  useEffect(
-    () => () => {
-      document.documentElement.style.removeProperty("--dock-h");
-    },
-    [],
-  );
+    wide.addEventListener("change", publish);
+    return () => {
+      ro.disconnect();
+      wide.removeEventListener("change", publish);
+      root.style.removeProperty("--bottombar-h");
+    };
+  }, [hasDock]);
 
   if (!primary) return null;
 
   return (
     <>
-      <div
+      <section
+        ref={dockRef}
+        aria-label={`${job.number} actions`}
         data-chrome
-        className={cx(
-          "fixed inset-x-0 z-[var(--z-bar)] px-[var(--gutter)] transition-[bottom] duration-300 ease-[var(--ease-spring)] lg:left-[260px] print:hidden",
-          bannerUp
-            ? "bottom-[calc(var(--tabbar-space)+52px)] lg:bottom-[68px]"
-            : "bottom-[calc(var(--tabbar-space)+4px)] lg:bottom-4",
-        )}
+        className="bottom-bar flex flex-col print:hidden"
       >
-        <div
-          ref={dockRef}
-          role="toolbar"
-          aria-label={`${job.number} actions`}
-          className="enter-fade-up material mx-auto flex max-w-[560px] flex-col gap-2 rounded-[24px] p-2 shadow-[var(--shadow-float),0_0_0_0.5px_var(--sep)]"
-        >
-          {tools.length > 0 && (
-            <div className="grid auto-cols-fr grid-flow-col gap-2">{tools}</div>
-          )}
-          <div aria-busy={busy || undefined}>{primary}</div>
+        {tools.length > 0 && (
+          <div
+            role="toolbar"
+            aria-label="Job tools"
+            className="grid auto-cols-fr grid-flow-col gap-2 px-2.5 pt-2.5 min-[1200px]:order-1 min-[1200px]:px-4 min-[1200px]:pt-0 min-[1200px]:pb-4"
+          >
+            {tools}
+          </div>
+        )}
+        <div className="bottom-bar-in">
+          <div className="bottom-bar-summary">
+            <BarSummary title={summary.title} subtitle={summary.subtitle} />
+          </div>
+          <div
+            aria-busy={busy || undefined}
+            className="bottom-bar-actions max-w-[60%] min-[1200px]:w-full min-[1200px]:max-w-none min-[1200px]:[&>*]:flex-1 [&_button]:max-w-full"
+          >
+            {primary}
+          </div>
         </div>
-      </div>
+      </section>
 
       {(sheet === "eta" || sheet === "late") && (
         <EtaSheet
@@ -812,17 +965,19 @@ export function ActionBar(p: ActionBarProps) {
           onSubmit={(v) => void doRun("cancelled", v, "Job cancelled")}
         />
       )}
-      <ActionSheet
-        open={sheet === "more"}
-        onOpenChange={(o) => !o && close()}
-        title={job.number}
-        items={more.map((m) => ({
-          ...m,
-          onSelect: m.onSelect
-            ? () => setTimeout(() => m.onSelect?.(), 0)
-            : undefined,
-        }))}
-      />
+      {(sheet === "more" || moreMounted) && (
+        <ActionSheet
+          open={sheet === "more"}
+          onOpenChange={(o) => !o && close()}
+          title={job.number}
+          items={more.map((m) => ({
+            ...m,
+            onSelect: m.onSelect
+              ? () => setTimeout(() => m.onSelect?.(), 0)
+              : undefined,
+          }))}
+        />
+      )}
     </>
   );
 }

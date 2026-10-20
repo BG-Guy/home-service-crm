@@ -72,7 +72,7 @@ export function RiskChip({
   return (
     <span
       className={cx(
-        "tint-bg tint-fg inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-pill font-semibold",
+        "tint-bg tint-fg inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-pill font-semibold tracking-normal",
         size === "sm" ? "h-5 px-2 text-caption" : "h-6 px-2.5 text-footnote",
         className,
       )}
@@ -133,7 +133,7 @@ export function ScoreBreakdown({
           <li
             // biome-ignore lint/suspicious/noArrayIndexKey: static breakdown
             key={i}
-            className="list-row flex min-h-11 items-center gap-3 px-4 py-2.5"
+            className="list-row flex min-h-[var(--row-min)] items-center gap-3 px-4 py-2.5"
           >
             <span
               className="tint-bg tint-fg flex size-6 shrink-0 items-center justify-center rounded-full"

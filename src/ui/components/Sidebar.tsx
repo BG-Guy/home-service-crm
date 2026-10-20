@@ -12,9 +12,15 @@ export interface SidebarSection {
   items: readonly TabItem[];
 }
 
+/** Root-section navigation plays the M2 cross-fade, not a push (PageTransition). */
+const NAV_TAB = ["nav-tab"];
+
 /**
- * Desktop sidebar (≥ 1024 px, SPEC §13.2): 260 px, sticky, `.material`,
- * grouped sections with badges, brand header and a footer slot (user menu).
+ * Desktop sidebar (≥ 1024 px, docs/DESIGN.md §5, SPEC §13.2): 256 px, sticky, on
+ * the page canvas. Items are 36 px; the selected one is a soft card (`--card`,
+ * `--shadow-card`, hairline in dark) with an accent icon and ink text, never a
+ * solid accent bar. Quiet 12/600 section labels, right-aligned count badges, a
+ * brand header and a footer slot (user menu). Styles: `.sidebar*` in globals.css.
  */
 export function Sidebar({
   sections,
@@ -33,27 +39,12 @@ export function Sidebar({
   const flat = sections.flatMap((s) => s.items);
   const activeKey = flat[activeTabIndex(flat, pathname)]?.key;
   return (
-    <nav
-      aria-label="Main"
-      data-chrome
-      className={cx(
-        "material sticky top-0 h-dvh w-[var(--sidebar-w)] flex-col overflow-y-auto overscroll-contain shadow-[inset_-0.5px_0_0_var(--sep)]",
-        className,
-      )}
-    >
-      {header && (
-        <div className="px-5 pb-2 pt-[calc(env(safe-area-inset-top)+20px)]">
-          {header}
-        </div>
-      )}
-      <div className="flex flex-1 flex-col gap-5 px-3 pb-4 pt-2">
+    <nav aria-label="Main" data-chrome className={cx("sidebar", className)}>
+      {header && <div className="sidebar-header">{header}</div>}
+      <div className="flex flex-1 flex-col gap-5 px-3 pb-4 pt-1">
         {sections.map((s, si) => (
           <div key={s.title ?? si}>
-            {s.title && (
-              <h2 className="px-3 pb-1 text-footnote font-semibold text-label-2">
-                {s.title}
-              </h2>
-            )}
+            {s.title && <h2 className="sidebar-label">{s.title}</h2>}
             <ul className="flex flex-col gap-0.5">
               {s.items.map((it) => {
                 const on = it.key === activeKey;
@@ -61,21 +52,11 @@ export function Sidebar({
                   <li key={it.key}>
                     <Link
                       href={it.href}
+                      transitionTypes={NAV_TAB}
                       aria-current={on ? "page" : undefined}
-                      className={cx(
-                        "flex min-h-9 items-center gap-3 rounded-control px-3 text-body outline-offset-[-2px]",
-                        on
-                          ? "bg-accent font-semibold text-on-accent"
-                          : "text-label hover:bg-fill-2",
-                      )}
+                      className="sidebar-item"
                     >
-                      <span
-                        aria-hidden
-                        className={cx(
-                          "flex [&_svg]:size-5",
-                          !on && "text-accent-text",
-                        )}
-                      >
+                      <span aria-hidden className="sidebar-icon">
                         {it.icon}
                       </span>
                       <span className="min-w-0 flex-1 truncate">
@@ -84,8 +65,7 @@ export function Sidebar({
                       {it.badge ? (
                         <Badge
                           count={it.badge}
-                          tone={on ? "gray" : it.critical ? "red" : "gray"}
-                          className={on ? "bg-white/25" : undefined}
+                          tone={it.critical ? "red" : "gray"}
                         />
                       ) : null}
                     </Link>
@@ -96,11 +76,7 @@ export function Sidebar({
           </div>
         ))}
       </div>
-      {footer && (
-        <div className="hairline-t px-3 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-3">
-          {footer}
-        </div>
-      )}
+      {footer && <div className="sidebar-footer">{footer}</div>}
     </nav>
   );
 }

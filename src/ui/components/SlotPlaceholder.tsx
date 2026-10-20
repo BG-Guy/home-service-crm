@@ -15,7 +15,7 @@ export function SlotPlaceholder({
   return (
     <div
       data-slot-placeholder={name}
-      className="rounded-card border border-dashed border-label-3 px-3 py-2 text-footnote text-label-2"
+      className="rounded-tile border border-dashed border-label-3 px-3 py-2 text-footnote text-label-2"
     >
       <span className="font-semibold">{name}</span>
       {note ? ` — ${note}` : " — not built yet"}

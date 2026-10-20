@@ -12,7 +12,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { HeaderActions } from "@/app/(app)/_components/HeaderActions";
 import { AddReceiptButton } from "@/features/parts/components/LineActions";
-import { NewReceiptButton } from "@/features/parts/components/ReceiptSheet";
+import { NewReceiptButton } from "@/features/parts/components/NewReceiptButton";
 import {
   listPartFlags,
   listPurchases,

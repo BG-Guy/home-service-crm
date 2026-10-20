@@ -8,12 +8,24 @@ Previous measurement (2026-10-15 integration) in brackets.
 
 | Budget | Limit | Measured | Status |
 |---|---|---|---|
-| Shell JS (framework + root and `(app)` layouts) | ≤ 150 KB gz | 149.9 KB gz [149.4] | ok (0.1 KB headroom) |
+| Shell JS (framework + root and `(app)` layouts) | ≤ 150 KB gz | 139.2 KB gz [149.6 same method] | ok (10.8 KB headroom) |
 | Route-specific client JS | ≤ 30 KB gz per route (map excluded) | most routes 3–28 KB; 12 app/public routes over (below) | **over** on 12 routes |
-| CSS | ≤ 25 KB gz | 17.2 KB + 2.6 KB gz [16.9 + 2.6] | ok |
+| CSS | ≤ 25 KB gz | 22.3 KB + 2.6 KB gz [17.2 + 2.6] | ok (~0.6 KB left) |
 | `public/embed.js` | ≤ 3 KB gz | 3,783 B raw, 1.8 KB gz | ok |
 | `public/sw.js` | ~3 KB | 1.4 KB gz | ok |
 | `/map` (excluded from the route budget) | — | 22.7 KB + Leaflet ~43 KB in a lazy `ssr:false` chunk | ok |
+
+**Design refresh v2 (2026-10-19, F2):** 149.6 → 139.2 KB gz (framework 129.2 + root layout 3.9 +
+`(app)` layout 6.1), measured on `.next` (HEAD) vs `.next-f2` with the same script (framework root
+main files + the root and `(app)` layout chunks of a route's client reference manifest; Next's
+3.5 KB client-components chunk is loaded too and unchanged). What left the initial shell: the
+outbox + upload + hash client and the sync capsule (~9 KB, now one idle chunk with the install
+prompt and the tech location pill, `ShellDeferred`), `lazy.tsx` → Skeleton → AppShell/Avatar,
+NavBar (the skeleton header renders its own markup), the toast's icon modules, springs and tone.
+The skeleton header and lucide's `"use client"` icon runtime stay in the shell on purpose: every
+route needs them, and outside the shell Turbopack copies them into each sibling chunk. First load
+over all 142 routes: 104 lighter, 7 heavier (≤ 2.9 KB, mostly new primitive modules), average
+163.2 → 159.1 KB. CSS: 22.3 KB + 2.6 KB (Leaflet) = 24.9 KB gz.
 
 Re-measured after the final QA2 polish (same day): 149.9 KB. The +0.5 KB most likely
 comes from the verification-pass edits to shell files (upload, phone format, alert, app

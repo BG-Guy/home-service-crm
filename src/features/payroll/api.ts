@@ -140,6 +140,25 @@ export async function getPeriodEarnings(userId: string): Promise<{
   };
 }
 
+/**
+ * What the tech earned on one local day (Today's summary strip): commission, tips,
+ * spiffs and wage top-ups effective that day. Same review rule as getPeriodEarnings.
+ */
+export async function getDayEarnings(
+  userId: string,
+  day?: string,
+): Promise<number> {
+  const d = day ?? todayKey(await companyTz());
+  const rows = (await db.execute(sql`
+    select coalesce(sum(amount_cents), 0)::bigint as n from ledger_entries
+    where user_id = ${userId}::uuid and effective_date = ${d}::date
+      and type in ('commission','tip','spiff','guarantee_topup','ot_topup')
+      and not (needs_review and reverses_id is null and not exists (select 1 from ledger_entries r where r.reverses_id = ledger_entries.id))`)) as unknown as {
+    rows: { n: string | number }[];
+  };
+  return Number(rows.rows[0]?.n ?? 0);
+}
+
 const WAGE_CLASS: Record<
   ExternalLedgerType,
   "wage" | "reimbursement" | "custody" | "n/a"

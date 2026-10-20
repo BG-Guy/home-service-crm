@@ -9,6 +9,7 @@ import {
   setSmsSeparatorOverride,
   smsHref,
 } from "@/client/sms-href";
+import { SaveBar } from "@/features/settings/components/SaveBar";
 import { Banner } from "@/ui/components/Banner";
 import { Button } from "@/ui/components/Button";
 import { Select, TextField } from "@/ui/components/Field";
@@ -298,16 +299,7 @@ export function MessagingSettingsForm({
         </div>
       </ListSection>
 
-      <div className="sticky bottom-[calc(var(--tabbar-h,0px)+env(safe-area-inset-bottom)+12px)] flex justify-end lg:static">
-        <Button
-          variant="filled"
-          disabled={!dirty}
-          loading={saving}
-          onClick={save}
-        >
-          Save changes
-        </Button>
-      </div>
+      <SaveBar dirty={dirty} pending={saving} disabled={!dirty} onSave={save} />
     </div>
   );
 }

@@ -10,13 +10,15 @@ import {
 import { cx } from "../cx";
 
 /*
- * Form fields (SPEC §12.6). All server-renderable (no client hooks), 17 px text so
- * iOS never zooms, error text wired via aria-invalid + aria-describedby.
+ * Form fields (DESIGN.md §5). All server-renderable (no client hooks), 17 px text
+ * so iOS never zooms, error text wired via aria-invalid + aria-describedby.
  *
  * Two layouts:
- *  - `stacked` (default): label above a rounded field — standalone forms.
- *  - `row`: iOS Settings style inside a `<ListSection>`: label left, input right
- *    of it, transparent background, hairline separators from the list card.
+ *  - `stacked` (default): 13/600 label above a filled 48 px field (`--field`, no
+ *    border). Focus: 2 px accent ring + soft glow. Error: red ring, the M18 shake
+ *    and the message fading in (CSS only: `.field-box` in globals.css).
+ *  - `row`: settings style inside a `<ListSection>`: label left, input right of
+ *    it, transparent background, separators from the list card.
  */
 
 export type FieldLayout = "stacked" | "row";
@@ -48,7 +50,7 @@ export function FieldError({
 }) {
   if (!children) return null;
   return (
-    <p id={id} className="px-1 pt-1 text-footnote text-danger">
+    <p id={id} className="field-error px-1 pt-1 text-footnote text-danger">
       {children}
     </p>
   );
@@ -76,7 +78,7 @@ export function FormRow({
       {label && (
         <label
           htmlFor={htmlFor}
-          className="px-1 text-footnote font-medium text-label-2"
+          className="px-1 text-footnote font-semibold text-label-2"
         >
           {label}
         </label>
@@ -92,11 +94,10 @@ export function FormRow({
 }
 
 /** Class for a stacked field box (exported for custom inputs like MoneyField). */
-export const fieldBoxClass =
-  "flex min-h-11 w-full items-center gap-2 rounded-control bg-card px-3.5 text-body text-label shadow-[inset_0_0_0_0.5px_var(--sep)] focus-within:shadow-[inset_0_0_0_2px_var(--accent)] has-[[aria-invalid=true]]:shadow-[inset_0_0_0_1.5px_var(--sys-red)]";
+export const fieldBoxClass = "field-box text-body";
 
 export const inputResetClass =
-  "w-full min-w-0 flex-1 bg-transparent py-[11px] text-body text-label outline-none placeholder:text-label-3 disabled:text-label-3";
+  "w-full min-w-0 flex-1 bg-transparent py-3 text-body text-label outline-none placeholder:text-label-3 disabled:text-label-3";
 
 /**
  * Shared chrome: renders label/hint/error around `children(ids)`.
@@ -139,7 +140,7 @@ export function FieldShell({
   if (layout === "row") {
     return (
       <div className={cx("list-row px-4", className)}>
-        <div className="flex min-h-11 items-center gap-3">
+        <div className="flex min-h-[var(--row-min)] items-center gap-3">
           {label && (
             <label
               htmlFor={id}
@@ -155,7 +156,7 @@ export function FieldShell({
           {children(aria)}
           {trailing}
         </div>
-        {desc && <div className="-mt-1 pb-2">{desc}</div>}
+        {desc && <div className="-mt-1.5 pb-2.5">{desc}</div>}
       </div>
     );
   }
@@ -165,7 +166,7 @@ export function FieldShell({
         <label
           htmlFor={id}
           className={cx(
-            "px-1 text-footnote font-medium text-label-2",
+            "px-1 text-footnote font-semibold text-label-2",
             hideLabel && "sr-only",
           )}
         >

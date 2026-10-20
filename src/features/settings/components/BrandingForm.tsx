@@ -171,7 +171,7 @@ export function BrandingForm({
         </FieldCard>
 
         <section aria-label="Preview">
-          <h2 className="px-4 pb-1.5 text-footnote uppercase text-label-2">
+          <h2 className="px-4 pb-2 text-subhead font-semibold text-label-2">
             Preview
           </h2>
           <BrandPreview hex={valid} />
@@ -269,7 +269,7 @@ export function BrandingForm({
         </FieldCard>
 
         <section aria-label="Invoice header">
-          <h2 className="px-4 pb-1.5 text-footnote uppercase text-label-2">
+          <h2 className="px-4 pb-2 text-subhead font-semibold text-label-2">
             Invoice header
           </h2>
           <div className="flex flex-col gap-4 rounded-card bg-card p-4">
@@ -308,7 +308,7 @@ function BrandPreview({ hex }: { hex: string | null }) {
   return (
     <div style={style} className="flex flex-col gap-4 rounded-card bg-card p-4">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="inline-flex min-h-11 items-center rounded-control bg-accent px-5 text-body font-semibold text-on-accent">
+        <span className="inline-flex min-h-11 items-center rounded-control bg-accent-fill px-5 text-body font-semibold text-on-accent">
           Collect payment
         </span>
         <span className="inline-flex min-h-11 items-center rounded-control bg-accent/15 px-5 text-body font-semibold text-accent-text">
@@ -326,7 +326,9 @@ function BrandPreview({ hex }: { hex: string | null }) {
             key={t}
             className={cx(
               "rounded-pill px-3 py-1 text-footnote font-semibold",
-              i === 0 ? "bg-accent text-on-accent" : "bg-fill-2 text-label-2",
+              i === 0
+                ? "bg-accent-fill text-on-accent"
+                : "bg-fill-2 text-label-2",
             )}
           >
             {t}
@@ -352,7 +354,7 @@ function InvoiceHeaderPreview({
   ) : (
     <span
       aria-hidden
-      className="flex size-8 items-center justify-center rounded-[8px] bg-accent text-footnote font-bold text-on-accent"
+      className="flex size-8 items-center justify-center rounded-[8px] bg-accent-fill text-footnote font-bold text-on-accent"
     >
       {name.slice(0, 1).toUpperCase()}
     </span>

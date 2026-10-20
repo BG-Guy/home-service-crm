@@ -1,6 +1,7 @@
 import { Avatar } from "@/ui/components/Avatar";
 import { ListRow } from "@/ui/components/List";
 import { Pill } from "@/ui/components/StatusPill";
+import { Morph } from "@/ui/motion/Morph";
 import type { CustomerFlags, CustomerListItem } from "../contracts";
 import { CUSTOMER_TYPE_LABEL, FLAG_LABELS, FlagChips, Tag } from "./FlagChips";
 
@@ -43,20 +44,30 @@ export function CustomerRow({
     ...flagKeys.slice(firstFlag ? 1 : 0).map((k) => FLAG_LABELS[k]),
     ...tags.slice(firstTag ? 1 : 0).map((t) => t.name),
   ];
+  // M3: the avatar and name fly into the detail header. The active row (desktop
+  // split view, where the header is on screen too) leaves the names to the header.
+  const avatar = (
+    <Avatar name={c.displayName} seed={c.id} size={compact ? 34 : 40} />
+  );
+  const name = <span className="min-w-0 truncate">{c.displayName}</span>;
   const contact =
     [c.phoneDisplay, c.addressShort].filter(Boolean).join(" · ") ||
     CUSTOMER_TYPE_LABEL[c.type];
   return (
     <ListRow
       leading={
-        <Avatar name={c.displayName} seed={c.id} size={compact ? 34 : 40} />
+        active ? (
+          avatar
+        ) : (
+          <Morph name={`customer-${c.id}-avatar`}>{avatar}</Morph>
+        )
       }
       href={`/customers/${c.id}${q ? `?q=${encodeURIComponent(q)}` : ""}`}
       current={active}
       className={active ? "bg-fill-2" : undefined}
       title={
         <span className="flex min-w-0 items-center gap-1.5">
-          <span className="min-w-0 truncate">{c.displayName}</span>
+          {active ? name : <Morph name={`customer-${c.id}-name`}>{name}</Morph>}
           {!compact && (firstFlag || firstTag) && (
             <span className="flex shrink-0 items-center gap-1">
               {firstFlag ? (

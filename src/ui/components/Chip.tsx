@@ -2,14 +2,16 @@ import { X } from "lucide-react";
 import Link from "next/link";
 import type { CSSProperties, MouseEventHandler, ReactNode } from "react";
 import { cx } from "../cx";
-import { TONE_VAR, type Tone } from "../tone";
+import { TONE_VAR, type Tone, toneInk } from "../tone";
 
 const chipBase =
-  "pressable inline-flex h-8 shrink-0 items-center gap-1.5 rounded-pill px-3.5 text-subhead font-medium outline-offset-2 before:absolute before:inset-x-0 before:-inset-y-1.5 before:content-[''] relative";
+  "pressable relative inline-flex h-[34px] shrink-0 items-center gap-1.5 rounded-pill px-4 text-subhead font-medium outline-offset-2 before:absolute before:inset-x-0 before:-inset-y-[5px] before:content-['']";
 
 /**
- * Filter chip (SPEC §12.6). Toggle with `onClick` (renders `aria-pressed`) or
- * navigate with `href` (renders `aria-current` when `selected`).
+ * Filter chip (DESIGN.md §5): a 34 px pill. Unselected = `--card` with a
+ * hairline; selected = ink fill (`--label`) with `--bg` text, like Uber/Airbnb.
+ * Toggle with `onClick` (renders `aria-pressed`) or navigate with `href`
+ * (renders `aria-current` when `selected`).
  *
  * ```tsx
  * <Chip href="?status=open" selected={status === "open"} count={12}>Open</Chip>
@@ -38,8 +40,8 @@ export function Chip({
   const cls = cx(
     chipBase,
     selected
-      ? "bg-label text-[var(--card)]"
-      : "bg-card text-label shadow-[0_0_0_0.5px_var(--sep)] hover:bg-fill-2",
+      ? "bg-label font-semibold text-bg"
+      : "bg-card text-label shadow-[inset_0_0_0_1px_var(--sep)] hover:bg-fill-2",
     className,
   );
   const inner = (
@@ -50,7 +52,7 @@ export function Chip({
         <span
           className={cx(
             "num text-footnote",
-            selected ? "opacity-70" : "text-label-2",
+            selected ? "opacity-75" : "text-label-2",
           )}
         >
           {count}
@@ -83,15 +85,22 @@ export function Chip({
   );
 }
 
-/** Horizontally scrolling chip row with side gutters (no visible scrollbar). */
+/**
+ * Horizontally scrolling chip row, full-bleed to the page gutters: scroll-snap,
+ * edge-fade masks over the gutters, no visible scrollbar. `sticky` pins it under
+ * the nav bar (`--sticky-top`, default safe area + 44 px) on the canvas color.
+ */
 export function ChipRow({
   children,
   label,
+  sticky,
   className,
 }: {
   children: ReactNode;
   /** Accessible group label, e.g. "Filter jobs". */
   label?: string;
+  /** Stick under the nav bar while the list scrolls. */
+  sticky?: boolean;
   className?: string;
 }) {
   return (
@@ -99,8 +108,9 @@ export function ChipRow({
     <div
       role="group"
       aria-label={label}
+      data-sticky={sticky ? "" : undefined}
       className={cx(
-        "no-scrollbar -mx-[var(--gutter)] flex gap-2 overflow-x-auto px-[var(--gutter)] py-1.5",
+        "chip-row -mx-[var(--gutter)] px-[var(--gutter)] py-1.5",
         className,
       )}
     >
@@ -128,13 +138,15 @@ export function TagChip({
   size?: "sm" | "md";
   className?: string;
 }) {
+  // A DB color has no ink token: `initial` makes .tint-fg mix it toward --label.
   const style = {
     "--tone": color || TONE_VAR[tone],
+    "--tone-ink": color ? "initial" : toneInk(tone),
   } as CSSProperties;
   return (
     <span
       className={cx(
-        "tint-bg tint-fg inline-flex shrink-0 items-center gap-1 rounded-pill font-medium",
+        "tint-bg tint-fg inline-flex shrink-0 items-center gap-1 rounded-pill font-semibold",
         size === "sm" ? "h-5 px-2 text-caption" : "h-6 px-2.5 text-footnote",
         onRemove && "pr-1",
         className,

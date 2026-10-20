@@ -19,10 +19,12 @@ import { formatPhoneDisplay } from "@/lib/phone-display";
 import { Avatar } from "@/ui/components/Avatar";
 import { ListRow, ListSection } from "@/ui/components/List";
 import { MoneyText } from "@/ui/components/MoneyText";
+import { Morph } from "@/ui/motion/Morph";
 import { auditCustomerView, getCustomerBrief, getPropertyBrief } from "./api";
 import { CallButton } from "./components/CallButton";
 import { EmailLink } from "./components/EmailLink";
 import { CUSTOMER_TYPE_LABEL, FlagChips, Tag } from "./components/FlagChips";
+import { QuickActionLink, QuickActionRow } from "./components/QuickActions";
 import type { CustomerCardProps, PropertyCardProps } from "./contracts";
 import { navigateHref } from "./normalize";
 
@@ -46,6 +48,8 @@ export async function CustomerCard({
   jobId,
   variant = "full",
   showActions = true,
+  extraActions,
+  morph = true,
 }: CustomerCardProps) {
   const viewer = await getCurrentUser();
   if (!viewer) return null;
@@ -103,51 +107,78 @@ export async function CustomerCard({
   }
 
   if (variant === "header") {
+    const avatar = (
+      <Avatar name={brief.displayName} seed={brief.id} size={88} />
+    );
+    const name = (
+      <h1 className="inline-block text-title1 text-label">
+        {brief.displayName}
+      </h1>
+    );
+    const chips =
+      returning ||
+      Object.values(brief.flags).some(Boolean) ||
+      brief.tags.length > 0;
     return (
-      <div className="flex flex-col items-center gap-2 pt-2 text-center">
-        <Avatar name={brief.displayName} seed={brief.id} size={72} />
-        <div>
-          <h1 className="text-title2 font-bold">{brief.displayName}</h1>
-          <p className="text-subhead text-label-2">
+      <section
+        aria-label="Customer"
+        className="flex flex-col items-center gap-3 pt-2 text-center"
+      >
+        {morph ? (
+          <Morph name={`customer-${brief.id}-avatar`}>{avatar}</Morph>
+        ) : (
+          avatar
+        )}
+        <div className="flex flex-col items-center gap-0.5">
+          {morph ? (
+            <Morph name={`customer-${brief.id}-name`}>{name}</Morph>
+          ) : (
+            name
+          )}
+          <p className="num text-subhead text-label-2">
             {typeLabel}
             {phoneText ? ` · ${phoneText}` : ""}
           </p>
         </div>
-        <div className="flex flex-wrap justify-center gap-1.5">
-          <FlagChips flags={brief.flags} returning={returning} />
-          {brief.tags.map((t) => (
-            <Tag key={t.id} name={t.name} color={t.color} />
-          ))}
-        </div>
-        {showActions && (
-          <div className="mt-2 flex w-full max-w-md gap-2">
-            {brief.phoneMasked && (
+        {chips && (
+          <div className="flex flex-wrap justify-center gap-1.5">
+            <FlagChips flags={brief.flags} returning={returning} />
+            {brief.tags.map((t) => (
+              <Tag key={t.id} name={t.name} color={t.color} />
+            ))}
+          </div>
+        )}
+        {(showActions || extraActions) && (
+          <QuickActionRow className="mt-2 w-full">
+            {showActions && brief.phoneMasked && (
               <CallButton
                 customerId={brief.id}
                 jobId={jobId}
-                variant="tile"
+                variant="round"
                 disabled={!brief.contactRevealed}
               />
             )}
-            {canText && (
-              <Link
+            {showActions && canText && (
+              <QuickActionLink
                 href={`/messages/${brief.id}`}
-                className="pressable flex min-h-[58px] flex-1 flex-col items-center justify-center gap-1 rounded-card bg-card text-footnote font-medium text-accent-text shadow-card"
-              >
-                <MessageCircle size={20} aria-hidden />
-                Text
-              </Link>
+                icon={<MessageCircle />}
+                label="Text"
+              />
             )}
-            {brief.email && <EmailLink customerId={brief.id} variant="tile" />}
-          </div>
+            {showActions && brief.email && (
+              <EmailLink customerId={brief.id} variant="round" />
+            )}
+            {extraActions}
+          </QuickActionRow>
         )}
-      </div>
+      </section>
     );
   }
 
   // full
   return (
     <ListSection
+      variant="title"
       header="Customer"
       trailing={
         <Link href={href} className="text-accent-text">
@@ -258,7 +289,7 @@ export async function PropertyCard({
             href={nav}
             target="_blank"
             rel="noopener noreferrer"
-            className="pressable inline-flex min-h-11 items-center gap-1.5 rounded-pill bg-accent px-4 text-subhead font-semibold text-on-accent"
+            className="btn btn-secondary btn-sm pressable"
           >
             <Navigation size={16} aria-hidden /> Navigate
           </a>
@@ -283,6 +314,7 @@ export async function PropertyCard({
 
   return (
     <ListSection
+      variant="title"
       header={p.label ? `Service address · ${p.label}` : "Service address"}
       footer={
         p.masked
@@ -301,7 +333,7 @@ export async function PropertyCard({
             <span className="block text-body">{p.addressShort}</span>
             <span className="block text-subhead text-label-2">{cityLine}</span>
           </span>
-          <span className="inline-flex items-center gap-1 rounded-pill bg-accent px-3.5 py-1.5 text-subhead font-semibold text-on-accent">
+          <span className="btn btn-secondary btn-sm">
             <Navigation size={15} aria-hidden /> Navigate
           </span>
         </a>

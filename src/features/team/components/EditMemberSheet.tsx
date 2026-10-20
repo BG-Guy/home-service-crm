@@ -50,33 +50,9 @@ export interface EditableMember {
   } | null;
 }
 
-export function EditMemberButton({
-  member,
-  skills,
-}: {
-  member: EditableMember;
-  skills: { id: string; name: string }[];
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <>
-      <Button variant="plain" size="sm" onClick={() => setOpen(true)}>
-        Edit
-      </Button>
-      {open && (
-        <EditMemberSheet
-          member={member}
-          skills={skills}
-          onClosed={() => setOpen(false)}
-        />
-      )}
-    </>
-  );
-}
-
 let licenseSeq = 0;
 
-function EditMemberSheet({
+export default function EditMemberSheet({
   member,
   skills,
   onClosed,
@@ -177,7 +153,7 @@ function EditMemberSheet({
           </FieldCard>
 
           <section>
-            <h2 className="px-4 pb-1.5 text-footnote uppercase text-label-2">
+            <h2 className="px-4 pb-2 text-subhead font-semibold text-label-2">
               Calendar color
             </h2>
             <div className="rounded-card bg-card p-4">
@@ -192,7 +168,7 @@ function EditMemberSheet({
           </section>
 
           <section>
-            <h2 className="px-4 pb-1.5 text-footnote uppercase text-label-2">
+            <h2 className="px-4 pb-2 text-subhead font-semibold text-label-2">
               Worker type
             </h2>
             <div className="rounded-card bg-card p-3">
@@ -298,7 +274,9 @@ function EditMemberSheet({
 
           <section>
             <div className="flex items-end justify-between px-4 pb-1.5">
-              <h2 className="text-footnote uppercase text-label-2">Licenses</h2>
+              <h2 className="text-subhead font-semibold text-label-2">
+                Licenses
+              </h2>
               <Button
                 variant="plain"
                 size="sm"

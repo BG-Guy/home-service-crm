@@ -1,10 +1,9 @@
 import "server-only";
 import { desc, eq } from "drizzle-orm";
-import { CreditCard, Wallet } from "lucide-react";
+import { Wallet } from "lucide-react";
 import { hasCardProcessor, processorReady } from "@/adapters/payments";
 import { db } from "@/db";
 import { depositRequests, payments } from "@/db/schema";
-import { assertCustomerAccess } from "@/features/customers/api";
 import { assertJobAccess } from "@/features/jobs/api";
 import { getCurrentUser } from "@/lib/auth/current";
 import { formatMoney } from "@/lib/money";
@@ -17,21 +16,20 @@ import { ListRow, ListSection } from "@/ui/components/List";
 import { MoneyText } from "@/ui/components/MoneyText";
 import { Pill, StatusPill } from "@/ui/components/StatusPill";
 import {
-  DepositActions,
-  MarkRefundPaidButton,
-  RefundButton,
-  RequestDepositButton,
-  VerifyButton,
-} from "./components/PaymentActions";
+  LazyDepositActions as DepositActions,
+  LazyMarkRefundPaidButton as MarkRefundPaidButton,
+  LazyRefundButton as RefundButton,
+  LazyRequestDepositButton as RequestDepositButton,
+  LazyVerifyButton as VerifyButton,
+} from "./components/islands";
 import type {
-  CustomerPaymentsPanelProps,
   DepositChipProps,
   JobPaymentsPanelProps,
   PaymentListRow,
 } from "./contracts";
 import { DEPOSIT_JOB_STATUSES } from "./internal";
-import { getCustomerPayments, getJobPaymentsPanel } from "./queries";
-import { CollectPaymentButton, RecordPaymentButton } from "./slots.client";
+import { getJobPaymentsPanel } from "./queries";
+import { CollectPaymentButton } from "./slots.client";
 
 // Server UI slots produced by B4 (BUILD_PLAN §5.1). Each checks its own permission,
 // row scope and feature flag and returns null when the viewer may not see it.
@@ -140,7 +138,10 @@ function PaymentRow({
 }
 
 /** S16 — Payments, deposits, refunds, verify state and a Collect button (job Invoice tab). */
-export async function JobPaymentsPanel({ jobId }: JobPaymentsPanelProps) {
+export async function JobPaymentsPanel({
+  jobId,
+  hideCollect,
+}: JobPaymentsPanelProps) {
   const user = await getCurrentUser();
   if (!user || !canSeeMoney(user)) return null;
   let data: Awaited<ReturnType<typeof getJobPaymentsPanel>>;
@@ -320,7 +321,7 @@ export async function JobPaymentsPanel({ jobId }: JobPaymentsPanelProps) {
         </ListSection>
       )}
 
-      {canCollect && due && data.job.status !== "cancelled" && (
+      {!hideCollect && canCollect && due && data.job.status !== "cancelled" && (
         <CollectPaymentButton
           jobId={jobId}
           invoiceId={data.invoice?.id}
@@ -339,66 +340,7 @@ export async function JobPaymentsPanel({ jobId }: JobPaymentsPanelProps) {
   );
 }
 
-/** S17 — Customer payment history and Record payment (customer detail). */
-export async function CustomerPaymentsPanel({
-  customerId,
-}: CustomerPaymentsPanelProps) {
-  const user = await getCurrentUser();
-  if (!user || !canSeeMoney(user)) return null;
-  try {
-    await assertCustomerAccess(user, customerId, "read");
-  } catch {
-    return null;
-  }
-  if (!user.perms.has("payments.view_all") && user.baseRole === "tech")
-    return null;
-  const [data, tz] = await Promise.all([
-    getCustomerPayments(customerId),
-    getCompanyTimezone(),
-  ]);
-  const openBalance = data.openInvoices.reduce((s, i) => s + i.balanceCents, 0);
-  return (
-    <ListSection
-      header="Payments"
-      footer={
-        openBalance > 0
-          ? `${formatMoney(openBalance)} open across ${data.openInvoices.length} invoice${data.openInvoices.length === 1 ? "" : "s"}.`
-          : undefined
-      }
-      trailing={
-        user.perms.has("payments.record_manual") &&
-        data.openInvoices.length > 0 ? (
-          <RecordPaymentButton customerId={customerId} />
-        ) : undefined
-      }
-    >
-      {data.payments.length === 0 ? (
-        <EmptyState
-          compact
-          icon={<CreditCard size={36} strokeWidth={1.6} />}
-          title="No payments yet"
-        />
-      ) : (
-        data.payments.slice(0, 10).map((p) => (
-          <ListRow
-            key={p.id}
-            title={
-              <>
-                <MoneyText cents={p.amountCents + p.tipCents} /> ·{" "}
-                {p.methodLabel}
-              </>
-            }
-            subtitle={`${formatDate(p.at, tz)}${p.jobNumber ? ` · Job ${p.jobNumber}` : ""}${p.invoiceNumber ? ` · ${p.invoiceNumber}` : ""}`}
-            detail={
-              <StatusPill kind="payment" status={paymentStatus(p)} size="sm" />
-            }
-            href={p.jobId ? `/jobs/${p.jobId}?tab=invoice` : undefined}
-          />
-        ))
-      )}
-    </ListSection>
-  );
-}
+export { CustomerPaymentsPanel } from "./customer-slots";
 
 /** S18 — "Deposit required $X" or "Deposit $X paid {date}" (job header). */
 export async function DepositChip({ jobId }: DepositChipProps) {

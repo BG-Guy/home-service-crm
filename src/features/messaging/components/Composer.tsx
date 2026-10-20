@@ -1,13 +1,21 @@
 "use client";
 
-import { Mail, MessageCircle, MessageSquare, Send } from "lucide-react";
+import {
+  ArrowUp,
+  Mail,
+  MessageCircle,
+  MessageSquare,
+  Send,
+} from "lucide-react";
 import { useId, useMemo, useState } from "react";
 import { formatPhoneDisplay } from "@/lib/phone-display";
 import { Banner } from "@/ui/components/Banner";
 import { Button } from "@/ui/components/Button";
 import { Chip, ChipRow } from "@/ui/components/Chip";
 import { TextArea, TextField } from "@/ui/components/Field";
+import { IconButton } from "@/ui/components/IconButton";
 import { SegmentedControl } from "@/ui/components/SegmentedControl";
+import { Spinner } from "@/ui/components/Spinner";
 import { toast } from "@/ui/components/Toast";
 import { Toggle } from "@/ui/components/Toggle";
 import { cx } from "@/ui/cx";
@@ -215,6 +223,184 @@ export function Composer({
     },
   ];
 
+  const disabled =
+    !body.trim() ||
+    sending ||
+    locked ||
+    (blockedText && !override) ||
+    (channel === "email" && !data.email);
+  const channelsOn = channelSegments.filter((c) => !c.disabled);
+  const nextChannel =
+    channelsOn[
+      (channelsOn.findIndex((c) => c.value === channel) + 1) % channelsOn.length
+    ]?.value ?? channel;
+  const channelName = (c: Ch) =>
+    c === "email" ? "email" : c === "whatsapp" ? "WhatsApp" : "text";
+  const ChannelIcon =
+    channel === "email"
+      ? Mail
+      : channel === "whatsapp"
+        ? MessageCircle
+        : MessageSquare;
+
+  const banners = (
+    <>
+      {locked && (
+        <Banner tone="info" title="Texting opens near the visit">
+          You can text this customer from 2 hours before your visit until a day
+          after. Email works any time.
+        </Banner>
+      )}
+
+      {blockedText && !locked && (
+        <Banner
+          tone="warning"
+          title={optedOut ? "Opted out of texts" : "No permission to text"}
+        >
+          <p>
+            {optedOut
+              ? "This customer asked us to stop texting. Only send a reply they asked for."
+              : "This customer hasn't agreed to texts yet."}{" "}
+            Email is always an option
+            {data.email ? "" : " once you add an address"}.
+          </p>
+          {data.phone && !data.doNotContact && (
+            // biome-ignore lint/a11y/noLabelWithoutControl: the Toggle input is a descendant
+            <label className="mt-2 flex min-h-11 items-center justify-between gap-3">
+              <span className="text-subhead">
+                Send this one reply anyway (not marketing)
+              </span>
+              <Toggle
+                label="Send anyway"
+                checked={override}
+                onChange={(e) => setOverride(e.currentTarget.checked)}
+              />
+            </label>
+          )}
+        </Banner>
+      )}
+    </>
+  );
+
+  const templateChips = templates.length > 0 && (
+    <ChipRow label="Templates">
+      {templates.map((t) => (
+        <Chip
+          key={t.key}
+          selected={templateKey === t.key}
+          onClick={() => pickTemplate(t.key)}
+        >
+          {loadingTpl === t.key ? "Loading…" : t.label}
+        </Chip>
+      ))}
+    </ChipRow>
+  );
+
+  const onBody = (v: string) => {
+    setBody(v);
+    // Hand-edited text is the person's own message, not the template: the
+    // template's send-time rules (job still booked…) no longer apply (T2-08).
+    if (templateKey) setTemplateKey(null);
+  };
+
+  // Compact = the thread's pill composer (iMessage): channel switch, a growing
+  // pill field and a round send button inside it.
+  if (compact) {
+    const lines = Math.min(
+      6,
+      Math.max(1, body.split("\n").length, Math.ceil(body.length / 38)),
+    );
+    return (
+      <div className="flex flex-col gap-2">
+        {banners}
+        {templateChips}
+        {channel === "email" && (
+          <TextField
+            label="Subject"
+            hideLabel
+            value={subject}
+            onChange={(e) => setSubject(e.currentTarget.value)}
+            placeholder="Subject"
+          />
+        )}
+        <div className="flex items-end gap-2">
+          {channelsOn.length > 1 ? (
+            <IconButton
+              label={`Sending by ${channelName(channel)}. Switch to ${channelName(nextChannel)}`}
+              variant="secondary"
+              size={40}
+              className="mb-0.5 shrink-0"
+              onClick={() => {
+                setChannel(nextChannel);
+                setTemplateKey(null);
+              }}
+            >
+              <ChannelIcon aria-hidden size={19} />
+            </IconButton>
+          ) : null}
+          <div className="relative min-w-0 flex-1">
+            <textarea
+              id={fieldId}
+              aria-label="Message"
+              value={body}
+              rows={lines}
+              // biome-ignore lint/a11y/noAutofocus: opt-in prop (the thread opened to reply)
+              autoFocus={autoFocus}
+              maxLength={1600}
+              placeholder={`${channel === "email" ? "Email" : "Message"} ${data.customerName.split(" ")[0] ?? ""}`}
+              onChange={(e) => onBody(e.currentTarget.value)}
+              onKeyDown={(e) => {
+                if (
+                  e.key === "Enter" &&
+                  (e.metaKey || e.ctrlKey) &&
+                  !disabled
+                ) {
+                  e.preventDefault();
+                  void send();
+                }
+              }}
+              className="block max-h-40 min-h-11 w-full resize-none rounded-[22px] border-[0.5px] border-sep bg-field py-[10px] pr-12 pl-4 text-body text-label placeholder:text-label-3 outline-none transition-shadow [field-sizing:content] focus-visible:shadow-[0_0_0_2px_var(--accent)]"
+            />
+            <IconButton
+              label={channel === "email" ? "Send email" : "Send text"}
+              variant="primary"
+              size={30}
+              className="!absolute right-[7px] bottom-[7px] transition-transform data-[off]:scale-90 disabled:!bg-fill disabled:!text-label-3 disabled:!opacity-100"
+              disabled={disabled}
+              data-off={disabled ? "" : undefined}
+              onClick={send}
+            >
+              {sending ? (
+                <Spinner size={16} />
+              ) : (
+                <ArrowUp aria-hidden size={18} strokeWidth={2.75} />
+              )}
+            </IconButton>
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-2 px-2 text-caption text-label-2">
+          <span className="truncate">
+            {isText
+              ? `${channel === "whatsapp" ? "WhatsApp" : "Text"} to ${data.phone ? formatPhoneDisplay(data.phone) : "no number"}`
+              : `Email to ${data.email ?? "no email"}`}
+          </span>
+          {isText && body && (
+            <span
+              className={cx(
+                "num shrink-0",
+                seg.encoding === "UCS-2" && "text-warning",
+              )}
+            >
+              {body.length} · {seg.segments} segment
+              {seg.segments === 1 ? "" : "s"}
+              {seg.encoding === "UCS-2" ? " (emoji)" : ""}
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={cx("flex flex-col", compact ? "gap-2" : "gap-3")}>
       <SegmentedControl
@@ -319,7 +505,7 @@ export function Composer({
       </div>
 
       <Button
-        variant="filled"
+        variant="primary"
         icon={<Send aria-hidden size={18} />}
         loading={sending}
         disabled={

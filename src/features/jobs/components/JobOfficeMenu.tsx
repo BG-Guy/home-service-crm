@@ -2,7 +2,7 @@
 
 import { Ellipsis } from "lucide-react";
 import dynamic from "next/dynamic";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { ActionSheet, type ActionSheetItem } from "@/ui/components/ActionSheet";
 import { IconButton } from "@/ui/components/IconButton";
 import { toast } from "@/ui/components/Toast";
@@ -38,6 +38,7 @@ export function JobOfficeMenu({
   defaultWindow,
   todayKey,
   initial,
+  openSignal,
 }: {
   job: EditableJob & {
     number: string;
@@ -62,9 +63,14 @@ export function JobOfficeMenu({
   windowLengths: number[];
   defaultWindow: number;
   todayKey: string;
-  initial?: "assign" | null;
+  initial?: "assign" | "menu" | null;
+  /** Light trigger mode (JobOfficeMenuButton): no button; each bump reopens the menu. */
+  openSignal?: number;
 }) {
   const [sheet, setSheet] = useState<Sheet>(initial ?? null);
+  useEffect(() => {
+    if (openSignal) setSheet("menu");
+  }, [openSignal]);
   const [, start] = useTransition();
   const { run, pending } = useStatusRunner(job.id);
   const close = () => setSheet(null);
@@ -141,13 +147,15 @@ export function JobOfficeMenu({
 
   return (
     <>
-      <IconButton
-        label="Job actions"
-        variant="plain"
-        onClick={() => setSheet("menu")}
-      >
-        <Ellipsis size={22} />
-      </IconButton>
+      {openSignal === undefined && (
+        <IconButton
+          label="Job actions"
+          variant="plain"
+          onClick={() => setSheet("menu")}
+        >
+          <Ellipsis size={22} />
+        </IconButton>
+      )}
       <ActionSheet
         open={sheet === "menu"}
         onOpenChange={(o) => !o && sheet === "menu" && close()}
@@ -212,3 +220,5 @@ export function JobOfficeMenu({
     </>
   );
 }
+
+export default JobOfficeMenu;

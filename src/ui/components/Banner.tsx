@@ -30,9 +30,10 @@ const MAP: Record<BannerTone, { tone: Tone; Icon: typeof Info }> = {
 };
 
 /**
- * Inline banner for info / warnings / errors / ⚖️ compliance notes (SPEC §12.6).
- * Tinted card with icon, optional title, body, action and dismiss.
- * Server-renderable; `onDismiss` only works from a client parent.
+ * Inline banner for info / warnings / errors / ⚖️ compliance notes (DESIGN.md §5).
+ * A soft tinted tile with an AA-ink icon, optional title, body, action (e.g. a
+ * retry button) and dismiss. Server-renderable; `onDismiss` only works from a
+ * client parent.
  */
 export function Banner({
   tone = "info",
@@ -57,22 +58,22 @@ export function Banner({
     <div
       role={tone === "error" ? "alert" : "status"}
       className={cx(
-        "tint-bg flex items-start gap-3 rounded-card px-3.5 py-3",
+        "tint-bg flex items-start gap-3 rounded-tile px-4 py-3.5",
         className,
       )}
       style={toneStyle(t)}
     >
-      <span aria-hidden className="tone-fg mt-px flex shrink-0">
+      <span aria-hidden className="tint-fg flex shrink-0">
         {icon ?? <Icon size={20} strokeWidth={2.25} />}
       </span>
       <div className="min-w-0 flex-1 text-subhead">
-        {title && <div className="font-semibold">{title}</div>}
+        {title && <div className="font-semibold text-label">{title}</div>}
         {children && (
           <div className={cx(title ? "text-label-2" : "text-label")}>
             {children}
           </div>
         )}
-        {action && <div className="mt-2">{action}</div>}
+        {action && <div className="mt-2.5">{action}</div>}
       </div>
       {onDismiss && (
         <button

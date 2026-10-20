@@ -30,7 +30,7 @@ export function CopyBlock({
   return (
     <div className={cx("relative rounded-control bg-fill-2", className)}>
       {label && (
-        <div className="px-3 pt-2 text-caption font-semibold uppercase text-label-2">
+        <div className="px-3 pt-2 text-footnote font-semibold text-label-2">
           {label}
         </div>
       )}

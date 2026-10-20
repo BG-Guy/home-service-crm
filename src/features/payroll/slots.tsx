@@ -10,9 +10,8 @@ import { KeyValueList } from "@/ui/components/KeyValueList";
 import { ListRow, ListSection } from "@/ui/components/List";
 import { Pill } from "@/ui/components/StatusPill";
 import { getCustodyBalances, getJobFinancials, getPeriodEarnings } from "./api";
-import { CashCountForm } from "./components/CashCountForm";
+import { CashCountForm, WhyAmount } from "./components/islands";
 import { Trace } from "./components/Trace";
-import { WhyAmount } from "./components/WhyAmount";
 import type {
   CashCheckSectionProps,
   CashOnHandPillProps,
@@ -127,10 +126,14 @@ export async function MyEarningsCard({ userId }: MyEarningsCardProps) {
   return (
     <Link
       href={user.id === userId ? "/pay" : "/pay/settlements"}
-      className="list-card pressable flex flex-col gap-2 p-4"
+      transitionTypes={["nav-forward"]}
+      className="card pressable hover-lift flex flex-col gap-1.5 p-[var(--card-pad)]"
     >
-      <span className="text-footnote font-semibold uppercase tracking-wide text-label-2">
-        {pe.startsOn ? `Pay · week of ${formatDateKey(pe.startsOn)}` : "Pay"}
+      <span className="flex items-center gap-1.5 text-footnote font-medium text-label-2">
+        <Wallet size={14} aria-hidden />
+        {pe.startsOn
+          ? `Pay this week · from ${formatDateKey(pe.startsOn)}`
+          : "Pay"}
       </span>
       <span
         className={`num text-title1 font-bold ${pe.netCents < 0 ? "text-danger" : ""}`}

@@ -42,7 +42,7 @@ import { Elapsed } from "./Elapsed";
 import { IssueActions } from "./IssueActions";
 import { MaintenanceSuggest } from "./MaintenanceSuggest";
 import { ReminderRuleButton } from "./ReminderRuleButton";
-import { TripButton } from "./TripSheet";
+import { TripButton } from "./TripButton";
 
 // Server-rendered tab bodies for /vehicles/[id] (SPEC M17). Each loads its own data.
 
@@ -361,7 +361,9 @@ export async function OverviewTab({
       </ListSection>
 
       <section aria-label="History" className="flex flex-col gap-1.5">
-        <h2 className="px-4 text-footnote uppercase text-label-2">History</h2>
+        <h2 className="px-4 text-subhead font-semibold text-label-2">
+          History
+        </h2>
         <ActivityTimeline entity={{ type: "vehicle", id: v.id }} limit={20} />
       </section>
     </div>

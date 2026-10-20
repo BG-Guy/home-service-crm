@@ -1,11 +1,10 @@
-import { CircleCheck } from "lucide-react";
 import type { Metadata } from "next";
 import { InvoiceDocument } from "@/features/invoices/components/InvoiceDocument";
 import { loadInvoiceDoc, paymentMethodLabel } from "@/features/invoices/doc";
 import { InvoicePhotoGrid } from "@/features/media/slots";
 import { getPaymentReceiptData } from "@/features/payments/api";
-import { ReceiptFlagButton } from "@/features/payments/slots.client";
 import { payInvoiceFromPortal } from "@/features/portal/actions";
+import { LazyReceiptFlag } from "@/features/portal/components/LazyReceiptFlag";
 import {
   PortalExpired,
   PortalFooter,
@@ -18,6 +17,8 @@ import { getSettings } from "@/lib/settings";
 import { formatDate, formatDateTime } from "@/lib/time";
 import { Button } from "@/ui/components/Button";
 import { KeyValueList } from "@/ui/components/KeyValueList";
+import { SuccessCheck } from "@/ui/components/SuccessCheck";
+import { cx } from "@/ui/cx";
 
 /** Card entry modes worth showing; cash/check/p2p repeat the method, so they're omitted. */
 const ENTRY_LABEL: Record<string, string> = {
@@ -67,15 +68,15 @@ export default async function ITokenPage({
       const entry = r.entryMode ? ENTRY_LABEL[r.entryMode] : undefined;
       return (
         <div className="space-y-5 pt-2">
-          <section className="list-card flex flex-col items-center px-5 py-7 text-center">
-            <CircleCheck size={44} className="text-success" aria-hidden />
-            <p className="mt-2 text-footnote font-semibold uppercase text-label-2">
+          <section className="card flex flex-col items-center px-6 py-8 text-center">
+            <SuccessCheck size={64} label="Paid" />
+            <p className="num mt-4 text-subhead font-semibold text-label-2">
               Receipt · {inv.number}
             </p>
-            <p className="num mt-1 text-large-title font-bold">
+            <h1 className="num mt-1 text-[44px] font-bold leading-[1.05] tracking-[-0.03em]">
               {formatMoney(r.amountCents + r.tipCents)}
-            </p>
-            <p className="text-subhead text-label-2">
+            </h1>
+            <p className="mt-1 text-subhead text-label-2">
               Paid · {method} · {formatDateTime(r.at, tz)}
             </p>
           </section>
@@ -107,21 +108,21 @@ export default async function ITokenPage({
               tokenId={tok.id}
             />
           ) : null}
-          <section className="list-card px-5 py-4">
-            <p className="text-subhead">
-              Something wrong with this payment? Tell us right away and a
-              manager will call you.
-            </p>
-            <div className="mt-3">
-              <ReceiptFlagButton token={token} paymentId={r.paymentId} />
-            </div>
-          </section>
-          <div className="flex flex-wrap gap-2">
-            <Button href={`/i/${token}`} variant="tinted">
+          <div className="flex flex-wrap justify-center gap-2 print:hidden">
+            <Button href={`/i/${token}`} variant="secondary">
               View invoice
             </Button>
             <PrintButton label="Save receipt" />
           </div>
+          <section className="card px-5 py-4 print:hidden">
+            <p className="text-subhead text-label-2">
+              Something wrong with this payment? Tell us right away and a
+              manager will call you.
+            </p>
+            <div className="mt-2 -ml-3">
+              <LazyReceiptFlag token={token} paymentId={r.paymentId} />
+            </div>
+          </section>
           <PortalFooter />
         </div>
       );
@@ -133,47 +134,53 @@ export default async function ITokenPage({
     inv.balanceCents > 0;
   return (
     <div className="space-y-5 pt-2">
-      <section className="list-card px-5 py-5 print:hidden">
+      <section className="card px-5 pb-5 pt-6 print:hidden">
         {open ? (
           <>
-            <p className="text-footnote font-semibold uppercase text-label-2">
+            <p
+              className={cx(
+                "text-subhead font-semibold",
+                inv.overdue ? "text-danger" : "text-label-2",
+              )}
+            >
               {inv.overdue ? "Past due" : "Amount due"}
               {inv.dueAt ? ` · ${formatDate(inv.dueAt, tz)}` : ""}
             </p>
-            <p className="num mt-1 text-large-title font-bold">
+            <h1 className="num mt-1 text-[44px] font-bold leading-[1.05] tracking-[-0.03em]">
               {formatMoney(inv.balanceCents)}
+            </h1>
+            <p className="mt-1 text-subhead text-label-2">
+              Invoice {inv.number}
             </p>
-            <form action={payInvoiceFromPortal} className="mt-4">
+            <form action={payInvoiceFromPortal} className="mt-5">
               <input type="hidden" name="token" value={token} />
               <input type="hidden" name="from" value="i" />
-              <Button type="submit" size="lg" fullWidth>
+              <Button type="submit" size="lg" block>
                 Pay {formatMoney(inv.balanceCents)}
               </Button>
             </form>
           </>
         ) : (
-          <div className="flex items-center gap-3">
-            <CircleCheck
-              size={32}
-              className="shrink-0 text-success"
-              aria-hidden
-            />
-            <div>
-              <p className="text-headline">
+          <div className="flex items-center gap-4">
+            {inv.status === "void" || inv.status === "uncollectible" ? null : (
+              <SuccessCheck size={48} label="Paid" />
+            )}
+            <div className="min-w-0">
+              <h1 className="text-title3">
                 {inv.status === "void"
                   ? "This invoice was cancelled"
                   : inv.status === "uncollectible"
                     ? "This invoice is closed"
-                    : "Paid in full — thank you!"}
-              </p>
-              <p className="text-subhead text-label-2">
+                    : "Paid in full, thank you!"}
+              </h1>
+              <p className="num text-subhead text-label-2">
                 Invoice {inv.number} · {formatMoney(inv.totalCents)}
               </p>
             </div>
           </div>
         )}
         <div className="mt-3 flex justify-center">
-          <PrintButton />
+          <PrintButton variant="plain" size="sm" />
         </div>
       </section>
 

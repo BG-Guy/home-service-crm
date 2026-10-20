@@ -15,17 +15,20 @@ const EtaSheet = dynamic(
 );
 
 /**
- * Next-job hero button on My Day: On my way / Arrived / Open job. Navigate lives on
- * the address card right below it (one Navigate button, QA T1-23).
+ * The one primary on the Today hero: On my way / Arrived / Open job. Navigate, call
+ * and text are round icon buttons next to it (NextJobHero). `muted` steps it down to
+ * a tinted button while "Clock in" is the page's primary.
  */
 export function HeroActions({
   jobId,
   status: initial,
   customerFirstName,
+  muted,
 }: {
   jobId: string;
   status: JobStatus;
   customerFirstName: string | null;
+  muted?: boolean;
 }) {
   const router = useRouter();
   const [status, setStatus] = useState(initial);
@@ -44,10 +47,12 @@ export function HeroActions({
     if (to === "arrived" && r) router.push(`/jobs/${jobId}`);
   };
 
+  const variant = muted ? "tinted" : "primary";
   const primary =
     status === "scheduled" || status === "confirmed" ? (
       <Button
-        className="flex-1"
+        variant={variant}
+        block
         icon={<Car size={18} aria-hidden />}
         loading={pending === "en_route"}
         onClick={() => setEta(true)}
@@ -56,7 +61,8 @@ export function HeroActions({
       </Button>
     ) : status === "en_route" ? (
       <Button
-        className="flex-1"
+        variant={variant}
+        block
         icon={<MapPinCheck size={18} aria-hidden />}
         loading={pending === "arrived"}
         onClick={() => void go("arrived", {}, "Arrived")}
@@ -65,7 +71,8 @@ export function HeroActions({
       </Button>
     ) : (
       <Button
-        className="flex-1"
+        variant={variant}
+        block
         href={`/jobs/${jobId}`}
         transition="push"
         icon={<ChevronRight size={18} aria-hidden />}
@@ -75,7 +82,7 @@ export function HeroActions({
     );
 
   return (
-    <div className="flex gap-2">
+    <>
       {primary}
       {eta && (
         <EtaSheet
@@ -87,6 +94,6 @@ export function HeroActions({
           onSubmit={(m) => void go("en_route", { etaMinutes: m }, "On the way")}
         />
       )}
-    </div>
+    </>
   );
 }

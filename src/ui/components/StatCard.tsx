@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { cx } from "../cx";
+import { type Tone, toneStyle } from "../tone";
 import { formatValue, type ValueFormat } from "./charts";
 
 export interface StatDelta {
@@ -14,8 +15,9 @@ export interface StatDelta {
 }
 
 /**
- * KPI tile (SPEC §12.6): label, big tabular value, delta with ▲/▼ + sign +
- * color (never color alone), optional sparkline slot and link.
+ * KPI tile (DESIGN.md §5): 13/500 label, a big bold tabular value, a delta chip
+ * with ▲/▼ + sign + a green/red tint (never color alone), an optional sparkline
+ * and link (press + hover lift). Radius 20.
  *
  * ```tsx
  * <StatCard label="Revenue" value={<MoneyText cents={1250000} compactWhole />}
@@ -25,8 +27,8 @@ export interface StatDelta {
  */
 const VALUE_SIZE = {
   lg: "text-title1",
-  md: "text-title2",
-  sm: "text-title3",
+  md: "text-[24px] leading-[30px]",
+  sm: "text-title2",
 } as const;
 
 export function StatCard({
@@ -42,7 +44,7 @@ export function StatCard({
 }: {
   label: ReactNode;
   value: ReactNode;
-  /** Value size: `lg` 28 px (default), `md` 22 px, `sm` 20 px for 3-up rows on phones. */
+  /** Value size: `lg` 28 px (default), `md` 24 px, `sm` 22 px for 3-up rows on phones. */
   size?: keyof typeof VALUE_SIZE;
   delta?: StatDelta;
   /** Sparkline (or any small chart) under the value. */
@@ -54,7 +56,7 @@ export function StatCard({
 }) {
   const body = (
     <>
-      <div className="flex items-center gap-1.5 text-footnote font-medium text-label-2">
+      <div className="flex items-center gap-1.5 text-footnote font-medium text-label-2 [&_svg]:shrink-0">
         {icon && (
           <span aria-hidden className="flex">
             {icon}
@@ -66,7 +68,7 @@ export function StatCard({
           pick a smaller `size` or fewer columns for dense rows (QA T4-05). */}
       <div
         className={cx(
-          "num mt-1 font-bold tracking-tight [overflow-wrap:anywhere]",
+          "num mt-1.5 font-bold text-label [overflow-wrap:anywhere]",
           VALUE_SIZE[size],
         )}
       >
@@ -80,8 +82,9 @@ export function StatCard({
     </>
   );
   const cls = cx(
-    "block min-w-0 rounded-tile bg-card p-4 shadow-card",
-    href && "pressable row-press",
+    "card block min-w-0",
+    size === "sm" ? "p-3.5" : "p-4",
+    href && "pressable hover-lift",
     className,
   );
   return href ? (
@@ -98,21 +101,20 @@ function Delta({ d }: { d: StatDelta }) {
   const down = d.value < 0;
   const good = d.goodWhen ?? "up";
   const positive = good === "neutral" ? null : good === "up" ? up : down;
-  const color =
-    d.value === 0 || positive == null
-      ? "text-label-2"
-      : positive
-        ? "text-[color-mix(in_oklab,var(--sys-green)_70%,var(--label))]"
-        : "text-danger";
+  const tone: Tone =
+    d.value === 0 || positive == null ? "gray" : positive ? "green" : "red";
   const mag = formatValue(Math.abs(d.value), d.format ?? "percent");
   const sign = up ? "+" : down ? "−" : "";
   const arrow = up ? "▲" : down ? "▼" : "";
-  // Inline text, so a long label wraps under the number like a sentence (QA T4-30).
+  // A tinted chip, then the label as inline text so it wraps like a sentence (QA T4-30).
   return (
-    <div className="mt-1 text-footnote">
-      <span className={cx("num whitespace-nowrap font-semibold", color)}>
+    <div className="mt-1.5 text-footnote leading-[22px]">
+      <span
+        className="num tint-bg tint-fg inline-flex h-[22px] items-center gap-0.5 whitespace-nowrap rounded-pill px-2 align-middle font-semibold"
+        style={toneStyle(tone)}
+      >
         {arrow && (
-          <span aria-hidden className="mr-0.5 text-[10px]">
+          <span aria-hidden className="text-[9px]">
             {arrow}
           </span>
         )}

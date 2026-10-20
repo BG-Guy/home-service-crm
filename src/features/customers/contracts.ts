@@ -107,6 +107,10 @@ export type CustomerCardProps = {
   jobId?: string;
   variant?: "full" | "compact" | "header";
   showActions?: boolean;
+  /** `header` only: more round quick actions after Call / Text / Email (e.g. New job). */
+  extraActions?: import("react").ReactNode;
+  /** `header` only: carry the M3 morph names (`customer-<id>-avatar` / `-name`). Default true. */
+  morph?: boolean;
 };
 export type PropertyCardProps = {
   propertyId: string;

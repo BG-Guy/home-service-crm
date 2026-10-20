@@ -26,9 +26,12 @@ export interface AlertAction {
 }
 
 /**
- * Centered iOS alert on a native `<dialog>` (SPEC §12.6): 1–2 actions side by
- * side, 3+ stacked. Esc / the cancel action closes it. Enter and exit animate
- * with CSS (`@starting-style`), so there is no animation JS.
+ * Centered alert on a native `<dialog>` (docs/DESIGN.md §4 M6, §5): 300 px glass
+ * card, radius 20, pill buttons: two short actions side by side, otherwise
+ * stacked. The cancel action is neutral, the preferred one the accent fill, a
+ * destructive one a red fill (the confirm step is the only place for red fill).
+ * Esc / the cancel action closes it. It scales 1.08 → 1 and fades in 220 ms while
+ * the scrim fades in, all CSS (`@starting-style`), so there is no animation JS.
  *
  * ```tsx
  * <Alert open={open} onOpenChange={setOpen} title="Delete photo?" message="This can't be undone."
@@ -67,7 +70,15 @@ export function Alert({
   }, [open]);
 
   const cancel = actions.find((a) => a.style === "cancel");
-  const hasPreferred = actions.some((a) => a.preferred);
+  // One filled accent button at most: the preferred action, else the first plain
+  // one, else a lone action.
+  const preferred = actions.findIndex((a) => a.preferred);
+  const primary =
+    preferred >= 0
+      ? preferred
+      : actions.length === 1
+        ? 0
+        : actions.findIndex((a) => !a.style || a.style === "default");
   const press = (a: AlertAction) => {
     if (!a.keepOpen) onOpenChange(false);
     a.onPress?.();
@@ -90,39 +101,32 @@ export function Alert({
         else onOpenChange(false);
       }}
     >
-      <div className="px-4 pb-4 pt-5 text-center">
+      <div className="alert-body">
         <h2 id={titleId} className="text-headline">
           {title}
         </h2>
         {message && (
-          <div id={msgId} className="mt-0.5 text-footnote">
+          <div id={msgId} className="alert-message">
             {message}
           </div>
         )}
         {children && <div className="mt-3 text-left">{children}</div>}
       </div>
-      <div
-        className={cx(
-          "hairline-t grid",
-          sideBySide ? "grid-cols-2" : "grid-cols-1",
-        )}
-      >
+      <div className={cx("alert-actions", sideBySide && "grid-cols-2")}>
         {actions.map((a, i) => (
           <button
             key={a.label}
             type="button"
             disabled={a.disabled}
             onClick={() => press(a)}
-            className={cx(
-              "min-h-11 px-2 text-body outline-offset-[-2px] active:bg-fill-2 disabled:opacity-40",
-              a.style === "destructive" ? "text-danger" : "text-accent-text",
-              (a.preferred || (!hasPreferred && a.style === "cancel")) &&
-                "font-semibold",
-              i > 0 &&
-                (sideBySide
-                  ? "shadow-[inset_0.5px_0_0_var(--sep)]"
-                  : "hairline-t"),
-            )}
+            className="alert-btn pressable"
+            data-style={
+              a.style === "destructive"
+                ? "destructive"
+                : i === primary
+                  ? "preferred"
+                  : (a.style ?? "default")
+            }
           >
             {a.label}
           </button>

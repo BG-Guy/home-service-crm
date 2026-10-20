@@ -18,7 +18,6 @@ import { Page } from "@/ui/components/AppShell";
 import { Button } from "@/ui/components/Button";
 import { Chip, ChipRow } from "@/ui/components/Chip";
 import { EmptyState } from "@/ui/components/EmptyState";
-import { ListSection } from "@/ui/components/List";
 import { LargeTitleHeader } from "@/ui/components/NavBar";
 import { SearchField } from "@/ui/components/SearchField";
 import { PageTransition } from "@/ui/motion/PageTransition";
@@ -149,20 +148,18 @@ export default async function JobsPage({
     !!status.length ||
     TOGGLES.some((t) => filters[t.key as "callback"]);
 
+  const officeFilters = !(mine && !all);
+  // Sticky filter block height (search pill + chip row), so the day headers
+  // can stick right under it.
+  const barH = officeFilters ? 106 : 60;
+
   return (
     <PageTransition>
       <LargeTitleHeader
-        title={mine && !all ? "My Jobs" : "Jobs"}
+        title={mine && !all ? "My jobs" : "Jobs"}
         trailing={<HeaderActions />}
-        search={
-          <SearchField
-            param="q"
-            defaultValue={filters.q ?? ""}
-            placeholder="Job #, customer, address"
-          />
-        }
       >
-        {mine && !all ? (
+        {officeFilters ? null : (
           <ParamSegmented
             param="view"
             label="Show"
@@ -172,9 +169,22 @@ export default async function JobsPage({
               { value: "past", label: "Past" },
             ]}
           />
-        ) : (
-          <div className="flex flex-col gap-2">
-            <ChipRow label="Filter jobs">
+        )}
+      </LargeTitleHeader>
+      <Page
+        className={officeFilters ? "[--jobs-bar:106px]" : "[--jobs-bar:60px]"}
+      >
+        <div
+          className="sticky top-[var(--sticky-top,calc(env(safe-area-inset-top)+44px))] z-[var(--z-sticky)] -mx-[var(--gutter)] flex flex-col bg-bg px-[var(--gutter)] pt-2"
+          style={{ height: barH }}
+        >
+          <SearchField
+            param="q"
+            defaultValue={filters.q ?? ""}
+            placeholder="Job #, customer, address"
+          />
+          {officeFilters && (
+            <ChipRow label="Filter jobs" className="mt-1">
               {QUICK.map((q) => (
                 <Chip
                   key={q.key}
@@ -189,6 +199,10 @@ export default async function JobsPage({
                 </Chip>
               ))}
             </ChipRow>
+          )}
+        </div>
+        {officeFilters && (
+          <div className="mt-1 mb-4 flex flex-col gap-2">
             <ChipRow label="More filters">
               <Chip
                 replace
@@ -223,10 +237,8 @@ export default async function JobsPage({
             )}
           </div>
         )}
-      </LargeTitleHeader>
-      <Page>
         {items.length === 0 ? (
-          <div className="list-card">
+          <div className="card mt-2">
             <EmptyState
               icon={<Briefcase size={44} />}
               title={
@@ -245,7 +257,7 @@ export default async function JobsPage({
               }
               action={
                 filtered ? (
-                  <Button href="/jobs" variant="gray">
+                  <Button href="/jobs" variant="secondary">
                     Clear filters
                   </Button>
                 ) : user.perms.has("jobs.create") ? (
@@ -255,18 +267,33 @@ export default async function JobsPage({
             />
           </div>
         ) : (
-          <div className="flex flex-col gap-[var(--section-gap)]">
-            {groups.map((g) => (
-              <ListSection key={g.key} header={g.label}>
-                {g.items.map((j) => (
-                  <JobRow
-                    key={j.id}
-                    job={j}
-                    tz={tz}
-                    showDate={g.key === "none"}
-                  />
-                ))}
-              </ListSection>
+          <div className="enter-stagger flex flex-col gap-5">
+            {groups.map((g, i) => (
+              <section
+                key={g.key}
+                aria-labelledby={`day-${g.key}`}
+                style={{ ["--i" as string]: Math.min(i, 9) }}
+              >
+                <h2
+                  id={`day-${g.key}`}
+                  className="sticky top-[calc(var(--sticky-top,calc(env(safe-area-inset-top)+44px))+var(--jobs-bar))] z-[9] -mx-[var(--gutter)] flex items-baseline justify-between bg-bg px-[calc(var(--gutter)+4px)] pt-2 pb-2 text-title3"
+                >
+                  {g.label}
+                  <span className="num text-subhead font-medium text-label-2">
+                    {g.items.length} {g.items.length === 1 ? "job" : "jobs"}
+                  </span>
+                </h2>
+                <div className="list-card">
+                  {g.items.map((j) => (
+                    <JobRow
+                      key={j.id}
+                      job={j}
+                      tz={tz}
+                      showDate={g.key === "none"}
+                    />
+                  ))}
+                </div>
+              </section>
             ))}
             {nextCursor && (
               <JobListMore

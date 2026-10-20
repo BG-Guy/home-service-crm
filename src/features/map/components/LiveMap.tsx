@@ -4,7 +4,7 @@ import { Clock, MapPin, Navigation, Users } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { AssignJobButton } from "@/features/jobs/slots.client";
+import { AssignJobButton } from "@/features/jobs/components/AssignJobButton";
 import { formatTime } from "@/lib/time";
 import { Avatar } from "@/ui/components/Avatar";
 import { Button } from "@/ui/components/Button";
@@ -128,11 +128,14 @@ export function LiveMap({ data }: { data: LiveMapData }) {
   );
 
   return (
-    <div className="flex flex-col gap-3 md:grid md:h-[calc(100dvh-140px)] md:grid-cols-[minmax(0,1fr)_340px] md:gap-4">
+    // Phone: the map is full-bleed and sticky; the list below is a bottom
+    // sheet that slides up over it as the page scrolls (no JS, no drag code).
+    // Desktop: map on the left, the list as a side panel.
+    <div className="flex flex-col md:grid md:h-[calc(100dvh-140px)] md:grid-cols-[minmax(0,1fr)_360px] md:gap-4">
       <style href="b7-map-pulse" precedence="default">
         {PULSE_CSS}
       </style>
-      <div className="relative h-[52dvh] overflow-hidden rounded-card shadow-card md:h-full">
+      <div className="sticky top-[var(--sticky-top,calc(env(safe-area-inset-top)+44px))] -mx-[var(--gutter)] h-[56dvh] overflow-hidden md:relative md:top-0 md:mx-0 md:h-full md:rounded-card md:shadow-card">
         <TechMap
           techs={techs}
           jobs={data.jobs}
@@ -145,9 +148,19 @@ export function LiveMap({ data }: { data: LiveMapData }) {
         />
       </div>
       <aside
-        aria-label="Technicians"
-        className="flex min-h-0 flex-col gap-3 md:overflow-y-auto"
+        aria-label="Technicians and jobs"
+        className="relative z-[1] -mx-[var(--gutter)] -mt-6 flex min-h-[55dvh] flex-col gap-3 rounded-t-[24px] bg-bg px-[var(--gutter)] pt-2 pb-4 shadow-[0_-10px_30px_rgb(0_0_0/0.14),0_-0.5px_0_var(--hairline)] md:mx-0 md:mt-0 md:min-h-0 md:overflow-y-auto md:rounded-none md:bg-transparent md:px-0 md:pt-0 md:shadow-none"
       >
+        <span
+          aria-hidden
+          className="mx-auto mb-1 block h-[5px] w-9 shrink-0 rounded-full bg-fill md:hidden"
+        />
+        <div className="flex items-baseline justify-between gap-3 px-1">
+          <h2 className="text-title3">Technicians</h2>
+          <span className="num text-subhead text-label-2">
+            {techs.filter((t) => t.clockedIn).length} of {techs.length} on shift
+          </span>
+        </div>
         <ChipRow label="Map filters">
           <Chip
             selected={showStale}
@@ -188,10 +201,7 @@ export function LiveMap({ data }: { data: LiveMapData }) {
             aria-labelledby="unassigned-h"
             className="flex flex-col gap-1.5"
           >
-            <h2
-              id="unassigned-h"
-              className="px-4 text-footnote uppercase text-label-2"
-            >
+            <h2 id="unassigned-h" className="px-1 pt-2 text-title3">
               Unassigned today
             </h2>
             <ul className="list-card">
@@ -223,7 +233,7 @@ export function LiveMap({ data }: { data: LiveMapData }) {
             </ul>
           </section>
         )}
-        <p className="px-4 text-footnote text-label-2">
+        <p className="px-1 text-footnote text-label-2">
           Positions come from the tech app while a tech is clocked in, plus
           status changes. Grey markers haven’t updated in {data.staleMinutes}{" "}
           min; older than {data.hideAfterMinutes} min are hidden.
@@ -282,7 +292,7 @@ export function LiveMap({ data }: { data: LiveMapData }) {
                     label={job.techIds.length ? "Reassign" : "Assign"}
                   />
                 )}
-              <Button href={`/jobs/${job.id}`} variant="gray">
+              <Button href={`/jobs/${job.id}`} variant="secondary">
                 Open job
               </Button>
               {job.lat != null && job.lng != null && (
@@ -354,7 +364,7 @@ function TechRow({
             <span
               className={cx(
                 "block text-footnote",
-                t.staleness === "live" ? "text-label-2" : "text-label-3",
+                t.staleness === "live" ? "text-label-2" : "text-label-2 italic",
               )}
             >
               {t.location

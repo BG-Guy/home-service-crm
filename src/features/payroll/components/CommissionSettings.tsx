@@ -160,7 +160,7 @@ export function AssignPlanButton({
             />
           </div>
           <fieldset className="flex flex-col gap-2">
-            <legend className="mb-1 text-footnote font-semibold uppercase text-label-2">
+            <legend className="mb-1 text-subhead font-semibold text-label-2">
               Rate by service type
             </legend>
             {bySvc.map((r, i) => (

@@ -1,14 +1,17 @@
 "use client";
 
 import { Check, Wrench } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useState, useTransition } from "react";
 import { Button } from "@/ui/components/Button";
-import { TextArea } from "@/ui/components/Field";
-import { Sheet } from "@/ui/components/Sheet";
 import { toast } from "@/ui/components/Toast";
 import { updateVehicleIssue } from "../actions";
 
 type IssueStatus = "open" | "acknowledged" | "in_repair" | "resolved";
+
+const load = () => import("./ResolveIssueSheet");
+const ResolveIssueSheet = dynamic(load, { ssr: false });
+const preload = () => void load();
 
 /** Admin controls on an issue: acknowledge → in repair → resolve (with resolution). */
 export function IssueActions({
@@ -20,6 +23,7 @@ export function IssueActions({
 }) {
   const [pending, start] = useTransition();
   const [open, setOpen] = useState(false);
+  const [armed, setArmed] = useState(false);
   const [resolution, setResolution] = useState("");
   const [error, setError] = useState<string | undefined>();
 
@@ -85,45 +89,33 @@ export function IssueActions({
           In repair
         </Button>
       )}
-      <Button size="sm" variant="tinted" onClick={() => setOpen(true)}>
+      <Button
+        size="sm"
+        variant="tinted"
+        onPointerEnter={preload}
+        onPointerDown={preload}
+        onFocus={preload}
+        onClick={() => {
+          setArmed(true);
+          setOpen(true);
+        }}
+      >
         Resolve
       </Button>
-      <Sheet
-        open={open}
-        onOpenChange={setOpen}
-        title="Resolve issue"
-        detents={["medium"]}
-        dirty={resolution !== ""}
-        leading={
-          <Button variant="plain" size="sm" onClick={() => setOpen(false)}>
-            Cancel
-          </Button>
-        }
-        footer={
-          <Button
-            size="lg"
-            fullWidth
-            loading={pending}
-            onClick={() => set("resolved", resolution)}
-          >
-            Mark resolved
-          </Button>
-        }
-      >
-        <div className="flex flex-col gap-3 pb-4 pt-1">
-          <TextArea
-            label="How was it fixed?"
-            placeholder="Replaced O2 sensor at Valley Auto; light cleared."
-            value={resolution}
-            onChange={(e) => {
-              setResolution(e.currentTarget.value);
-              setError(undefined);
-            }}
-            error={error}
-            rows={4}
-          />
-        </div>
-      </Sheet>
+      {armed && (
+        <ResolveIssueSheet
+          open={open}
+          onOpenChange={setOpen}
+          pending={pending}
+          error={error}
+          resolution={resolution}
+          onResolution={(v) => {
+            setResolution(v);
+            setError(undefined);
+          }}
+          onResolve={() => set("resolved", resolution)}
+        />
+      )}
     </div>
   );
 }

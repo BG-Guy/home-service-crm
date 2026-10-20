@@ -56,15 +56,7 @@ export const RecurrenceSchema = z.discriminatedUnion("type", [
 ]);
 export type Recurrence = z.infer<typeof RecurrenceSchema>;
 
-export const RECURRENCE_LABELS: Record<Recurrence["type"], string> = {
-  once: "Once",
-  daily: "Every day",
-  weekly: "Weekly",
-  monthly: "Monthly",
-  every_n_days: "Every N days",
-  every_n_months: "Every N months",
-  every_n_miles: "Every N miles",
-};
+export { RECURRENCE_LABELS } from "./recurrence-labels";
 
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 

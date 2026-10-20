@@ -1,4 +1,4 @@
-import { CircleCheck, Clock, LinkIcon } from "lucide-react";
+import { Clock, LinkIcon } from "lucide-react";
 import type { Metadata } from "next";
 import { hasCardProcessor } from "@/adapters/payments";
 import { PayForm } from "@/features/payments/components/PayForm";
@@ -11,6 +11,7 @@ import { resolvePublicToken } from "@/lib/tokens";
 import { Banner } from "@/ui/components/Banner";
 import { EmptyState } from "@/ui/components/EmptyState";
 import { MoneyText } from "@/ui/components/MoneyText";
+import { SuccessCheck } from "@/ui/components/SuccessCheck";
 import { cx } from "@/ui/cx";
 
 export const metadata: Metadata = {
@@ -42,7 +43,7 @@ export default async function PayPage({
   const company = await findCompany();
   if (!tok)
     return (
-      <div className="list-card mt-4">
+      <div className="card mt-4">
         <EmptyState
           icon={<LinkIcon size={44} strokeWidth={1.6} />}
           title="This link has expired"
@@ -57,7 +58,7 @@ export default async function PayPage({
   const t = await loadPayTarget(tok);
   if (!t)
     return (
-      <div className="list-card mt-4">
+      <div className="card mt-4">
         <EmptyState title="Nothing to pay here" />
       </div>
     );
@@ -66,17 +67,15 @@ export default async function PayPage({
 
   if (status === "success" || t.state === "paid")
     return (
-      <div className="mt-4 flex flex-col items-center gap-3 rounded-card bg-card px-6 py-10 text-center">
+      <div className="card mt-4 flex flex-col items-center gap-3 px-6 py-10 text-center">
         {t.state === "paid" ? (
-          <CircleCheck
-            aria-hidden
-            size={56}
-            className="enter-pop text-success"
-          />
+          <SuccessCheck size={72} label="Paid" />
         ) : (
-          <Clock aria-hidden size={52} className="text-accent-text" />
+          <span className="inline-flex size-[72px] items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--accent)_var(--tint-a),transparent)] text-accent-text">
+            <Clock aria-hidden size={34} />
+          </span>
         )}
-        <h1 className="text-title2 font-bold">
+        <h1 className="mt-2 text-title1">
           {t.state === "paid" ? "Thank you!" : "Payment processing"}
         </h1>
         <p className="text-body text-label-2">
@@ -93,7 +92,7 @@ export default async function PayPage({
 
   if (t.state === "closed")
     return (
-      <div className="list-card mt-4">
+      <div className="card mt-4">
         <EmptyState
           title="This payment is no longer open"
           message="Contact us if you think that's a mistake."
@@ -109,77 +108,93 @@ export default async function PayPage({
           Payment canceled. Nothing was charged. You can try again below.
         </Banner>
       )}
-      <section className="flex flex-col items-center gap-1 rounded-card bg-card px-5 py-6 text-center">
-        <p className="text-footnote uppercase text-label-2">
-          {t.title}
-          {t.jobNumber && t.kind === "invoice" ? ` · job ${t.jobNumber}` : ""}
-        </p>
-        <h1 className="num text-large-title font-bold">
-          <MoneyText cents={t.dueCents} />
+      <header className="px-1 pt-2">
+        <h1 className="text-large-title">
+          {t.kind === "deposit" ? "Pay your deposit" : "Confirm and pay"}
         </h1>
-        <p className="text-subhead text-label-2">
-          {t.kind === "deposit"
-            ? "Deposit due"
-            : t.totals?.some((r) => r.kind === "balance")
-              ? "Balance due"
-              : "Amount due"}
+        <p className="mt-1 text-subhead text-label-2">
+          {t.title}
+          {t.jobNumber && t.kind === "invoice" ? ` · Job ${t.jobNumber}` : ""}
         </p>
+      </header>
+
+      <section aria-label="Summary" className="card overflow-hidden">
+        <div className="px-5 pb-5 pt-6">
+          <p className="text-subhead font-semibold text-label-2">
+            {t.kind === "deposit"
+              ? "Deposit due"
+              : t.totals?.some((r) => r.kind === "balance")
+                ? "Balance due"
+                : "Amount due"}
+          </p>
+          <MoneyText
+            cents={t.dueCents}
+            className="mt-1 block text-[44px] font-bold leading-[1.05] tracking-[-0.03em]"
+          />
+        </div>
+        {t.kind === "invoice" && (t.lines.length > 0 || t.totals) && (
+          <div className="border-t border-sep px-5 py-4 text-subhead">
+            <ul className="flex flex-col gap-2">
+              {t.lines.slice(0, 12).map((l, i) => (
+                <li
+                  // biome-ignore lint/suspicious/noArrayIndexKey: static lines
+                  key={i}
+                  className="flex items-baseline justify-between gap-3"
+                >
+                  <span className="min-w-0 truncate">
+                    {l.name}
+                    {l.qty !== 1 ? (
+                      <span className="text-label-2"> × {l.qty}</span>
+                    ) : null}
+                  </span>
+                  <MoneyText cents={l.totalCents} className="shrink-0" />
+                </li>
+              ))}
+              {t.lines.length > 12 && (
+                <li className="text-footnote text-label-2">
+                  {t.lines.length - 12} more on the invoice
+                </li>
+              )}
+            </ul>
+            {/* The invoice's own totals rows (shared with the invoice document), so
+                subtotal, tax, total, payments and credits foot to the balance. */}
+            {(t.totals ?? []).length > 0 && (
+              <dl className="mt-3 flex flex-col gap-1.5 border-t border-sep pt-3">
+                {(t.totals ?? []).map((r, i) => (
+                  <div
+                    // biome-ignore lint/suspicious/noArrayIndexKey: static order
+                    key={i}
+                    className={cx(
+                      "flex items-baseline justify-between gap-3",
+                      r.kind === "total" && "font-semibold",
+                      r.muted && "text-label-2",
+                    )}
+                  >
+                    <dt className="min-w-0">{r.label}</dt>
+                    <dd>
+                      <MoneyText cents={r.cents} className="shrink-0" />
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+            {t.totals?.some((r) => r.kind === "balance") && (
+              <div className="mt-3 flex items-baseline justify-between gap-3 border-t border-sep pt-3 text-headline">
+                <span>Balance due</span>
+                <MoneyText cents={t.dueCents} className="shrink-0" />
+              </div>
+            )}
+          </div>
+        )}
       </section>
 
-      {t.kind === "invoice" && (t.lines.length > 0 || t.totals) && (
-        <section aria-label="Items" className="list-card">
-          {t.lines.slice(0, 12).map((l, i) => (
-            <div
-              // biome-ignore lint/suspicious/noArrayIndexKey: static lines
-              key={i}
-              className="list-row flex min-h-11 items-center justify-between gap-3 px-4 py-2"
-            >
-              <span className="min-w-0 truncate text-body">
-                {l.name}
-                {l.qty !== 1 ? ` × ${l.qty}` : ""}
-              </span>
-              <MoneyText cents={l.totalCents} className="text-label-2" />
-            </div>
-          ))}
-          {t.lines.length > 12 && (
-            <p className="list-row px-4 py-2 text-footnote text-label-2">
-              {t.lines.length - 12} more on the invoice
-            </p>
-          )}
-          {/* The invoice's own totals rows (shared with the invoice document), so
-              subtotal, tax, total, payments and credits foot to the balance. */}
-          {(t.totals ?? []).map((r, i) => (
-            <div
-              // biome-ignore lint/suspicious/noArrayIndexKey: static order
-              key={i}
-              className={cx(
-                "list-row flex min-h-11 items-center justify-between gap-3 px-4 py-2",
-                r.kind === "total" ? "font-semibold" : "text-subhead",
-                r.muted && "text-label-2",
-              )}
-            >
-              <span className="min-w-0">{r.label}</span>
-              <MoneyText cents={r.cents} className="shrink-0" />
-            </div>
-          ))}
-          {t.totals?.some((r) => r.kind === "balance") && (
-            <div className="list-row flex min-h-11 items-center justify-between gap-3 px-4 py-2 font-semibold">
-              <span>Balance due</span>
-              <MoneyText cents={t.dueCents} className="shrink-0" />
-            </div>
-          )}
-        </section>
-      )}
-
       {t.kind === "deposit" && t.policy && (
-        <section className="flex flex-col gap-1.5">
-          <h2 className="px-4 text-footnote uppercase text-label-2">
-            {t.policy.title}
-          </h2>
-          <p className="whitespace-pre-line rounded-card bg-card p-4 text-subhead text-label-2">
+        <section className="flex flex-col gap-2">
+          <h2 className="px-1 text-title3">{t.policy.title}</h2>
+          <p className="card whitespace-pre-line p-4 text-subhead text-label-2">
             {t.policy.body}
           </p>
-          <p className="px-4 text-footnote text-label-2">
+          <p className="px-1 text-footnote text-label-2">
             By paying you agree to this policy (version {t.policy.version}).
           </p>
         </section>
@@ -195,7 +210,7 @@ export default async function PayPage({
           allowTip={allowTip}
         />
       ) : (
-        <section className="flex flex-col gap-2 rounded-card bg-card p-4">
+        <section className="card flex flex-col gap-2 p-5">
           <h2 className="text-headline">How to pay</h2>
           <p className="whitespace-pre-line text-body">
             {s.payments.manual_instructions}

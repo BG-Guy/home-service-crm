@@ -50,9 +50,55 @@ export function trackVisualViewport(
   };
 }
 
+/**
+ * Where overlays use their desktop presentation (docs/DESIGN.md §4 M4d): a window
+ * ≥ 768 px wide, or any fine pointer. Sheets become modals or drawers and menus
+ * pop up from their trigger. The CSS twin is the same media query in globals.css.
+ */
+export const DESKTOP_OVERLAY_QUERY = "(min-width: 768px), (pointer: fine)";
+
 export function isDesktop(): boolean {
   return (
     typeof window !== "undefined" &&
-    window.matchMedia("(min-width: 1024px)").matches
+    window.matchMedia(DESKTOP_OVERLAY_QUERY).matches
   );
+}
+
+/* ---------- M4 card stack: the page behind a large phone sheet ---------- */
+
+const stacked = new Set<string>();
+let unstackTimer: ReturnType<typeof setTimeout> | undefined;
+
+/**
+ * Turns the iOS card stack on or off for one sheet (ref-counted across stacked
+ * sheets). `<html data-sheet-stack="on">` scales `.shell-stage` to .94 with
+ * rounded top corners (CSS transition, transform only); `"off"` animates it back,
+ * then the attribute goes away so the stage has no transform or clip at rest.
+ */
+export function setSheetStack(id: string, on: boolean): void {
+  if (typeof document === "undefined") return;
+  const had = stacked.size > 0;
+  if (on) stacked.add(id);
+  else stacked.delete(id);
+  const now = stacked.size > 0;
+  if (now === had) return;
+  const html = document.documentElement;
+  clearTimeout(unstackTimer);
+  if (now) {
+    const stage = document.querySelector<HTMLElement>(".shell-stage");
+    if (!stage) return;
+    // Scale around the top of the visible part of the page.
+    stage.style.setProperty("--stack-y", `${window.scrollY}px`);
+    if (html.dataset.sheetStack !== "off") {
+      html.dataset.sheetStack = "off";
+      // Commit the start state, so the radius and scale transition from it.
+      getComputedStyle(stage).clipPath;
+    }
+    html.dataset.sheetStack = "on";
+  } else if (html.dataset.sheetStack) {
+    html.dataset.sheetStack = "off";
+    unstackTimer = setTimeout(() => {
+      if (stacked.size === 0) delete html.dataset.sheetStack;
+    }, 360);
+  }
 }

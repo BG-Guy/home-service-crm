@@ -45,7 +45,7 @@ export function SettingsNav({
       </Link>
       {groups.map((g) => (
         <div key={g.key}>
-          <h2 className="px-3 pb-1 text-footnote font-semibold text-label-2">
+          <h2 className="px-3 pb-1.5 text-footnote font-semibold text-label-3">
             {g.label}
           </h2>
           <ul className="flex flex-col gap-0.5">
@@ -57,19 +57,16 @@ export function SettingsNav({
                     href={i.href}
                     aria-current={on ? "page" : undefined}
                     className={cx(
-                      "flex min-h-10 items-center gap-3 rounded-control px-3 text-body outline-offset-[-2px] transition-colors",
+                      "pressable flex min-h-10 items-center gap-3 rounded-[10px] px-3 text-body outline-offset-[-2px] transition-colors",
                       on
-                        ? "bg-accent font-semibold text-on-accent"
-                        : "text-label hover:bg-fill-2",
+                        ? "bg-card font-semibold text-label shadow-card"
+                        : "text-label hover:bg-fill-3",
                     )}
                   >
                     <span
                       aria-hidden
-                      className={cx(
-                        "flex size-[26px] shrink-0 items-center justify-center rounded-[6px]",
-                        on ? "bg-white/20" : "tone-bg",
-                      )}
-                      style={on ? undefined : toneStyle(i.tone)}
+                      className="tint-bg tint-fg flex size-7 shrink-0 items-center justify-center rounded-[8px]"
+                      style={toneStyle(i.tone)}
                     >
                       {i.icon}
                     </span>

@@ -147,6 +147,7 @@ async function LeadList({
     getSettings(),
   ]);
   const canEdit = viewer.perms.has("leads.edit");
+  const canConvert = viewer.perms.has("leads.convert");
   if (items.length === 0) {
     const filtered = !!(f.q || f.source || f.filter || f.status?.length);
     return (
@@ -191,13 +192,14 @@ async function LeadList({
   }
   const reasons = settings.leads.lost_reasons;
   return (
-    <div className="flex flex-col gap-3">
+    <div className="enter-stagger flex flex-col gap-3">
       {items.map((l) => (
         <LeadCard
           key={l.id}
           lead={l}
           viewerId={viewer.id}
           canEdit={canEdit}
+          canConvert={canConvert}
           lostReasons={reasons}
           active={l.id === activeId}
         />
@@ -208,6 +210,7 @@ async function LeadList({
           offset={items.length}
           viewerId={viewer.id}
           canEdit={canEdit}
+          canConvert={canConvert}
           lostReasons={reasons}
         />
       )}

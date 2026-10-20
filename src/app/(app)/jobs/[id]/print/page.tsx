@@ -49,9 +49,7 @@ export default async function JobPrintPage({
     children: React.ReactNode;
   }) => (
     <div className="grid grid-cols-[130px_1fr] gap-2 py-1">
-      <dt className="text-footnote font-semibold uppercase tracking-wide text-label-2">
-        {label}
-      </dt>
+      <dt className="text-footnote font-semibold text-label-2">{label}</dt>
       <dd className="text-subhead">{children}</dd>
     </div>
   );

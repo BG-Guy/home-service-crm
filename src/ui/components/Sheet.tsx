@@ -20,6 +20,7 @@ import {
   springTo,
 } from "../motion/spring-driver";
 import {
+  DUR,
   EASE,
   prefersReducedMotion,
   project,
@@ -27,7 +28,12 @@ import {
   spring,
 } from "../motion/springs";
 import { Alert } from "./Alert";
-import { isDesktop, lockScroll, trackVisualViewport } from "./dialog-utils";
+import {
+  isDesktop,
+  lockScroll,
+  setSheetStack,
+  trackVisualViewport,
+} from "./dialog-utils";
 
 /**
  * Detent: `medium` (half height), `large` (full height), `content` (fits its
@@ -61,9 +67,19 @@ export interface SheetProps {
   };
   /** Allow drag/scrim/Esc dismissal (default true). */
   dismissible?: boolean;
-  /** Desktop (≥ 1024 px) presentation: centered `modal` (default) or right `panel`. */
+  /**
+   * Desktop presentation (≥ 768 px or a fine pointer, M4d): a centered `modal`
+   * (default; scale .96 → 1 + fade, radius 24) or a full-height `drawer` that
+   * slides in from the right, 440 px wide, for long forms. Phones always get the
+   * bottom sheet.
+   */
+  presentation?: "modal" | "drawer";
+  /** Older name of `presentation`: `panel` = `drawer`. */
   desktop?: "modal" | "panel";
-  /** Sticky footer (e.g. a primary button); sits above the safe area / keyboard. */
+  /**
+   * Sticky footer for the sheet's primary action (e.g. a block `Button`); it stays
+   * above the safe area and the keyboard while the body scrolls.
+   */
   footer?: ReactNode;
   /** No panel chrome (used by ActionSheet). */
   bare?: boolean;
@@ -104,7 +120,10 @@ export function useSheetState(initial = false) {
 
 const DEFAULT_DETENTS: readonly Detent[] = ["large"];
 
-type Mode = "sheet" | "modal" | "panel";
+type Mode = "sheet" | "modal" | "drawer";
+
+const presentationOf = (p: Pick<SheetProps, "presentation" | "desktop">) =>
+  p.presentation ?? (p.desktop === "panel" ? "drawer" : "modal");
 interface Geometry {
   offsets: number[];
   closed: number;
@@ -120,16 +139,22 @@ function offsetFor(d: Detent, H: number, vh: number): number {
 }
 
 /**
- * iOS sheet (SPEC §12.6) on a native `<dialog>.showModal()`:
+ * iOS sheet (docs/DESIGN.md §4 M4 / M4d) on a native `<dialog>.showModal()`:
+ * - phone: slides up on a 320 ms spring (`spring.sheet`) while the scrim fades in;
+ *   at the large detent the page behind scales back to .94 with rounded top
+ *   corners (the iOS card stack: `<html data-sheet-stack>` + CSS on `.shell-stage`);
  * - detents (`medium` / `large` / `content` / fraction), grabber tap cycles detents;
  * - drag the grabber/header to resize or dismiss; release uses the finger's
  *   velocity, projects the resting point (UIScrollView deceleration) and settles
- *   with a real spring (`spring.sheet`) — dismisses when the projection passes 50 %;
+ *   with the spring — dismisses when the projection passes 50 %;
  * - scrolling the body at a smaller detent expands to the largest one;
+ * - `footer`: a sticky slot for the primary action, above the safe area/keyboard;
  * - confirm-on-dirty, Esc, scrim tap, focus containment (native dialog), focus
  *   restore, page scroll lock, keyboard-aware via `visualViewport`;
- * - desktop ≥ 1024 px: centered modal (max 560 px) or right-side panel;
- * - reduced motion: crossfades instead of sliding.
+ * - desktop (≥ 768 px or a fine pointer): a centered modal (max 560 px, radius 24,
+ *   scale .96 → 1 + fade in 220 ms) or `presentation="drawer"` (full height, 440 px,
+ *   from the right in 320 ms);
+ * - reduced motion: crossfades instead of sliding, no card stack.
  *
  * Sheets may stack (a picker sheet over a form sheet); each is its own top-layer dialog.
  *
@@ -152,7 +177,6 @@ export function Sheet(props: SheetProps) {
     detents = DEFAULT_DETENTS,
     initialDetent = 0,
     discardConfirm,
-    desktop = "modal",
     footer,
     bare,
     className,
@@ -186,8 +210,10 @@ export function Sheet(props: SheetProps) {
   } | null>(null);
   const tracker = useRef(createVelocityTracker());
   const titleId = useId();
+  const stackId = useId();
 
   const fit = bare || (detents.length === 1 && detents[0] === "content");
+  const presentation = presentationOf(props);
 
   /* ---------- geometry + rendering of the drag offset ---------- */
 
@@ -223,9 +249,24 @@ export function Sheet(props: SheetProps) {
     scrim.style.opacity = String(1 - t);
   }, []);
 
+  // M4 card stack: on while a phone sheet heads for its full-height detent.
+  const stack = useCallback(
+    (target: number) => {
+      const p = latest.current;
+      const full =
+        mode.current === "sheet" &&
+        !p.bare &&
+        !(p.detents?.length === 1 && p.detents[0] === "content") &&
+        target <= 0.5;
+      setSheetStack(stackId, full && !prefersReducedMotion());
+    },
+    [stackId],
+  );
+
   const animateTo = useCallback(
     (target: number, velocity = 0) => {
       anim.current?.stop();
+      stack(target);
       const a = springTo({
         from: y.current,
         to: target,
@@ -236,7 +277,7 @@ export function Sheet(props: SheetProps) {
       anim.current = a;
       return a.finished;
     },
-    [apply],
+    [apply, stack],
   );
 
   const cancelWaapi = () => {
@@ -291,13 +332,7 @@ export function Sheet(props: SheetProps) {
     if (!dialog || !panel || !scrim) return;
 
     const p = latest.current;
-    mode.current = p.bare
-      ? "sheet"
-      : isDesktop()
-        ? (p.desktop ?? "modal") === "panel"
-          ? "panel"
-          : "modal"
-        : "sheet";
+    mode.current = p.bare ? "sheet" : isDesktop() ? presentationOf(p) : "sheet";
     const wasOpen = dialog.open;
     // showModal() focuses an [autofocus] descendant, else the first button (the
     // header's Cancel, with a focus ring: QA T4-32). Point it at the panel, or at
@@ -346,18 +381,29 @@ export function Sheet(props: SheetProps) {
       anim.current?.stop();
       panel.style.transform = "none";
       scrim.style.opacity = "1";
-      if (!reduced) {
+      if (!wasOpen) {
+        const modal = mode.current === "modal";
+        // M4d: modal scale .96 → 1 + fade in 220 ms; drawer from the right in 320 ms.
         waapi.current = [
           panel.animate(
-            mode.current === "modal"
-              ? [
-                  { opacity: 0, transform: "scale(0.96)" },
-                  { opacity: 1, transform: "none" },
-                ]
-              : [{ transform: "translateX(100%)" }, { transform: "none" }],
-            { duration: 450, easing: EASE.snappy },
+            reduced
+              ? [{ opacity: 0 }, { opacity: 1 }]
+              : modal
+                ? [
+                    { opacity: 0, transform: "scale(0.96)" },
+                    { opacity: 1, transform: "none" },
+                  ]
+                : [{ transform: "translateX(100%)" }, { transform: "none" }],
+            reduced
+              ? { duration: 150, easing: EASE.out }
+              : modal
+                ? { duration: DUR.quick, easing: EASE.snappy }
+                : { duration: DUR.snappy, easing: EASE.spring },
           ),
-          scrim.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200 }),
+          scrim.animate([{ opacity: 0 }, { opacity: 1 }], {
+            duration: reduced ? 150 : modal ? DUR.quick : DUR.snappy,
+            easing: EASE.out,
+          }),
         ];
       }
     }
@@ -419,18 +465,20 @@ export function Sheet(props: SheetProps) {
       animateTo(geo.current.closed, v).then((done) => done && finish());
     } else {
       anim.current?.stop();
+      setSheetStack(stackId, false);
+      const drawer = mode.current === "drawer" && !reduced;
       const opts = {
-        duration: reduced ? 150 : 200,
-        easing: "ease-out",
+        duration: reduced ? 150 : drawer ? 240 : 160,
+        easing: "cubic-bezier(.4,0,1,1)",
         fill: "forwards" as const,
       };
       const a = panel.animate(
-        mode.current === "panel" && !reduced
+        drawer
           ? [{ transform: "none" }, { transform: "translateX(100%)" }]
           : mode.current === "modal" && !reduced
             ? [
                 { opacity: 1, transform: "none" },
-                { opacity: 0, transform: "scale(0.96)" },
+                { opacity: 0, transform: "scale(0.97)" },
               ]
             : [{ opacity: 1 }, { opacity: 0 }],
         opts,
@@ -449,8 +497,9 @@ export function Sheet(props: SheetProps) {
   useEffect(
     () => () => {
       anim.current?.stop();
+      setSheetStack(stackId, false);
     },
-    [],
+    [stackId],
   );
 
   /* ---------- drag ---------- */
@@ -559,7 +608,7 @@ export function Sheet(props: SheetProps) {
           className={cx("sheet-panel outline-none", className)}
           data-fit={fit || undefined}
           data-bare={bare || undefined}
-          data-desktop={desktop}
+          data-presentation={presentation}
         >
           {bare ? (
             children
@@ -572,7 +621,7 @@ export function Sheet(props: SheetProps) {
                 onPointerUp={onPointerUp}
                 onPointerCancel={onPointerUp}
               >
-                <div className="sheet-grab-handle flex justify-center pt-[5px] lg:hidden">
+                <div className="sheet-grab-handle">
                   {detents.length > 1 ? (
                     <button
                       type="button"

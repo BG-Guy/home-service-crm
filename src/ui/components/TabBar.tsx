@@ -39,11 +39,16 @@ export function activeTabIndex(
   return best;
 }
 
+/** Root-section navigation plays the M2 cross-fade, not a push (PageTransition). */
+const NAV_TAB = ["nav-tab"];
+
 /**
- * Floating capsule tab bar (SPEC §12.6, §13.1): ≤ 5 tabs, `.material`, a
- * sliding selection pill (spring), badges, safe-area aware, never hides.
- * Tapping the active tab scrolls to top. Shares `view-transition-name: tabbar`
- * so it stays still during push/pop transitions.
+ * Floating glass capsule tab bar (docs/DESIGN.md §5, SPEC §13.1): ≤ 5 tabs, an
+ * accent pill that slides behind the active tab (M14, transform only, its position
+ * from `--i`), an icon bounce on tap (CSS), badges, safe-area aware, never hides.
+ * Tapping the active tab scrolls to top. `view-transition-name: tabbar` (on the
+ * capsule) keeps it still while pages push, pop or cross-fade. The styles are
+ * `.tabbar*` in globals.css.
  */
 export function TabBar({
   items,
@@ -56,37 +61,29 @@ export function TabBar({
   const tabs = items.slice(0, 5);
   const active = activeTabIndex(tabs, pathname);
   return (
-    <nav
-      aria-label="Tabs"
-      data-chrome
-      className={cx(
-        "fixed inset-x-0 bottom-[max(12px,calc(env(safe-area-inset-bottom)-6px))] z-[var(--z-bar)] flex justify-center px-[var(--gutter)]",
-        className,
-      )}
-      style={{ viewTransitionName: "tabbar" } as CSSProperties}
-    >
+    <nav aria-label="Tabs" data-chrome className={cx("tabbar", className)}>
+      {/* The capsule carries the view-transition name, not the <nav>: a named
+          element is a backdrop root, so on the wrapper the glass would blur only
+          the empty wrapper and the page would read through it. */}
       <div
-        className="material relative grid h-[var(--tabbar-h)] w-full max-w-[420px] rounded-pill p-1 shadow-[var(--shadow-float),0_0_0_0.5px_var(--sep)]"
-        style={{
-          gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))`,
-        }}
+        className="tabbar-capsule"
+        data-none={active < 0 || undefined}
+        style={
+          {
+            viewTransitionName: "tabbar",
+            "--n": tabs.length,
+            "--i": Math.max(0, active),
+          } as CSSProperties
+        }
       >
-        {active >= 0 && (
-          <span
-            aria-hidden
-            className="absolute bottom-1 left-1 top-1 rounded-pill bg-fill-2 transition-transform duration-[var(--dur-snappy)] ease-spring-snappy motion-reduce:transition-none"
-            style={{
-              width: `calc((100% - 8px) / ${tabs.length})`,
-              transform: `translateX(${active * 100}%)`,
-            }}
-          />
-        )}
+        <span aria-hidden className="tabbar-pill" />
         {tabs.map((t, i) => {
           const on = i === active;
           return (
             <Link
               key={t.key}
               href={t.href}
+              transitionTypes={NAV_TAB}
               aria-current={on ? "page" : undefined}
               onClick={(e) => {
                 if (on && !e.metaKey && !e.ctrlKey) {
@@ -94,27 +91,17 @@ export function TabBar({
                   window.scrollTo({ top: 0, behavior: "smooth" });
                 }
               }}
-              className={cx(
-                "pressable relative z-[1] flex flex-col items-center justify-center gap-0.5 rounded-pill outline-offset-[-2px]",
-                on ? "text-accent-text" : "text-label",
-              )}
+              className="tab"
             >
-              <span aria-hidden className="relative flex [&_svg]:size-[24px]">
+              <span aria-hidden className="tab-icon">
                 {t.icon}
                 {t.badge ? (
-                  <span className="absolute -right-2.5 -top-1.5">
+                  <span className="tab-badge">
                     <Badge count={t.badge} tone={t.critical ? "red" : "gray"} />
                   </span>
                 ) : null}
               </span>
-              <span
-                className={cx(
-                  "max-w-full truncate px-1 text-[10px] leading-3",
-                  on ? "font-semibold" : "font-medium",
-                )}
-              >
-                {t.label}
-              </span>
+              <span className="tab-label">{t.label}</span>
               {t.badge ? (
                 <span className="sr-only">, {t.badge} new</span>
               ) : null}

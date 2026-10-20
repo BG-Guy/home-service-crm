@@ -8,19 +8,11 @@ import {
   Trash2,
   User,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useOptimistic, useState, useTransition } from "react";
 import { ROW_SEP } from "@/features/jobs/components/sep";
 import { dateKey, formatInTz } from "@/lib/time";
-import { Button } from "@/ui/components/Button";
-import {
-  DateField,
-  Select,
-  TextArea,
-  TextField,
-  TimeField,
-} from "@/ui/components/Field";
-import { Sheet } from "@/ui/components/Sheet";
 import { Pill } from "@/ui/components/StatusPill";
 import { SwipeActions } from "@/ui/components/SwipeActions";
 import { toast } from "@/ui/components/Toast";
@@ -42,7 +34,10 @@ const KIND_LABEL: Record<string, string> = {
   custom: "Task",
 };
 
-type Draft = {
+// The create/edit sheet is its own chunk, loaded on the first tap.
+const TaskSheet = dynamic(() => import("./TaskSheet"), { ssr: false });
+
+export type Draft = {
   id: string | null;
   title: string;
   body: string;
@@ -203,7 +198,7 @@ export function TaskList({
                   className={cx(
                     "flex size-[22px] items-center justify-center rounded-full border-[1.5px] transition-[background-color,border-color] duration-300 ease-[var(--ease-spring)]",
                     t.status === "done"
-                      ? "border-transparent bg-accent text-on-accent"
+                      ? "border-transparent bg-accent-fill text-on-accent"
                       : "border-label-3",
                   )}
                 >
@@ -230,7 +225,12 @@ export function TaskList({
                 onClick={() => openEdit(t)}
                 className="flex min-w-0 flex-1 flex-col items-start py-2.5 text-left outline-offset-[-2px]"
               >
-                <span className={cx("text-body", closed && "line-through")}>
+                <span
+                  className={cx(
+                    "text-body font-medium",
+                    closed && "line-through",
+                  )}
+                >
                   {t.title}
                 </span>
                 {!compact && t.body && (
@@ -266,7 +266,7 @@ export function TaskList({
               {t.jobId && t.jobNumber && (
                 <Link
                   href={`/jobs/${t.jobId}`}
-                  className="mt-2.5 inline-flex shrink-0 items-center gap-1 rounded-full bg-fill px-2.5 py-1 text-footnote text-label-2"
+                  className="pressable mt-2.5 inline-flex shrink-0 items-center gap-1 rounded-full bg-fill px-2.5 py-1 text-footnote font-medium text-label-2"
                 >
                   <Briefcase size={12} aria-hidden /> {t.jobNumber}
                 </Link>
@@ -307,7 +307,7 @@ export function TaskList({
           type="button"
           onClick={openNew}
           className={cx(
-            "row-press flex min-h-11 items-center gap-3 px-4 text-left text-body text-accent",
+            "row-press flex min-h-12 items-center gap-3 px-4 text-left text-body font-medium text-accent-text",
             list.length > 0 && "border-t-[0.5px] border-[var(--sep)]",
           )}
         >
@@ -316,89 +316,16 @@ export function TaskList({
       )}
 
       {draft && (
-        <Sheet
-          open
-          onOpenChange={(o) => !o && setDraft(null)}
-          title={draft.id ? "Edit task" : "New task"}
-          detents={["content"]}
-          dirty={!!draft.title}
-          leading={
-            <Button variant="plain" size="sm" onClick={() => setDraft(null)}>
-              Cancel
-            </Button>
-          }
-          footer={
-            <Button
-              size="lg"
-              fullWidth
-              loading={pending}
-              disabled={!draft.title.trim()}
-              onClick={save}
-            >
-              {draft.id ? "Save" : "Add task"}
-            </Button>
-          }
-        >
-          <div className="grid grid-cols-2 gap-3 px-4 pb-4">
-            <TextField
-              label="Title"
-              className="col-span-2"
-              value={draft.title}
-              maxLength={200}
-              autoFocus
-              error={errors.title?.[0]}
-              onChange={(e) => setDraft({ ...draft, title: e.target.value })}
-            />
-            <TextArea
-              label="Details"
-              className="col-span-2"
-              rows={2}
-              maxLength={4000}
-              value={draft.body}
-              onChange={(e) => setDraft({ ...draft, body: e.target.value })}
-            />
-            <DateField
-              label="Due"
-              value={draft.dueDate}
-              onChange={(e) => setDraft({ ...draft, dueDate: e.target.value })}
-            />
-            <TimeField
-              label="Time"
-              value={draft.dueTime}
-              onChange={(e) => setDraft({ ...draft, dueTime: e.target.value })}
-            />
-            {canAssign && (
-              <Select
-                label="Assign to"
-                className="col-span-2"
-                value={draft.assigneeUserId}
-                placeholder="Office queue (unassigned)"
-                options={users.map((u) => ({
-                  value: u.id,
-                  label: u.id === viewerId ? `${u.name} (me)` : u.name,
-                }))}
-                onChange={(e) =>
-                  setDraft({ ...draft, assigneeUserId: e.target.value })
-                }
-              />
-            )}
-            {!draft.id && (
-              <Select
-                label="Type"
-                className="col-span-2"
-                value={draft.kind}
-                options={[
-                  { value: "custom", label: "Task" },
-                  { value: "follow_up", label: "Follow up" },
-                  { value: "callback_customer", label: "Call customer" },
-                ]}
-                onChange={(e) =>
-                  setDraft({ ...draft, kind: e.target.value as Draft["kind"] })
-                }
-              />
-            )}
-          </div>
-        </Sheet>
+        <TaskSheet
+          draft={draft}
+          setDraft={setDraft}
+          errors={errors}
+          pending={pending}
+          onSave={save}
+          canAssign={canAssign}
+          users={users}
+          viewerId={viewerId}
+        />
       )}
     </div>
   );

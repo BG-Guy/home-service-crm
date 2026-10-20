@@ -1,7 +1,8 @@
 "use client";
 
-import { CircleAlert, CircleCheck, Info, TriangleAlert } from "lucide-react";
+import { Icon, type IconNode } from "lucide-react";
 import {
+  type CSSProperties,
   type ReactNode,
   useEffect,
   useRef,
@@ -10,8 +11,6 @@ import {
 } from "react";
 import { cx } from "../cx";
 import { haptic } from "../motion/haptics";
-import { EASE, prefersReducedMotion } from "../motion/springs";
-import { type Tone, toneStyle } from "../tone";
 
 export type ToastTone = "default" | "success" | "error" | "warning";
 
@@ -93,26 +92,64 @@ export function useToast() {
 
 /* ---------- view ---------- */
 
-const TONE: Record<ToastTone, { tone: Tone; Icon: typeof Info }> = {
-  default: { tone: "accent", Icon: Info },
-  success: { tone: "green", Icon: CircleCheck },
-  error: { tone: "red", Icon: CircleAlert },
-  warning: { tone: "orange", Icon: TriangleAlert },
+// Glyphs drawn with lucide's generic <Icon> (no per-icon modules). Using it here
+// also puts lucide's small "use client" runtime, which every page needs for its
+// server-rendered icons, in the root chunk once instead of a copy per route
+// chunk. The success check draws itself (M10).
+const RING: IconNode[number] = [
+  "circle",
+  { cx: "12", cy: "12", r: "9.5", key: "r" },
+];
+const GLYPH: Record<ToastTone, IconNode> = {
+  default: [RING, ["path", { d: "M12 16v-4M12 8h.01", key: "g" }]],
+  success: [
+    RING,
+    [
+      "path",
+      {
+        d: "m8 12.4 2.8 2.8 5.4-5.6",
+        pathLength: 1,
+        className: "toast-check",
+        key: "g",
+      },
+    ],
+  ],
+  error: [RING, ["path", { d: "M12 7.5v5M12 16.2h.01", key: "g" }]],
+  warning: [
+    [
+      "path",
+      {
+        d: "M10.3 4.1 2.6 17.5a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 4.1a2 2 0 0 0-3.4 0Z",
+        key: "t",
+      },
+    ],
+    ["path", { d: "M12 9.5v3.5M12 16.7h.01", key: "g" }],
+  ],
 };
+
+function ToastIcon({ tone }: { tone: ToastTone }) {
+  return (
+    <Icon iconNode={GLYPH[tone]} size={22} strokeWidth={2.25} aria-hidden />
+  );
+}
+
+const LEAVE_MS = 200;
 
 function ToastView({
   t,
   index,
-  expanded,
+  front,
+  multiline,
 }: {
   t: ToastItem;
   index: number;
-  expanded: boolean;
+  front: boolean;
+  multiline: boolean;
 }) {
-  const inner = useRef<HTMLDivElement>(null);
   const [paused, setPaused] = useState(false);
-  const drag = useRef<{ y: number; id: number } | null>(null);
+  const drag = useRef<{ x: number; y: number; id: number } | null>(null);
   const duration = t.duration ?? (t.undo || t.action ? 5000 : 3000);
+  const tone = t.tone ?? "default";
 
   useEffect(() => {
     if (t.leaving || paused || duration === 0) return;
@@ -120,90 +157,65 @@ function ToastView({
     return () => clearTimeout(h);
   }, [t.leaving, paused, duration, t.id]);
 
+  // The exit is CSS (`.toast[data-leaving]`: rise + fade, 200 ms).
   useEffect(() => {
     if (!t.leaving) return;
-    const el = inner.current;
-    if (!el || prefersReducedMotion()) {
-      remove(t.id);
-      return;
-    }
-    const a = el.animate(
-      [
-        { opacity: 1 },
-        { opacity: 0, transform: "translateY(-60%) scale(0.92)" },
-      ],
-      { duration: 260, easing: "ease-in", fill: "forwards" },
-    );
-    a.finished.then(
-      () => remove(t.id),
-      () => remove(t.id),
-    );
+    const h = setTimeout(() => remove(t.id), LEAVE_MS);
+    return () => clearTimeout(h);
   }, [t.leaving, t.id]);
-
-  const { tone, Icon } = TONE[t.tone ?? "default"];
-  const y = expanded ? index * 72 : index * 10;
-  const scale = expanded ? 1 : 1 - index * 0.05;
-  const front = index === 0 || expanded;
-  const multiline = index === 0 && !expanded;
 
   return (
     <div
-      className="absolute inset-x-0 top-0"
-      style={{
-        transform: `translateY(${y}px) scale(${scale})`,
-        transformOrigin: "top center",
-        zIndex: MAX_VISIBLE + 1 - index,
-        opacity: t.leaving ? undefined : index >= MAX_VISIBLE ? 0 : 1,
-        transition: `transform var(--dur-snappy) var(--ease-spring-snappy), opacity 200ms`,
-        pointerEvents: front && !t.leaving ? "auto" : "none",
-      }}
+      className="toast"
+      data-tone={tone}
+      data-front={front || undefined}
+      data-leaving={t.leaving || undefined}
+      data-hidden={index >= MAX_VISIBLE || undefined}
+      style={{ "--i": index, zIndex: MAX_VISIBLE + 1 - index } as CSSProperties}
       aria-hidden={!front || undefined}
     >
       {/* biome-ignore lint/a11y/noStaticElementInteractions: swipe-to-dismiss + hover pause; buttons inside are the controls */}
       <div
-        ref={inner}
-        className={`enter-toast material flex min-h-12 touch-none items-center gap-3 rounded-[22px] py-2.5 pl-3.5 pr-2 shadow-[var(--shadow-float),0_0_0_0.5px_var(--sep)] [&>*]:transition-opacity [&>*]:duration-200 ${front ? "" : "[&>*]:opacity-0"}`}
+        className="toast-card"
         onPointerEnter={() => setPaused(true)}
         onPointerLeave={() => setPaused(false)}
         onFocus={() => setPaused(true)}
         onBlur={() => setPaused(false)}
         onPointerDown={(e) => {
           if ((e.target as Element).closest("button")) return;
-          drag.current = { y: e.clientY, id: e.pointerId };
+          drag.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
           e.currentTarget.setPointerCapture(e.pointerId);
+          e.currentTarget.style.transition = "none";
         }}
         onPointerMove={(e) => {
           const d = drag.current;
           if (!d || d.id !== e.pointerId) return;
+          // Up (the phone island) or right (the desktop card) only.
           const dy = Math.min(0, e.clientY - d.y);
-          e.currentTarget.style.transform = `translateY(${dy}px)`;
+          const dx = Math.max(0, e.clientX - d.x);
+          e.currentTarget.style.translate = `${dx}px ${dy}px`;
         }}
         onPointerUp={(e) => {
           const d = drag.current;
           drag.current = null;
           if (!d) return;
-          const dy = e.clientY - d.y;
-          if (dy < -24) toast.dismiss(t.id);
-          else
-            e.currentTarget.animate(
-              [
-                { transform: e.currentTarget.style.transform },
-                { transform: "none" },
-              ],
-              { duration: 400, easing: EASE.snappy },
-            );
-          e.currentTarget.style.transform = "";
+          const el = e.currentTarget;
+          el.style.transition = "";
+          el.style.translate = "";
+          if (e.clientY - d.y < -24 || e.clientX - d.x > 64)
+            toast.dismiss(t.id);
+        }}
+        onPointerCancel={(e) => {
+          drag.current = null;
+          e.currentTarget.style.transition = "";
+          e.currentTarget.style.translate = "";
         }}
       >
-        <span
-          aria-hidden
-          className="tone-fg flex shrink-0"
-          style={toneStyle(tone)}
-        >
-          {t.icon ?? <Icon size={22} strokeWidth={2.25} />}
+        <span className="toast-icon">
+          {t.icon ?? <ToastIcon tone={tone} />}
         </span>
-        {/* The top toast shows up to 3 lines (a long error must be readable,
-            QA T3-22); the expanded stack keeps one line per toast (72 px rows). */}
+        {/* The front toast shows up to 3 lines (a long error must be readable,
+            QA T3-22); the expanded stack keeps one line per toast. */}
         <div className="min-w-0 flex-1">
           <div
             className={cx(
@@ -216,7 +228,7 @@ function ToastView({
           {t.message && (
             <div
               className={cx(
-                "text-footnote text-label-2",
+                "toast-message text-footnote",
                 multiline ? "line-clamp-3 break-words" : "truncate",
               )}
             >
@@ -227,7 +239,7 @@ function ToastView({
         {(t.undo || t.action) && (
           <button
             type="button"
-            className="min-h-11 shrink-0 rounded-pill px-3 text-subhead font-semibold text-accent-text active:bg-fill-2"
+            className="toast-action"
             onClick={() => {
               (t.undo ?? t.action?.onPress)?.();
               toast.dismiss(t.id);
@@ -242,10 +254,13 @@ function ToastView({
 }
 
 /**
- * Toast host (SPEC §12.6): top capsule `.material`, auto-dismiss 3 s (5 s with
- * Undo), queue max 3 stacked as a deck (expands on hover/focus), swipe up to
- * dismiss, announced via a polite live region. Mount once (see `AppProviders`),
- * then call `toast(...)` anywhere on the client.
+ * Toast host (docs/DESIGN.md §4 M7). Phone: a black "island" pill that drops from
+ * the top on a bouncy spring and widens to fit, swipe up to dismiss. Desktop
+ * (≥ 1024 px): a glass card at the bottom right, swipe right to dismiss. Out: rise
+ * and fade in 200 ms. Auto-dismiss 3 s (5 s with Undo/action), max 3 stacked as a
+ * deck that expands on hover/focus, announced via a polite live region. All motion
+ * is CSS (`.toast*` in globals.css). Mount once (see `AppProviders`), then call
+ * `toast(...)` anywhere on the client.
  */
 export function Toaster() {
   const list = useSyncExternalStore(
@@ -256,6 +271,7 @@ export function Toaster() {
   const [expanded, setExpanded] = useState(false);
   const live = list.filter((t) => !t.leaving);
   const latest = live[0];
+  const open = expanded && live.length > 1;
 
   return (
     <>
@@ -267,18 +283,20 @@ export function Toaster() {
       <section
         aria-label="Notifications"
         className="toast-region"
-        style={{ height: list.length ? 64 : 0 }}
+        data-expanded={open || undefined}
+        data-empty={list.length === 0 || undefined}
         onPointerEnter={() => setExpanded(true)}
         onPointerLeave={() => setExpanded(false)}
         onFocusCapture={() => setExpanded(true)}
         onBlurCapture={() => setExpanded(false)}
       >
-        {list.map((t) => (
+        {list.map((t, i) => (
           <ToastView
             key={t.id}
             t={t}
-            index={list.indexOf(t)}
-            expanded={expanded && live.length > 1}
+            index={i}
+            front={i === 0 || open}
+            multiline={i === 0 && !open}
           />
         ))}
       </section>

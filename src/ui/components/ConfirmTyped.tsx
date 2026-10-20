@@ -66,8 +66,12 @@ export function ConfirmTyped({
         },
       ]}
     >
-      <label htmlFor={id} className="mb-1.5 block text-center text-footnote">
-        Type <span className="font-semibold">{phrase}</span> to confirm.
+      <label
+        htmlFor={id}
+        className="mb-2 block text-center text-footnote text-label-2"
+      >
+        Type <span className="font-semibold text-label">{phrase}</span> to
+        confirm.
       </label>
       <input
         id={id}
@@ -78,7 +82,7 @@ export function ConfirmTyped({
         autoCorrect="off"
         spellCheck={false}
         disabled={busy}
-        className="h-9 w-full rounded-[8px] bg-card px-2.5 text-body outline-none shadow-[inset_0_0_0_0.5px_var(--sep)] focus:shadow-[inset_0_0_0_2px_var(--accent)]"
+        className="h-11 w-full rounded-[12px] bg-card px-3 text-body outline-none shadow-[inset_0_0_0_0.5px_var(--sep)] transition-shadow duration-150 focus:shadow-[inset_0_0_0_2px_var(--accent)]"
       />
     </Alert>
   );

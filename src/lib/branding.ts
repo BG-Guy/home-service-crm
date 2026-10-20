@@ -6,6 +6,9 @@
 // - `--accent-text` is derived per theme so links/labels keep WCAG AA (4.5:1) on the
 //   page and card backgrounds: darkened in light mode, lightened in dark mode.
 // - `--on-accent` is white or near-black, whichever reads better on the fill.
+// - `--accent-fill` is the fill under text (primary buttons, selected chips, badges): the
+//   accent darkened just enough for white text to reach 4.5:1, readable outdoors. Accents
+//   that already pass (or that take dark text) are used as they are.
 
 const HEX = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i;
 
@@ -92,6 +95,8 @@ export interface BrandTokens {
   accentTextLight: string;
   accentTextDark: string;
   onAccent: string;
+  /** Fill under `onAccent` text: ≥ 4.5:1 with white when the label is white. */
+  accentFill: string;
 }
 
 /** Derive the accent token set for a brand color (null when the input is invalid). */
@@ -102,12 +107,17 @@ export function brandTokens(
   if (!hex) return null;
   const white = contrast(hex, "#ffffff");
   const dark = contrast(hex, "#111111");
+  // Button labels are 17 px semibold: prefer white unless it's clearly worse.
+  const onAccent = white >= 3 || white >= dark ? "#ffffff" : "#111111";
   return {
     accent: hex,
     accentTextLight: adjustFor(hex, LIGHT_BGS, "#000000"),
     accentTextDark: adjustFor(hex, DARK_BGS, "#ffffff"),
-    // Button labels are 17 px semibold: prefer white unless it's clearly worse.
-    onAccent: white >= 3 || white >= dark ? "#ffffff" : "#111111",
+    onAccent,
+    accentFill:
+      onAccent === "#ffffff" && white < 4.5
+        ? adjustFor(hex, ["#ffffff"], "#000000")
+        : hex,
   };
 }
 
@@ -120,7 +130,7 @@ export function brandCss(accent: string | null | undefined): string {
   const t = brandTokens(accent);
   if (!t) return "";
   return [
-    `:root:root{--accent:${t.accent};--accent-text:${t.accentTextLight};--on-accent:${t.onAccent}}`,
+    `:root:root{--accent:${t.accent};--accent-text:${t.accentTextLight};--on-accent:${t.onAccent};--accent-fill:${t.accentFill}}`,
     `@media (prefers-color-scheme: dark){:root:root:not([data-theme="light"]){--accent-text:${t.accentTextDark}}}`,
     `:root:root[data-theme="dark"]{--accent-text:${t.accentTextDark}}`,
   ].join("\n");

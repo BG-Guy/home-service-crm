@@ -142,7 +142,7 @@ export default async function InsightsPage({
       <Page wide className="pt-3 lg:max-w-[1200px]">
         {setup && !setup.dismissed && setup.done < setup.total && (
           <div className="mb-[var(--section-gap)]">
-            <SetupChecklistCard checklist={setup} canEdit />
+            <SetupChecklistCard checklist={setup} canEdit compact />
           </div>
         )}
         {view === "business" && (

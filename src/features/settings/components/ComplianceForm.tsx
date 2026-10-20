@@ -96,7 +96,7 @@ export function ComplianceForm({ initial }: { initial: ComplianceValues }) {
         </ListSection>
 
         <section>
-          <h2 className="px-4 pb-1.5 text-footnote uppercase text-label-2">
+          <h2 className="px-4 pb-2 text-subhead font-semibold text-label-2">
             W-2 wage deductions ⚖️
           </h2>
           <div className="rounded-card bg-card p-4">
@@ -143,7 +143,7 @@ export function ComplianceForm({ initial }: { initial: ComplianceValues }) {
         </section>
 
         <section>
-          <h2 className="px-4 pb-1.5 text-footnote uppercase text-label-2">
+          <h2 className="px-4 pb-2 text-subhead font-semibold text-label-2">
             Texting quiet hours (TCPA) ⚖️
           </h2>
           <div className="flex flex-col gap-4 rounded-card bg-card p-4">
@@ -174,7 +174,7 @@ export function ComplianceForm({ initial }: { initial: ComplianceValues }) {
         </section>
 
         <section>
-          <h2 className="px-4 pb-1.5 text-footnote uppercase text-label-2">
+          <h2 className="px-4 pb-2 text-subhead font-semibold text-label-2">
             Frequency caps
           </h2>
           <div className="rounded-card bg-card">

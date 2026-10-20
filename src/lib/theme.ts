@@ -17,7 +17,7 @@ export function dataThemeFor(pref: ThemePref): "light" | "dark" | undefined {
 }
 
 /** Browser chrome color per theme (`<meta name="theme-color">`), = the page --bg. */
-export const THEME_COLORS = { light: "#F2F2F7", dark: "#000000" } as const;
+export const THEME_COLORS = { light: "#F5F5F7", dark: "#000000" } as const;
 
 /**
  * theme-color entries for a preference: a forced theme paints the bar its own

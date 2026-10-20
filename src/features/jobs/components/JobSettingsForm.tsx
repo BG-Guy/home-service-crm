@@ -137,7 +137,7 @@ export function JobSettingsForm({ initial }: { initial: JobSettingsValues }) {
                 onClick={() => toggleWindow(m)}
                 className={cx(
                   "min-h-9 rounded-full px-3.5 text-subhead transition-colors duration-200",
-                  on ? "bg-accent text-on-accent" : "bg-fill text-label",
+                  on ? "bg-accent-fill text-on-accent" : "bg-fill text-label",
                 )}
               >
                 {fmt(m)}

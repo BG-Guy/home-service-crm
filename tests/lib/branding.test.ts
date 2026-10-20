@@ -40,6 +40,22 @@ describe("branding", () => {
     expect(brandTokens("#ffcc00")?.onAccent).toBe("#111111");
   });
 
+  it("keeps white labels at 4.5:1 on the fill (readable outdoors)", () => {
+    // Too light for white text: darkened just enough.
+    for (const accent of ["#0088ff", "#e8590c", "#ff383c"]) {
+      const t = brandTokens(accent);
+      if (!t) throw new Error(accent);
+      expect(t.onAccent).toBe("#ffffff");
+      expect(contrast(t.accentFill, "#ffffff")).toBeGreaterThanOrEqual(4.5);
+      expect(t.accentFill).not.toBe(accent);
+    }
+    // Already passing, or taking dark text: unchanged.
+    expect(brandTokens("#3b4cca")?.accentFill).toBe("#3b4cca");
+    expect(brandTokens("#b03a2e")?.accentFill).toBe("#b03a2e");
+    expect(brandTokens("#ffcc00")?.accentFill).toBe("#ffcc00");
+    expect(brandCss("#e8590c")).toContain("--accent-fill:#");
+  });
+
   it("emits CSS only for valid colors", () => {
     expect(brandCss(null)).toBe("");
     expect(brandCss("not-a-color")).toBe("");

@@ -68,7 +68,7 @@ export default async function LeadSourcesPage() {
           </ListSection>
         )}
         <section className="flex flex-col gap-2">
-          <h2 className="px-4 text-footnote uppercase text-label-2">
+          <h2 className="px-4 text-subhead font-semibold text-label-2">
             Inbox rules
           </h2>
           <LeadSettingsForm

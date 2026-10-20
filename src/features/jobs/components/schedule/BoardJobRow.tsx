@@ -14,6 +14,7 @@ export function BoardJobRow({
   showTechs = false,
   showDay = false,
   trailing,
+  edge,
 }: {
   job: BoardJob;
   tz: string;
@@ -21,6 +22,8 @@ export function BoardJobRow({
   showTechs?: boolean;
   showDay?: boolean;
   trailing?: ReactNode;
+  /** Lane color (the tech's): a soft block edge on the left. */
+  edge?: string;
 }) {
   const people =
     showTechs && techs
@@ -28,13 +31,20 @@ export function BoardJobRow({
       : [];
   const depositDue = job.deposit?.required && !job.deposit.paid;
   return (
-    <div className="list-row flex items-center gap-2 pr-3">
+    <div className="list-row relative flex items-center gap-2 pr-3">
+      {edge && (
+        <span
+          aria-hidden
+          className="absolute top-2.5 bottom-2.5 left-2 w-1 rounded-full"
+          style={{ background: edge }}
+        />
+      )}
       <Link
         href={`/jobs/${job.id}`}
         transitionTypes={["nav-forward"]}
-        className="row-press flex min-h-[64px] min-w-0 flex-1 items-center gap-3 pl-4 text-left outline-offset-[-2px]"
+        className="row-press flex min-h-[68px] min-w-0 flex-1 items-center gap-3 pl-5 text-left outline-offset-[-2px]"
       >
-        <span className="flex w-14 shrink-0 flex-col py-2.5">
+        <span className="flex w-[4.75rem] shrink-0 flex-col self-start whitespace-nowrap py-3">
           {job.start ? (
             <>
               <span className="num text-subhead font-semibold">
@@ -43,6 +53,14 @@ export function BoardJobRow({
                   minute: "2-digit",
                 })}
               </span>
+              {job.end && !showDay && (
+                <span className="num text-caption text-label-2">
+                  {formatInTz(job.end, tz, {
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })}
+                </span>
+              )}
               {showDay && (
                 <span className="text-caption text-label-2">
                   {formatInTz(job.start, tz, {
@@ -56,18 +74,16 @@ export function BoardJobRow({
             <span className="text-caption text-label-2">No time</span>
           )}
         </span>
-        <span className="flex min-w-0 flex-1 flex-col py-2.5">
-          <span className="flex min-w-0 items-baseline gap-1.5">
-            <span className="num shrink-0 text-footnote text-label-2">
-              {job.number}
-            </span>
-            <span className="line-clamp-2 min-w-0 text-body">{job.title}</span>
+        <span className="flex min-w-0 flex-1 flex-col py-3">
+          <span className="line-clamp-2 min-w-0 text-headline">
+            {job.title}
           </span>
           <span className="truncate text-subhead text-label-2">
             {job.customerName} · {job.addressShort}
           </span>
           <span className="mt-1 flex flex-wrap items-center gap-1.5">
             <StatusPill kind="job" status={job.status} size="sm" />
+            <span className="num text-caption text-label-2">{job.number}</span>
             {job.priority !== "normal" && (
               <Pill
                 tone={job.priority === "emergency" ? "red" : "orange"}
@@ -108,7 +124,7 @@ export function BoardJobRow({
             </span>
           )}
           {job.warnings.length === 0 && job.travelHint && (
-            <span className="mt-0.5 text-caption text-label-3">
+            <span className="mt-0.5 text-caption text-label-2">
               {job.travelHint}
             </span>
           )}

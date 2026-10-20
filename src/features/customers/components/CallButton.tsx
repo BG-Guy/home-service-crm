@@ -1,6 +1,7 @@
 "use client";
 
 import { Phone } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useState } from "react";
 import { useConfirm } from "@/ui/components/Alert";
 import { Button } from "@/ui/components/Button";
@@ -8,7 +9,15 @@ import { IconButton } from "@/ui/components/IconButton";
 import { ListRow } from "@/ui/components/List";
 import { toast } from "@/ui/components/Toast";
 import { logCustomerCall, startCustomerCall } from "../actions";
-import { CallOutcomeSheet } from "./CallOutcomeSheet";
+import { QuickActionIcon, quickActionCls } from "./QuickActions";
+
+// The outcome sheet (and the Sheet kit behind it) loads on the first call tap,
+// not with the page (DESIGN.md §2: sheets behind first open).
+const loadSheet = () => import("./CallOutcomeSheet");
+const CallOutcomeSheet = dynamic(
+  () => loadSheet().then((m) => m.CallOutcomeSheet),
+  { ssr: false },
+);
 
 /**
  * Call through the app (SPEC §4.2): the number is fetched server-side after the
@@ -24,21 +33,27 @@ export function CallButton({
   variant = "button",
   subtitle,
   disabled,
+  size = 36,
 }: {
   customerId: string;
   jobId?: string;
   which?: "phone" | "phoneAlt" | "site";
   propertyId?: string;
   label?: string;
-  variant?: "button" | "icon" | "row" | "tile";
+  /** `round` = the labelled circle of a quick-action row. */
+  variant?: "button" | "icon" | "row" | "tile" | "round";
   subtitle?: string;
   disabled?: boolean;
+  /** `icon` only: circle size (36 default; 44 for hero rows). */
+  size?: 36 | 44;
 }) {
   const [open, setOpen] = useState(false);
+  const [armed, setArmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirm, confirmEl] = useConfirm();
 
   const start = async () => {
+    void loadSheet();
     setBusy(true);
     const res = await startCustomerCall({
       customerId,
@@ -61,43 +76,64 @@ export function CallButton({
     )
       return;
     window.location.href = res.data.tel;
+    setArmed(true);
     setTimeout(() => setOpen(true), 600);
   };
 
   const sheet = (
     <>
       {confirmEl}
-      <CallOutcomeSheet
-        open={open}
-        onOpenChange={setOpen}
-        onSave={async ({ outcome, notes }) => {
-          const r = await logCustomerCall({
-            customerId,
-            jobId,
-            outcome,
-            notes,
-            direction: "out",
-            clientId: crypto.randomUUID(),
-          });
-          if (r.ok) toast.success("Call logged");
-          else toast.error(r.error);
-          return r.ok;
-        }}
-      />
+      {armed && (
+        <CallOutcomeSheet
+          open={open}
+          onOpenChange={setOpen}
+          onSave={async ({ outcome, notes }) => {
+            const r = await logCustomerCall({
+              customerId,
+              jobId,
+              outcome,
+              notes,
+              direction: "out",
+              clientId: crypto.randomUUID(),
+            });
+            if (r.ok) toast.success("Call logged");
+            else toast.error(r.error);
+            return r.ok;
+          }}
+        />
+      )}
     </>
   );
 
+  if (variant === "round")
+    return (
+      <>
+        <button
+          type="button"
+          onClick={start}
+          disabled={disabled || busy}
+          aria-busy={busy || undefined}
+          className={quickActionCls}
+        >
+          <QuickActionIcon>
+            <Phone />
+          </QuickActionIcon>
+          <span className="max-w-full truncate">{label}</span>
+        </button>
+        {sheet}
+      </>
+    );
   if (variant === "icon")
     return (
       <>
         <IconButton
           label={label}
-          variant="gray"
-          size={36}
+          variant="secondary"
+          size={size}
           onClick={start}
           disabled={disabled || busy}
         >
-          <Phone size={18} />
+          <Phone size={size >= 44 ? 20 : 18} />
         </IconButton>
         {sheet}
       </>

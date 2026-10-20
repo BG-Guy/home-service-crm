@@ -2,6 +2,169 @@
 
 ## Unreleased
 
+### Design refresh v2 (2026-10-19)
+Spec: `docs/DESIGN.md`. CSS and markup only; no new dependencies, no new client JS in the shell.
+
+**Tokens and primitives (F1)**
+- New tokens: calm canvas `#f5f5f7`, `--hairline`, `--field` (input fill), `--danger-text`,
+  `--shadow-raised`, `--radius-modal` 24; cards radius 20; gutter 16 / 24 / 32; section gap 28;
+  rows 52 (44 dense). Type scale carries weights and tracking (`text-title1` is 700 / -0.02em),
+  body 17/24, new `text-page-title`. Dark mode: true black, raised gray cards with hairlines.
+- Status text is AA everywhere: per-tone `--ink-*` shades on soft 12% tints (`toneStyle()` sets
+  `--tone-ink`), and `text-success` / `text-warning` / `text-danger` now use them too.
+- Button: `primary` / `secondary` / `tinted` / `plain` / `destructive` (legacy `filled` and `gray`
+  still work), a `destructive` role for red text on any variant, `block`, a loading state that
+  keeps its width, and `loadingText`. IconButton shares the variants (`secondary` = neutral
+  circle) and sizes 30–56.
+- Lists: `ListSection variant="title" | "caption"` (no more uppercase headers), new
+  `SectionHeader`, 52 px rows with tinted 32 px icon tiles, `bold` and `dense` rows.
+- New `Card`, `TripTimeline` (Uber-style trip progress) and `SuccessCheck` (M10).
+- `ChipRow` scrolls with snap and edge fades (`sticky` option); selected chips are ink-filled.
+  SearchField is a 44 px pill; fields are filled 48 px with a focus glow and an error shake.
+- StatusPill pulses its dot for live states (job on the way / in progress); Badge `pop`;
+  Avatar gradient and presence ring; TechCard driver card (ETA, vehicle, call / text);
+  StatCard delta chips; EmptyState tinted icon circle; Skeleton shimmer.
+- Motion utilities: `.pressable` (M9), `.hover-lift` (M16), `.live-dot` (M12), `.shimmer`
+  (M13), `.disclosure` (M15), `.badge-pop` (M11). First-paint entry (`enter-fade-up`, used by
+  the login card and M8) starts at opacity .5, never 0, so pages report a real FCP / LCP.
+
+**Shell, navigation, overlays and motion (F2)**
+- Motion tokens 120 / 220 / 320 / 400 / 480 ms and `--ease-out`; the `linear()` springs are
+  generated from the JS driver (`src/ui/motion/easing.ts`), with a consistency test.
+- M1 push / pop 400 ms (was 675) with a left-edge shadow, pages clipped to their column; M2 tab
+  bar / sidebar cross-fade 160 ms (`TabLink`, `NAV_TAB`); M3 `Morph` shared elements.
+- Sheet: 320 ms spring, iOS card stack behind the large detent, desktop modal (≥ 768 px or a fine
+  pointer) and `presentation="drawer"`; `desktop="panel"` still works.
+- M5 pop-ups grow from their trigger: the "+" menu (no Sheet any more), the desktop ActionSheet,
+  ContextMenu (`MenuPopover`). M6 alert: glass, pill buttons on the contrast-safe fills. M7 toast:
+  phone island, desktop card, drawn success check; no icon modules in the toast host.
+- Tab bar: opaque glass capsule (the view-transition name moved to the capsule; on the `<nav>` it
+  made the blur see nothing, which is why page text read through), sliding accent pill, icon
+  bounce. Nav bars turn to glass once scrolled; long titles no longer slide under the trailing
+  buttons. Sidebar: soft-card selection, 36 px items, quiet labels.
+- New `BottomBar` / `BarSummary`, `DetailLayout`; content max width 1200; new-look
+  `ListLoading` / `DetailLoading` (`rail`); `.enter-stagger` (M8); install hint is a floating nudge.
+- Shell JS 149.6 → 139.2 KB gz (framework + layouts): outbox, upload client, sync capsule, install
+  prompt and location pill load after idle; skeleton header without NavBar; lucide runtime once in
+  the root chunk. 104 of 142 routes have a lighter first load.
+
+**Screens: jobs, schedule, map, tasks (B)**
+- Job detail: a hero card (live status, title that morphs from the list row, customer and
+  address with a round Directions button, window, technicians), in-page tabs with a sliding
+  underline, and `DetailLayout`. Desktop (≥ 1200): a sticky right rail with the action card, a
+  trip-style progress timeline, the money summary and tech cards; the centered floating dock
+  is gone. Phone: the dock is a sticky booking bar (tool tiles, a summary such as "3 to do" or
+  the balance on the left, the one primary on the right). Office users without the field dock
+  get the bar for their next step (Collect a balance, Schedule an unassigned job).
+- Jobs list: sticky search pill and status chips, sticky day headers with counts, rich rows
+  (bold title, time column, status, avatars). `JobRow` carries the `job-<id>-title` /
+  `-status` morph names (`morph={false}` to turn them off).
+- Schedule: soft blocks with the lead tech's color on the edge, a red now-line with a time
+  pill, sentence-case queues; phone tech lanes with the same edge; day switching slides.
+- Map: phone is a full-bleed map with a bottom sheet of techs and jobs that slides up over
+  it as you scroll (no drag code); desktop keeps the side panel. Leaflet stays lazy.
+- Tasks and new job: title sections, the task sheet loads on first tap, the new-job submit
+  is a sticky booking bar.
+- Speed: /jobs/[id] route JS 89.6 → 56.6 KB gz from these changes (17.2 with the other
+  modules' slot splits that landed alongside). The camera / photo sheet, signature
+  sheet, More menu, office menu, checklist, notes, photo gallery and other modules' slot
+  buttons load on first use or where they render; the media slots and the portal job
+  actions are split into their own chunks; the dock warms the next step's sheet when idle.
+  /tasks 26.6 → 12.5, /schedule 24.3 → 8.7, /jobs 18.9 → 11.9, /map 29.0 → 18.8.
+
+**Screens: customers and sales (C)**
+- Customer detail: profile header (88 px avatar and name that morph from the list row, type,
+  phone, flags and tags), a row of round quick actions (Call, Text, Email, New job as the one
+  filled circle), neutral pills for Estimate / Statement / Record payment / Ask for a review,
+  three stat tiles (lifetime, balance, jobs) and bold section titles. Merge lives in the "…" menu.
+- Leads: inbox cards lead with an SLA ring (fills toward the 15-minute mark, green / amber /
+  red, the wait inside), the quote on the right, Call / Text / Book and Claim; the name morphs
+  into the lead hero (`lead-<id>-title`). Lead detail: a hero card with the ring, status and
+  round Call / Text / Book / More (Call filled while new, Book once contacted); "Text them" is a
+  pill that loads the composer on first tap.
+- Estimates and invoices: `DetailLayout` with the one primary (Send / Issue invoice / Collect)
+  in the booking bar on phones and the first rail card on desktop; hero shows the number
+  (`estimate-<id>-title` / `invoice-<id>-title` morph from the lists), status and the amount.
+  Line editor: title header with an item count, tabular amounts, a larger total. Lists use
+  bold section titles and semibold tabular amounts. Payments, disputes, reviews: title
+  sections, no uppercase labels left in C's files.
+- Speed (route JS, gz): /customers/[id] 78.5 → 24.3, /leads/[id] 56.5 → 27.8, /invoices/[id]
+  53.1 → 25.7, /estimates/[id] 52.9 → 23.0, /leads 29.7 → 16.3, /payments 26.7 → 18.8. Every
+  sheet (edit customer, address, call outcome, lost, convert, lead edit, line, price book,
+  invoice send / revise / void / credit, estimate builder sheets, payment collect / record /
+  receipt flag, dispute "why" and evidence picker) loads on hover, focus or first tap; the
+  customer-page slots moved to `*/customer-slots.tsx`, and the job-page slots render
+  `next/dynamic` islands (`*/components/islands.tsx`).
+
+**Screens: customer pages, auth and documents (D)**
+- Auth: desktop split layout (accent-gradient brand panel, CSS only) beside the form; phone stays
+  one column. Login paints on the first frame (FCP / LCP 380 ms cold, was none recorded).
+- Public header: monogram, name and a round call button. `/t`: Uber-style ETA hero ("Luis is on
+  the way", minutes tile), the driver card and a `TripTimeline`; StaticMap gets a live tech dot,
+  a destination pin and a fade into its card (`flush`). Done states use `SuccessCheck`.
+- `/e`: good / better / best option cards (the chosen one expands its lines, M15), an edge
+  booking bar "Total · Approve", "Not right now? Decline" as a plain link. The signature and
+  decline sheets are lazy chunks loaded on intent (route JS 22.0 → 11.4 KB gz).
+- `/p`: checkout summary with a large amount and an ink-filled tip picker; the paid screen uses
+  `SuccessCheck` (no more opacity-0 `enter-pop`). `/i`: amount-due card over the paper invoice;
+  the receipt's flag button loads after hydration (route JS 36.6 → 9.8 KB gz). `/j`: status hero
+  with a live pill, tinted document rows (route JS 34.9 → 10.9 KB gz with B's lazy sheet).
+- `/r`: 44 px stars that pop in sequence (M11), `SuccessCheck` on thanks. `/f`: a three-step
+  form (service chips, details, contact) driven by CSS `:has()` with no page JS; every field,
+  the honeypot, the signed `_ts`, consent text and attribution inputs are unchanged, Enter can't
+  submit an earlier step, and with Turnstile (or without `:has()`) it stays one page.
+- InvoiceDocument / EstimateDocument: no uppercase labels, field-filled totals and notices,
+  ringed option blocks; fixes "Co.." when the company name ends with a period.
+- Removed the unused `src/app/_components/OutboxAutoFlush.tsx`.
+
+**Screens: Today, tech app and dashboards (A)**
+- Tech Today: greeting title; a slim clock line (live dot, "On the clock · 2 h 14 m", Break) or
+  one "Clock in" hero when off the clock (the job button steps down to tinted then); an
+  Uber-style job hero (`NextJobHero`: live pill, title with the `job-<id>-title` morph, window,
+  customer and address, ONE primary next step, call / text / navigate as round icon buttons;
+  Navigate is no longer a second filled button); a summary strip (jobs done, earned today via
+  the new `getDayEarnings` in payroll/api, cash held → hand in); today's route as a
+  `TripTimeline` (no morph names); no uppercase labels.
+- Office / admin Today: greeting; KPI row (jobs ring, new leads with the oldest wait, overdue AR,
+  approvals); a "Techs today" strip (avatar with clocked-in ring, a segment per job, now/next;
+  `getTechDay` in insights/ops); a "Needs attention" feed with a verb per row; two columns at
+  ≥ 1280 px. The setup checklist is a small progress card (`9/13`, Continue, steps in an M15
+  disclosure; `SetupChecklistCard compact`).
+- /pay, /time, /more, /today/finish, insights blocks: title sections, tinted icon tiles, period
+  hero card; Clock out is a primary (red fill stays for confirms).
+- Speed: client islands load as their own chunks (`tech/components/islands.tsx`,
+  `insights/components/islands.tsx`, `payroll/components/islands.tsx`), so techs don't ship the
+  ops board and the office doesn't ship the tech app; the time-entry sheet loads on first open;
+  Today reads the outbox count through messaging/api instead of the slot module. Route JS gz:
+  /today 44.4 → 5.6 KB, /today/finish 32.2 → 7.7, /insights 26.2 → 9.0, /pay 5.1. Tech
+  /today cold JS on the wire 364 → 303 KB, same FCP / LCP.
+
+**Screens: settings, team, messages, fleet and tools (E)**
+- Settings: the index shows a company card above the search; tiles are tinted with AA ink (they
+  were white glyphs on 12% tints). The desktop settings column marks the current page with a
+  card instead of an accent fill. Settings forms end in a sticky save bar (`SaveBar`, on
+  `BottomBar`) that says "Unsaved changes" or "All saved"; `StickySave` uses it, and the
+  messaging, vehicle, tool and parts settings forms now have it too.
+- Messages: thread rows read like iMessage (48 px avatar, bold name, time on the name line, a
+  wide preview, an accent badge for waiting texts). The thread composer is a pill with a round
+  send button inside it, a channel switch button and Cmd/Ctrl+Enter to send, pinned to the
+  bottom of the screen; upcoming sends are dashed "scheduled" cards.
+- Team member: round labeled Call / Text / Email actions. Vehicle quick tiles use tinted icons
+  (the solid green and orange circles had white glyphs under 3:1); the inspection "problem"
+  toggle uses `bg-danger-fill` (it was white on #ff7c75 in dark mode).
+- No uppercase labels left in E's files (caption headers are 15/600 sentence case).
+- Route JS (gz, route part): /settings/reminders 49.5 → 6.2 KB, /team/[id] 46.8 → 13.8,
+  /vehicles/[id] 41.8 → 18.3, /messages 31.0 → 7.0, /team 32.4 → 18.6, /parts 32.3 → 14.6,
+  /tools 29.6 → 21.3, /approvals 23.4 → 15.7. How:
+  - Sheets load on first open (their code is fetched on hover or press): reminder editor, member
+    edit, reset link, role picker, invite, trip, reminder rule, resolve issue, new message,
+    bulk text, new receipt, vehicle "More" menu.
+  - `RECURRENCE_LABELS` moved out of the zod module (it pulled zod into the reminders page).
+  - notify `ActivityFeed` / `PrefsForm`, and the client islands of the messaging, parts and
+    vehicles slots, are `next/dynamic` (SSR on). Turbopack ships every client module a page can
+    reach, so the notification bell had put the activity feed and the preferences catalog on
+    every route.
+
 ### Trade demo profiles (2026-10-18)
 - `npm run seed:demo -- --profile=<handyman|locksmith|chimney>` (with `--reset` as usual)
   seeds one realistic single-trade business at the same scale as the mixed demo (40

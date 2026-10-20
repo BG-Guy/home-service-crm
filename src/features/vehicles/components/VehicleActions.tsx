@@ -12,8 +12,8 @@ import {
 import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
-import { ActionSheet } from "@/ui/components/ActionSheet";
 import { cx } from "@/ui/cx";
+import { type Tone, toneStyle } from "@/ui/tone";
 import type { ApprovalHint } from "../rules";
 import type { SheetVehicle } from "./sheets/OdometerSheet";
 
@@ -45,6 +45,21 @@ const IssueSheet = dynamic(
   { ssr: false },
 );
 
+const ActionSheet = dynamic(
+  () => import("@/ui/components/ActionSheet").then((m) => m.ActionSheet),
+  { ssr: false },
+);
+
+/** Warm a sheet's chunk on intent (hover / press) so the tap opens it at once. */
+const PRELOAD: Record<LogKind, () => Promise<unknown>> = {
+  odometer: () => import("./sheets/OdometerSheet"),
+  fuel: () => import("./sheets/FuelSheet"),
+  service: () => import("./sheets/ServiceSheet"),
+  document: () => import("./sheets/DocumentSheet"),
+  inspection: () => import("./sheets/InspectionSheet"),
+  issue: () => import("./sheets/IssueSheet"),
+};
+
 export type LogKind =
   | "odometer"
   | "fuel"
@@ -67,22 +82,27 @@ function Tile({
   label,
   tone,
   onClick,
+  onIntent,
 }: {
   icon: ReactNode;
   label: string;
-  tone: string;
+  tone: Tone;
   onClick: () => void;
+  onIntent?: () => void;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="pressable flex min-h-[72px] flex-col items-center justify-center gap-1.5 rounded-card bg-card px-2 py-2.5 text-footnote font-medium text-label shadow-card"
+      onPointerEnter={onIntent}
+      onPointerDown={onIntent}
+      onFocus={onIntent}
+      className="pressable hover-lift flex min-h-[76px] flex-col items-center justify-center gap-2 rounded-card bg-card px-1 py-3 text-footnote font-semibold tracking-tight text-label shadow-card"
     >
       <span
         aria-hidden
-        className="flex size-9 items-center justify-center rounded-full text-white"
-        style={{ background: tone }}
+        className="tint-bg tint-fg flex size-10 items-center justify-center rounded-full"
+        style={toneStyle(tone)}
       >
         {icon}
       </span>
@@ -115,6 +135,7 @@ export function VehicleActions({
     setOpenRaw(k);
   };
   const [more, setMore] = useState(false);
+  const [moreUsed, setMoreUsed] = useState(false);
   const can = (k: LogKind) => allowed.includes(k);
 
   // Deep link: /vehicles/[id]?log=odometer|fuel|service|inspection|issue opens the form.
@@ -130,26 +151,26 @@ export function VehicleActions({
     }
   }, [params.get("log")]);
 
-  const primary: { kind: LogKind; icon: ReactNode; tone: string }[] = [
+  const primary: { kind: LogKind; icon: ReactNode; tone: Tone }[] = [
     {
       kind: "odometer" as const,
       icon: <Gauge size={19} />,
-      tone: "var(--sys-blue)",
+      tone: "blue" as const,
     },
     {
       kind: "fuel" as const,
       icon: <Fuel size={19} />,
-      tone: "var(--sys-green)",
+      tone: "green" as const,
     },
     {
       kind: "inspection" as const,
       icon: <ClipboardCheck size={19} />,
-      tone: "var(--sys-indigo)",
+      tone: "indigo" as const,
     },
     {
       kind: "issue" as const,
       icon: <TriangleAlert size={19} />,
-      tone: "var(--sys-orange)",
+      tone: "orange" as const,
     },
   ].filter((t) => can(t.kind));
   const secondary = (["service", "document"] as const).filter(can);
@@ -176,14 +197,18 @@ export function VehicleActions({
               label={LABEL[t.kind]}
               tone={t.tone}
               onClick={() => setOpen(t.kind)}
+              onIntent={() => void PRELOAD[t.kind]()}
             />
           ))}
           {secondary.length > 0 && (
             <Tile
               icon={<Ellipsis size={19} />}
               label="More"
-              tone="var(--sys-gray)"
-              onClick={() => setMore(true)}
+              tone="gray"
+              onClick={() => {
+                setMoreUsed(true);
+                setMore(true);
+              }}
             />
           )}
         </div>
@@ -194,31 +219,33 @@ export function VehicleActions({
           {blocked.map((b) => LABEL[b].toLowerCase()).join(", ")} entries.
         </p>
       )}
-      <ActionSheet
-        open={more}
-        onOpenChange={setMore}
-        title={vehicle.nickname}
-        items={[
-          ...(can("service")
-            ? [
-                {
-                  label: "Log service",
-                  icon: <Wrench size={20} aria-hidden />,
-                  onSelect: () => setOpen("service"),
-                },
-              ]
-            : []),
-          ...(can("document")
-            ? [
-                {
-                  label: "Add document",
-                  icon: <FileText size={20} aria-hidden />,
-                  onSelect: () => setOpen("document"),
-                },
-              ]
-            : []),
-        ]}
-      />
+      {moreUsed && (
+        <ActionSheet
+          open={more}
+          onOpenChange={setMore}
+          title={vehicle.nickname}
+          items={[
+            ...(can("service")
+              ? [
+                  {
+                    label: "Log service",
+                    icon: <Wrench size={20} aria-hidden />,
+                    onSelect: () => setOpen("service"),
+                  },
+                ]
+              : []),
+            ...(can("document")
+              ? [
+                  {
+                    label: "Add document",
+                    icon: <FileText size={20} aria-hidden />,
+                    onSelect: () => setOpen("document"),
+                  },
+                ]
+              : []),
+          ]}
+        />
+      )}
       {mounted.includes("odometer") && (
         <OdometerSheet
           open={open === "odometer"}

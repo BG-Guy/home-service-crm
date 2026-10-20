@@ -44,7 +44,7 @@ export function PhotoGrid({
     <>
       <ul
         className={cx(
-          "grid gap-1",
+          "grid gap-1.5",
           columns === 2 && "grid-cols-2 md:grid-cols-3 lg:grid-cols-4",
           columns === 3 && "grid-cols-3 md:grid-cols-4 lg:grid-cols-5",
           columns === 4 && "grid-cols-4 md:grid-cols-5 lg:grid-cols-6",
@@ -56,7 +56,7 @@ export function PhotoGrid({
             <button
               type="button"
               onClick={() => setOpen(i)}
-              className="pressable relative block aspect-square w-full overflow-hidden rounded-[8px] bg-fill-2 outline-offset-2"
+              className="pressable relative block aspect-square w-full overflow-hidden rounded-xl bg-fill-2 outline-offset-2"
               aria-label={`Open photo ${i + 1} of ${photos.length}${p.tag ? `, ${tagLabel(p.tag)}` : ""}`}
             >
               {/* biome-ignore lint/performance/noImgElement: pre-sized signed thumbnails */}
@@ -68,7 +68,7 @@ export function PhotoGrid({
                 className="size-full object-cover"
               />
               {showTags && p.tag && (
-                <span className="absolute bottom-1 left-1 rounded-pill bg-black/55 px-1.5 py-px text-[11px] font-semibold text-white backdrop-blur-sm">
+                <span className="absolute bottom-1.5 left-1.5 rounded-pill bg-black/55 px-2 py-0.5 text-[11px] font-semibold text-white">
                   {tagLabel(p.tag)}
                 </span>
               )}

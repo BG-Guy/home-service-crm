@@ -1,8 +1,7 @@
 import "server-only";
 import { getCurrentUser } from "@/lib/auth/current";
+import { ReopenSetupButton, SetupChecklistCard } from "./components/islands";
 import { OpsBoard } from "./components/OpsBoard";
-import { ReopenSetupButton } from "./components/ReopenSetupButton";
-import { SetupChecklistCard } from "./components/SetupChecklistCard";
 import type { OpsTodayProps } from "./contracts";
 import { getSetupChecklist } from "./setup";
 
@@ -23,7 +22,7 @@ export async function OpsToday(_props: OpsTodayProps) {
   return (
     <div className="flex flex-col gap-[var(--section-gap)]">
       {showSetup && !setup.dismissed && (
-        <SetupChecklistCard checklist={setup} canEdit />
+        <SetupChecklistCard checklist={setup} canEdit compact />
       )}
       <OpsBoard user={user} />
       {showSetup && setup.dismissed && (

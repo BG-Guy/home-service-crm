@@ -109,7 +109,7 @@ export default async function SettingsProfilePage() {
         </ListSection>
 
         <section id="appearance" className="scroll-mt-24">
-          <h2 className="px-4 pb-1.5 text-footnote uppercase text-label-2">
+          <h2 className="px-4 pb-2 text-subhead font-semibold text-label-2">
             Appearance
           </h2>
           <div className="rounded-card bg-card p-3">

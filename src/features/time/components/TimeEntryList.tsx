@@ -1,39 +1,30 @@
 "use client";
 
 import { Clock, MapPin, Pencil, Plus } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useState, useTransition } from "react";
 import { dateKey, formatDateKey, formatInTz } from "@/lib/time";
 import { Button } from "@/ui/components/Button";
-import {
-  DateField,
-  TextArea,
-  TextField,
-  TimeField,
-} from "@/ui/components/Field";
 import { ListSection } from "@/ui/components/List";
-import { Sheet } from "@/ui/components/Sheet";
 import { Pill } from "@/ui/components/StatusPill";
 import { toast } from "@/ui/components/Toast";
 import { haptic } from "@/ui/motion/haptics";
+import { toneStyle } from "@/ui/tone";
 import { addTimeEntry, editTimeEntry } from "../actions";
 import { formatMinutes } from "../format";
 import type { TimeEntryView } from "../queries";
+import type { Draft } from "./TimeEntrySheet";
+
+// The edit sheet (fields + Sheet) loads on first open.
+const TimeEntrySheet = dynamic(() => import("./TimeEntrySheet"), {
+  ssr: false,
+});
 
 // Time entries grouped by day (S6 and /time). Managers (time.manage) edit or add
 // entries; every change needs a reason and is audited server-side.
 
 const hm = (iso: string, tz: string) =>
   formatInTz(iso, tz, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
-
-type Draft = {
-  id: string | null;
-  inDate: string;
-  inTime: string;
-  outDate: string;
-  outTime: string;
-  breakMinutes: number;
-  reason: string;
-};
 
 export function TimeEntryList({
   entries,
@@ -149,8 +140,11 @@ export function TimeEntryList({
             {g.items.map((e) => {
               const body = (
                 <>
-                  <span className="flex size-[29px] shrink-0 items-center justify-center rounded-[7px] bg-[var(--sys-teal)] text-white">
-                    <Clock size={16} aria-hidden />
+                  <span
+                    className="icon-tile tone-bg flex size-8 shrink-0 items-center justify-center rounded-[9px]"
+                    style={toneStyle("teal")}
+                  >
+                    <Clock size={17} aria-hidden />
                   </span>
                   <span className="flex min-w-0 flex-1 flex-col py-2.5">
                     <span className="num text-body">
@@ -228,87 +222,13 @@ export function TimeEntryList({
       )}
 
       {draft && (
-        <Sheet
-          open
-          onOpenChange={(o) => !o && setDraft(null)}
-          title={draft.id ? "Edit time entry" : "Add time entry"}
-          detents={["content"]}
-          dirty
-          leading={
-            <Button variant="plain" size="sm" onClick={() => setDraft(null)}>
-              Cancel
-            </Button>
-          }
-          footer={
-            <Button
-              size="lg"
-              fullWidth
-              loading={pending}
-              disabled={draft.reason.trim().length < 3}
-              onClick={save}
-            >
-              Save
-            </Button>
-          }
-        >
-          <div className="grid grid-cols-2 gap-3 px-4 pb-4">
-            <DateField
-              label="Clock-in date"
-              value={draft.inDate}
-              onChange={(ev) => setDraft({ ...draft, inDate: ev.target.value })}
-              error={errors.clockIn?.[0]}
-            />
-            <TimeField
-              label="Time"
-              value={draft.inTime}
-              onChange={(ev) => setDraft({ ...draft, inTime: ev.target.value })}
-            />
-            <DateField
-              label="Clock-out date"
-              value={draft.outDate}
-              onChange={(ev) =>
-                setDraft({ ...draft, outDate: ev.target.value })
-              }
-              error={errors.clockOut?.[0]}
-            />
-            <TimeField
-              label="Time"
-              value={draft.outTime}
-              onChange={(ev) =>
-                setDraft({ ...draft, outTime: ev.target.value })
-              }
-            />
-            <TextField
-              label="Break (minutes)"
-              type="number"
-              inputMode="numeric"
-              min={0}
-              max={600}
-              className="col-span-2"
-              value={String(draft.breakMinutes)}
-              onChange={(ev) =>
-                setDraft({
-                  ...draft,
-                  breakMinutes: Math.max(0, Number(ev.target.value) || 0),
-                })
-              }
-            />
-            <TextArea
-              label="Reason for the change"
-              className="col-span-2"
-              placeholder="e.g. Forgot to clock out"
-              value={draft.reason}
-              maxLength={500}
-              rows={2}
-              error={errors.reason?.[0]}
-              onChange={(ev) => setDraft({ ...draft, reason: ev.target.value })}
-            />
-            <p className="col-span-2 text-footnote text-label-2">
-              Times are in the company time zone. Edits are saved to the audit
-              log.
-            </p>
-          </div>
-        </Sheet>
+        <TimeEntrySheet
+          draft={draft}
+          setDraft={setDraft}
+          errors={errors}
+          pending={pending}
+          onSave={save}
+        />
       )}
     </div>
   );

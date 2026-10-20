@@ -55,7 +55,7 @@ export default async function RTokenPage({
 
   if (!tok)
     return (
-      <div className="list-card mt-4">
+      <div className="card mt-4">
         <EmptyState
           icon={<Clock size={44} strokeWidth={1.5} />}
           title={

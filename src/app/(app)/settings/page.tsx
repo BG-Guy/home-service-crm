@@ -55,6 +55,34 @@ export default async function SettingsIndexPage() {
         trailing={<HeaderActions create={false} />}
       />
       <Page className="lg:pt-8">
+        <section className="mb-6 flex items-center gap-4 rounded-card bg-card p-4 shadow-card lg:mb-6 lg:p-5">
+          <span
+            aria-hidden
+            className="flex size-14 shrink-0 items-center justify-center rounded-[16px] bg-accent-fill text-on-accent"
+          >
+            <Building size={28} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-headline font-bold tracking-tight lg:text-title2">
+              {brand}
+            </h2>
+            <p className="truncate text-subhead text-label-2">
+              {[
+                addr?.city && addr?.state
+                  ? `${addr.city}, ${addr.state}`
+                  : null,
+                company?.timezone,
+              ]
+                .filter(Boolean)
+                .join(" · ") || "Add your address in Company"}
+            </p>
+          </div>
+          {isManager && (
+            <Button href="/settings/company" variant="secondary" size="sm">
+              Edit
+            </Button>
+          )}
+        </section>
         <div className="lg:hidden">
           <SettingsIndexList groups={groups} />
           {setup?.dismissed && setup.done < setup.total && (
@@ -65,35 +93,6 @@ export default async function SettingsIndexPage() {
         </div>
 
         <div className="hidden flex-col gap-6 lg:flex">
-          <section className="flex items-center gap-4 rounded-card bg-card p-5 shadow-card">
-            <span
-              aria-hidden
-              className="flex size-14 items-center justify-center rounded-[14px] bg-accent text-on-accent"
-            >
-              <Building size={28} />
-            </span>
-            <div className="min-w-0 flex-1">
-              <h1 className="truncate text-title2 font-bold tracking-tight">
-                {brand}
-              </h1>
-              <p className="truncate text-subhead text-label-2">
-                {[
-                  addr?.city && addr?.state
-                    ? `${addr.city}, ${addr.state}`
-                    : null,
-                  company?.timezone,
-                ]
-                  .filter(Boolean)
-                  .join(" · ") || "Add your address in Company"}
-              </p>
-            </div>
-            {isManager && (
-              <Button href="/settings/company" variant="gray" size="sm">
-                Edit profile
-              </Button>
-            )}
-          </section>
-
           {counts && (
             <div className="grid grid-cols-4 gap-3">
               <StatCard label="Active team" value={counts.users} href="/team" />

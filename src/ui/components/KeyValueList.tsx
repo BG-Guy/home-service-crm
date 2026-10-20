@@ -16,8 +16,9 @@ export interface KeyValueItem {
 }
 
 /**
- * Label / value rows for detail views (SPEC §12.6), as an inset grouped card
- * built on `<dl>`. Empty values render an em dash.
+ * Label / value rows for detail views (DESIGN.md §5), as an inset grouped card
+ * built on `<dl>`: quiet label, the value in the primary color (hierarchy from
+ * type). Empty values render an em dash.
  */
 export function KeyValueList({
   items,
@@ -36,7 +37,10 @@ export function KeyValueList({
         const value = empty ? (
           <span className="text-label-3">—</span>
         ) : it.href ? (
-          <Link href={it.href} className="text-accent-text hover:underline">
+          <Link
+            href={it.href}
+            className="text-accent-text underline-offset-2 hover:underline"
+          >
             {it.value}
           </Link>
         ) : (
@@ -46,7 +50,7 @@ export function KeyValueList({
           <div
             key={it.key ?? i}
             className={cx(
-              "list-row flex min-h-11 px-4 py-[11px]",
+              "list-row flex min-h-12 px-4 py-3",
               it.stacked
                 ? "flex-col gap-0.5"
                 : "items-baseline justify-between gap-4",
@@ -57,18 +61,18 @@ export function KeyValueList({
             <dt
               className={cx(
                 it.stacked
-                  ? "text-footnote text-label-2"
-                  : "min-w-0 flex-1 text-body text-label",
+                  ? "text-footnote font-semibold text-label-2"
+                  : "min-w-0 flex-1 text-body text-label-2",
               )}
             >
               {it.label}
             </dt>
             <dd
               className={cx(
-                "text-body",
+                "text-body text-label",
                 it.stacked
-                  ? "min-w-0 whitespace-pre-line break-words text-label"
-                  : "max-w-[60%] shrink-0 break-words text-right text-label-2",
+                  ? "min-w-0 whitespace-pre-line break-words"
+                  : "max-w-[60%] shrink-0 break-words text-right",
                 it.numeric && "num",
               )}
             >

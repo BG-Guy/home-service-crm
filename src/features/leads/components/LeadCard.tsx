@@ -2,25 +2,34 @@
 
 import {
   CalendarDays,
+  CalendarPlus,
   MapPin,
   MessageSquare,
   Repeat,
-  UserCheck,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Avatar } from "@/ui/components/Avatar";
 import { Button } from "@/ui/components/Button";
 import { MoneyText } from "@/ui/components/MoneyText";
 import { Pill, StatusPill } from "@/ui/components/StatusPill";
 import { SwipeActions } from "@/ui/components/SwipeActions";
 import { toast } from "@/ui/components/Toast";
 import { cx } from "@/ui/cx";
-import { claimLead, markLeadSpam } from "../actions";
+import { Morph } from "@/ui/motion/Morph";
+import { claimLead, markLeadSpam, prepareLeadConversion } from "../actions";
 import type { LeadListItem } from "../contracts";
 import { lostReasonLabel, SOURCE_KIND_LABEL } from "../labels";
 import { LeadCallButton } from "./LeadCallButton";
-import { LostSheet } from "./LostSheet";
 import { SlaTimer } from "./SlaTimer";
+
+// "Lost" (from the swipe) opens a sheet: its own chunk, loaded on first swipe.
+const LostSheet = dynamic(
+  () => import("./LostSheet").then((m) => m.LostSheet),
+  { ssr: false },
+);
 
 const OPEN = new Set(["new", "contacted", "qualified"]);
 
@@ -34,25 +43,38 @@ function fmtDate(d: string): string {
   }).format(new Date(Date.UTC(y, m - 1, day)));
 }
 
-/** One inbox card: SLA timer, source, service, price, date, area, returning badge + quick actions. */
+/**
+ * One inbox card (DESIGN.md §7 brief 4): the SLA ring leads (an avatar once it's
+ * closed), bold name (M3 `lead-<id>-title`), service and phone, the quote on the
+ * right, a meta line, then Call / Text / Book quick actions and Claim.
+ */
 export function LeadCard({
   lead,
   viewerId,
   canEdit,
+  canConvert = false,
   lostReasons,
   active,
 }: {
   lead: LeadListItem;
   viewerId: string;
   canEdit: boolean;
+  canConvert?: boolean;
   lostReasons: string[];
   active?: boolean;
 }) {
-  const [lostOpen, setLostOpen] = useState(false);
+  const router = useRouter();
+  const [lostOpen, setLostOpenState] = useState(false);
+  const [lostArmed, setLostArmed] = useState(false);
   const [claiming, setClaiming] = useState(false);
+  const [booking, setBooking] = useState(false);
   const open = OPEN.has(lead.status);
   const mine = lead.assignedUserId === viewerId;
   const href = `/leads/${lead.id}`;
+  const setLostOpen = (v: boolean) => {
+    if (v) setLostArmed(true);
+    setLostOpenState(v);
+  };
 
   const claim = async () => {
     setClaiming(true);
@@ -62,22 +84,54 @@ export function LeadCard({
     else toast.error(r.error);
   };
 
+  const book = async () => {
+    setBooking(true);
+    const r = await prepareLeadConversion({ leadId: lead.id, to: "job" });
+    setBooking(false);
+    if (!r.ok || !r.data)
+      return void toast.error(r.ok ? "Couldn't convert" : r.error);
+    router.push(r.data.href);
+  };
+
+  const title = (
+    <h3 className="inline-block max-w-full truncate align-bottom text-headline">
+      {lead.name}
+    </h3>
+  );
+
   const body = (
     <article
       className={cx(
-        "list-card flex flex-col gap-2 px-4 py-3",
+        "card flex flex-col gap-3 p-4",
         active && "ring-2 ring-accent",
       )}
       aria-label={`Lead ${lead.name}`}
     >
-      <div className="flex items-start gap-2">
+      <div className="flex items-start gap-3">
+        {open ? (
+          <SlaTimer
+            variant="ring"
+            createdAt={lead.createdAt}
+            respondedAt={lead.firstResponseAt}
+          />
+        ) : (
+          <Avatar
+            name={lead.name}
+            seed={lead.customerId ?? lead.id}
+            size={48}
+          />
+        )}
         <Link
           href={href}
           transitionTypes={["nav-forward"]}
-          className="min-w-0 flex-1 rounded-control focus-visible:outline-2"
+          className="min-w-0 flex-1 self-center rounded-control focus-visible:outline-2"
         >
-          <div className="flex items-center gap-1.5">
-            <h3 className="truncate text-headline">{lead.name}</h3>
+          <div className="flex min-w-0 items-center gap-1.5">
+            {active ? (
+              title
+            ) : (
+              <Morph name={`lead-${lead.id}-title`}>{title}</Morph>
+            )}
             {lead.isReturning && (
               <Repeat
                 size={14}
@@ -86,30 +140,36 @@ export function LeadCard({
               />
             )}
           </div>
-          <p className="truncate text-subhead text-label-2">
+          <p className="num truncate text-subhead text-label-2">
             {[lead.service ?? "Service not given", lead.phoneDisplay]
               .filter(Boolean)
               .join(" · ")}
           </p>
         </Link>
-        {open ? (
-          <SlaTimer
-            createdAt={lead.createdAt}
-            respondedAt={lead.firstResponseAt}
-          />
-        ) : (
-          <StatusPill
-            kind="lead"
-            status={lead.status}
-            label={
-              lead.status === "lost" && lead.lostReason
-                ? `Lost · ${lostReasonLabel(lead.lostReason)}`
-                : undefined
-            }
-          />
-        )}
+        <div className="flex shrink-0 flex-col items-end gap-1 self-center">
+          {open ? (
+            lead.quotedPriceCents != null ? (
+              <MoneyText
+                cents={lead.quotedPriceCents}
+                className="text-headline"
+              />
+            ) : null
+          ) : (
+            <StatusPill
+              kind="lead"
+              status={lead.status}
+              size="sm"
+              label={
+                lead.status === "lost" && lead.lostReason
+                  ? `Lost · ${lostReasonLabel(lead.lostReason)}`
+                  : undefined
+              }
+            />
+          )}
+        </div>
       </div>
-      <div className="flex flex-wrap items-center gap-1.5">
+
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
         {lead.sourceName && (
           <Pill tone="gray" dot={false} size="sm">
             {lead.sourceName || SOURCE_KIND_LABEL[lead.sourceKind ?? ""]}
@@ -120,11 +180,6 @@ export function LeadCard({
             Check · {lead.spamScore}
           </Pill>
         )}
-        {lead.isReturning && (
-          <Pill tone="indigo" dot={false} size="sm">
-            Returning
-          </Pill>
-        )}
         {lead.isTest && (
           <Pill tone="gray" size="sm">
             Test
@@ -133,10 +188,11 @@ export function LeadCard({
         {open && lead.status !== "new" && (
           <StatusPill kind="lead" status={lead.status} size="sm" />
         )}
-        {lead.quotedPriceCents != null && (
-          <span className="text-footnote font-semibold">
-            <MoneyText cents={lead.quotedPriceCents} />
-          </span>
+        {!open && lead.quotedPriceCents != null && (
+          <MoneyText
+            cents={lead.quotedPriceCents}
+            className="text-footnote font-semibold"
+          />
         )}
         {lead.preferredDate && (
           <span className="inline-flex items-center gap-1 text-footnote text-label-2">
@@ -149,9 +205,7 @@ export function LeadCard({
           <span
             className={cx(
               "inline-flex items-center gap-1 text-footnote",
-              lead.inServiceArea === false
-                ? "text-[var(--sys-red)]"
-                : "text-label-2",
+              lead.inServiceArea === false ? "text-danger" : "text-label-2",
             )}
           >
             <MapPin size={13} aria-hidden />
@@ -168,11 +222,11 @@ export function LeadCard({
         <p className="line-clamp-2 text-footnote text-label-2">{lead.notes}</p>
       )}
       {open && canEdit && (
-        <div className="flex flex-wrap items-center gap-2 pt-1">
+        <div className="flex flex-wrap items-center gap-2 border-t border-hairline pt-3">
           {lead.hasPhone && <LeadCallButton leadId={lead.id} />}
           {lead.customerId ? (
             <Button
-              variant="gray"
+              variant="secondary"
               size="sm"
               href={`/messages/${lead.customerId}`}
               icon={<MessageSquare size={16} aria-hidden />}
@@ -180,18 +234,29 @@ export function LeadCard({
               Text
             </Button>
           ) : null}
+          {canConvert && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={book}
+              loading={booking}
+              icon={<CalendarPlus size={16} aria-hidden />}
+            >
+              Book
+            </Button>
+          )}
           {!lead.assignedUserId ? (
             <Button
-              variant="gray"
+              variant="plain"
               size="sm"
               onClick={claim}
               loading={claiming}
-              icon={<UserCheck size={16} aria-hidden />}
+              className="ml-auto"
             >
               Claim
             </Button>
           ) : (
-            <span className="ml-auto text-footnote text-label-2">
+            <span className="ml-auto truncate text-footnote text-label-2">
               {mine ? "Yours" : lead.assignedName}
             </span>
           )}
@@ -219,12 +284,14 @@ export function LeadCard({
       >
         {body}
       </SwipeActions>
-      <LostSheet
-        leadId={lead.id}
-        reasons={lostReasons}
-        open={lostOpen}
-        onOpenChange={setLostOpen}
-      />
+      {lostArmed && (
+        <LostSheet
+          leadId={lead.id}
+          reasons={lostReasons}
+          open={lostOpen}
+          onOpenChange={setLostOpen}
+        />
+      )}
     </>
   );
 }

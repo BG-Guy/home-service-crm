@@ -13,12 +13,14 @@ export function LeadLoadMore({
   offset,
   viewerId,
   canEdit,
+  canConvert,
   lostReasons,
 }: {
   filter: LeadFilter;
   offset: number;
   viewerId: string;
   canEdit: boolean;
+  canConvert?: boolean;
   lostReasons: string[];
 }) {
   const [items, setItems] = useState<LeadListItem[]>([]);
@@ -32,6 +34,7 @@ export function LeadLoadMore({
           lead={l}
           viewerId={viewerId}
           canEdit={canEdit}
+          canConvert={canConvert}
           lostReasons={lostReasons}
         />
       ))}
@@ -48,7 +51,7 @@ export function LeadLoadMore({
               setMore(r.hasMore);
             })
           }
-          className="pressable mx-auto flex min-h-11 items-center gap-2 rounded-pill bg-fill-2 px-5 text-subhead font-semibold text-accent-text"
+          className="btn btn-secondary btn-md pressable mx-auto"
         >
           {pending ? <Spinner size={16} /> : null}
           {pending ? "Loading…" : "Load more"}

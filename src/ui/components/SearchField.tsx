@@ -6,9 +6,11 @@ import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { cx } from "../cx";
 
 /**
- * iOS search bar with clear and Cancel (SPEC §12.6). `onSearch` is debounced
- * (200 ms). With `param`, the query is mirrored into the URL (`?q=`) via
- * `router.replace` so server-rendered lists can filter on `searchParams`.
+ * Search pill with clear and Cancel (DESIGN.md §5): 44 px, `--card` with a soft
+ * shadow on the canvas, the `--field` fill inside cards and sheets (automatic).
+ * `onSearch` is debounced (200 ms). With `param`, the query is mirrored into the
+ * URL (`?q=`) via `router.replace` so server-rendered lists can filter on
+ * `searchParams`. `sticky` pins it under the nav bar with a raised shadow.
  *
  * ```tsx
  * // page.tsx (server): <SearchField param="q" defaultValue={sp.q} placeholder="Search customers" />
@@ -24,6 +26,7 @@ export function SearchField({
   showCancel = true,
   autoFocus,
   onCancel,
+  sticky,
   className,
 }: {
   defaultValue?: string;
@@ -39,6 +42,8 @@ export function SearchField({
   showCancel?: boolean;
   autoFocus?: boolean;
   onCancel?: () => void;
+  /** Stick under the nav bar (list pages). */
+  sticky?: boolean;
   className?: string;
 }) {
   const id = useId();
@@ -87,13 +92,19 @@ export function SearchField({
   };
 
   return (
-    <search className={cx("flex items-center gap-2", className)}>
-      <div className="relative flex h-9 min-w-0 flex-1 items-center rounded-control bg-fill-2 focus-within:shadow-[0_0_0_2px_var(--accent)]">
+    <search
+      className={cx(
+        "flex items-center gap-2",
+        sticky && "search-sticky",
+        className,
+      )}
+    >
+      <div className="search-pill relative flex h-11 min-w-0 flex-1 items-center rounded-pill">
         <Search
           aria-hidden
-          size={17}
+          size={18}
           strokeWidth={2.25}
-          className="pointer-events-none absolute left-2 text-label-2"
+          className="pointer-events-none absolute left-3.5 text-label-2"
         />
         <label htmlFor={id} className="sr-only">
           {label ?? placeholder}
@@ -127,7 +138,7 @@ export function SearchField({
               clear();
             }
           }}
-          className="h-full w-full min-w-0 bg-transparent pl-8 pr-8 text-body text-label outline-none placeholder:text-label-2 [&::-webkit-search-cancel-button]:hidden"
+          className="h-full w-full min-w-0 bg-transparent pl-10 pr-10 text-body text-label outline-none placeholder:text-label-2 [&::-webkit-search-cancel-button]:hidden"
         />
         {value && (
           <button
@@ -135,7 +146,7 @@ export function SearchField({
             aria-label="Clear search"
             onPointerDown={(e) => e.preventDefault()}
             onClick={clear}
-            className="absolute right-0 flex size-9 items-center justify-center text-label-3"
+            className="absolute right-1 flex size-10 items-center justify-center rounded-full text-label-3"
           >
             <CircleX
               aria-hidden

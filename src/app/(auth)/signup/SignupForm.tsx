@@ -110,9 +110,7 @@ export function SignupForm({
               error={e.state}
             />
           </div>
-          <div className="mt-2 px-1 text-footnote uppercase text-label-2">
-            Your admin account
-          </div>
+          <h2 className="mt-3 px-1 text-headline">Your admin account</h2>
         </>
       ) : (
         <input type="hidden" name="companyName" value={companyName ?? ""} />

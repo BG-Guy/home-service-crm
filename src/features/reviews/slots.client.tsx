@@ -52,8 +52,9 @@ export function RequestReviewButton({
   return (
     <>
       <Button
-        variant="gray"
+        variant="secondary"
         size="sm"
+        className="shrink-0"
         icon={<Star aria-hidden size={16} />}
         disabled={!st.eligible || busy || !st.jobId}
         loading={busy}

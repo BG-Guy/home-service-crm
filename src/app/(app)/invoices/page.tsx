@@ -25,6 +25,7 @@ import { LargeTitleHeader } from "@/ui/components/NavBar";
 import { SearchField } from "@/ui/components/SearchField";
 import { StatCard } from "@/ui/components/StatCard";
 import { StatusPill } from "@/ui/components/StatusPill";
+import { Morph } from "@/ui/motion/Morph";
 import { PageTransition } from "@/ui/motion/PageTransition";
 
 export const metadata: Metadata = { title: "Invoices" };
@@ -222,6 +223,7 @@ export default async function InvoicesPage({
           />
         ) : (
           <ListSection
+            variant="title"
             header={sp.aging ? `Aging ${sp.aging} days` : "Invoices"}
           >
             {rows.map((r) => {
@@ -259,7 +261,14 @@ export default async function InvoicesPage({
                       />
                     </span>
                   }
-                  subtitle={`${r.number}${sub ? ` · ${sub}` : ""}`}
+                  subtitle={
+                    <>
+                      <Morph name={`invoice-${r.id}-title`}>
+                        <span className="inline-block">{r.number}</span>
+                      </Morph>
+                      {sub ? ` · ${sub}` : ""}
+                    </>
+                  }
                   detail={
                     <span className="flex flex-col items-end">
                       <MoneyText
@@ -268,7 +277,7 @@ export default async function InvoicesPage({
                             ? r.totalCents
                             : r.balanceCents
                         }
-                        className="text-label"
+                        className="font-semibold text-label"
                       />
                       {r.balanceCents > 0 &&
                       r.balanceCents !== r.totalCents &&
@@ -288,7 +297,7 @@ export default async function InvoicesPage({
 
         {nextCursor ? (
           <div className="flex justify-center">
-            <Button href={href(sp, { cursor: nextCursor })} variant="gray">
+            <Button href={href(sp, { cursor: nextCursor })} variant="secondary">
               Older invoices
             </Button>
           </div>

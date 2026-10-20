@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { getPosition } from "@/client/geo";
 import { runOffline } from "@/features/jobs/components/offline-client";
+import { OdometerCaptureButton } from "@/features/vehicles/components/islands";
 import type { ApprovalHint } from "@/features/vehicles/contracts";
-import { OdometerCaptureButton } from "@/features/vehicles/slots.client";
 import { formatInTz } from "@/lib/time";
 import { ActionSheet } from "@/ui/components/ActionSheet";
 import { Button } from "@/ui/components/Button";
@@ -133,20 +133,24 @@ export function ClockCard({
   if (!state) {
     if (mode === "out")
       return (
-        <div className="list-card flex items-center gap-3 p-4">
+        <div className="card flex items-center gap-3 p-4">
           <Timer size={22} className="text-label-2" aria-hidden />
           <p className="text-subhead text-label-2">You're not clocked in.</p>
         </div>
       );
+    // The single "Clock in" hero: the page's one primary while off the clock.
     return (
-      <div className="list-card flex flex-col gap-3 p-4">
+      <section
+        aria-label="Time clock"
+        className="card flex flex-col gap-4 bg-[linear-gradient(160deg,color-mix(in_srgb,var(--sys-green)_12%,transparent),transparent_70%)] p-[var(--card-pad)]"
+      >
         <div className="flex items-center gap-3">
-          <span className="flex size-10 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--sys-green)_15%,transparent)] text-[var(--sys-green)]">
-            <LogIn size={20} aria-hidden />
+          <span className="icon-tile flex size-11 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--sys-green)_16%,transparent)] text-[var(--sys-green)]">
+            <LogIn size={22} aria-hidden />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-headline font-semibold">Start your day</p>
-            <p className="text-footnote text-label-2">
+            <p className="text-title3 text-label">You're off the clock</p>
+            <p className="text-subhead text-label-2">
               {needOdo
                 ? `Log ${vehicle?.nickname ?? "your vehicle"}'s odometer, then clock in.`
                 : "Clock in when you head out."}
@@ -160,7 +164,7 @@ export function ClockCard({
             lastOdometer={vehicle.odometer}
             source="clock"
             approvalHint={odometerHint}
-            label="Log odometer & clock in"
+            label="Log odometer and clock in"
             variant="filled"
             fullWidth
             onRecorded={(id) => {
@@ -171,7 +175,7 @@ export function ClockCard({
         ) : (
           <Button
             size="lg"
-            fullWidth
+            block
             loading={pending}
             icon={<LogIn size={20} aria-hidden />}
             onClick={() => clock("in", odoId)}
@@ -179,28 +183,36 @@ export function ClockCard({
             Clock in
           </Button>
         )}
-      </div>
+      </section>
     );
   }
 
   // ------------------------------------------------------------ clocked in
+  // Slim status line: live dot, the running duration, since-when, Break.
   return (
-    <div className="list-card flex flex-col gap-3 p-4">
+    <div
+      className={cx(
+        "card flex flex-col gap-3",
+        mode === "in" ? "py-2.5 pr-2.5 pl-4" : "p-4",
+      )}
+    >
       <div className="flex items-center gap-3">
-        <span className="relative flex size-10 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--sys-green)_15%,transparent)] text-[var(--sys-green)]">
-          <Timer size={20} aria-hidden />
-          <span className="absolute -top-0.5 -right-0.5 size-3 rounded-full border-2 border-[var(--card)] bg-[var(--sys-green)] motion-safe:animate-pulse" />
-        </span>
+        <span
+          className="live-dot"
+          style={{ ["--tone" as string]: "var(--sys-green)" }}
+          aria-hidden
+        />
         <div className="min-w-0 flex-1">
           {/* Device clock vs the server's render time: a minute apart at most. */}
-          <p
-            className="num text-headline font-semibold"
-            suppressHydrationWarning
-          >
-            {elapsed(state.clockInAt, state.breakMinutes, now)}
+          <p className="text-subhead text-label" suppressHydrationWarning>
+            <span className="font-semibold">On the clock</span>
+            <span className="text-label-2"> · </span>
+            <span className="num font-semibold">
+              {elapsed(state.clockInAt, state.breakMinutes, now)}
+            </span>
           </p>
-          <p className="text-footnote text-label-2">
-            On the clock since{" "}
+          <p className="num truncate text-footnote text-label-2">
+            Since{" "}
             {formatInTz(state.clockInAt, tz, {
               hour: "numeric",
               minute: "2-digit",
@@ -210,7 +222,7 @@ export function ClockCard({
         </div>
         {mode === "in" && (
           <Button
-            variant="gray"
+            variant="secondary"
             size="sm"
             icon={<Coffee size={16} aria-hidden />}
             disabled={pending}
@@ -235,7 +247,7 @@ export function ClockCard({
             lastOdometer={vehicle.odometer}
             source="clock"
             approvalHint={odometerHint}
-            label="Log odometer & clock out"
+            label="Log odometer and clock out"
             variant="filled"
             fullWidth
             onRecorded={(id) => {
@@ -247,7 +259,6 @@ export function ClockCard({
           <Button
             size="lg"
             fullWidth
-            variant="destructive"
             loading={pending}
             icon={<LogOut size={20} aria-hidden />}
             onClick={() =>

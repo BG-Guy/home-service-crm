@@ -83,7 +83,11 @@ export interface ReceiptData {
 }
 
 // §5.2 slot props
-export type JobPaymentsPanelProps = { jobId: string };
+export type JobPaymentsPanelProps = {
+  jobId: string;
+  /** The page shows Collect in its own bar (invoice detail): omit the panel's button. */
+  hideCollect?: boolean;
+};
 export type CustomerPaymentsPanelProps = { customerId: string };
 export type DepositChipProps = { jobId: string };
 export type CollectPaymentButtonProps = {
@@ -98,6 +102,7 @@ export type CollectPaymentButtonProps = {
 export type RecordPaymentButtonProps = {
   customerId: string;
   invoiceId?: string;
+  size?: "sm" | "md";
 };
 export type ReceiptFlagButtonProps = { token: string; paymentId: string };
 

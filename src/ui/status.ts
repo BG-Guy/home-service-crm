@@ -31,19 +31,26 @@ import type { Tone } from "./tone";
 export interface StatusDef {
   label: string;
   tone: Tone;
+  /** A live, real-time state: the pill's dot pulses (M12). Keep it to field states. */
+  live?: boolean;
 }
 
 type StatusMap<T extends readonly string[]> = Record<T[number], StatusDef>;
 const s = (label: string, tone: Tone): StatusDef => ({ label, tone });
+const live = (label: string, tone: Tone): StatusDef => ({
+  label,
+  tone,
+  live: true,
+});
 
 export const STATUS = {
   job: {
     unscheduled: s("Unscheduled", "gray"),
     scheduled: s("Scheduled", "blue"),
     confirmed: s("Confirmed", "indigo"),
-    en_route: s("On the way", "teal"),
+    en_route: live("On the way", "teal"),
     arrived: s("Arrived", "purple"),
-    in_progress: s("In progress", "orange"),
+    in_progress: live("In progress", "orange"),
     on_hold: s("On hold", "yellow"),
     completed: s("Completed", "green"),
     closed: s("Closed", "gray"),
@@ -228,4 +235,9 @@ export function humanize(value: string): string {
 export function statusDef(kind: StatusKind, status: string): StatusDef {
   const map = STATUS[kind] as Record<string, StatusDef>;
   return map[status] ?? { label: humanize(status), tone: "gray" };
+}
+
+/** True for live, real-time states (job on the way / in progress): pulse the dot. */
+export function isLiveStatus(kind: StatusKind, status: string): boolean {
+  return statusDef(kind, status).live === true;
 }

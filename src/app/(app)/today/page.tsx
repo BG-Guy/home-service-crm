@@ -16,6 +16,10 @@ import { PageTransition } from "@/ui/motion/PageTransition";
 
 export const metadata: Metadata = { title: "Today" };
 
+// Techs and the office see different boards; each board loads its client islands
+// lazily (tech/components/islands.tsx, insights/components/islands.tsx), so one
+// role never downloads the other's JS (budget §14).
+
 function greeting(hour: number): string {
   if (hour < 5) return "Working late";
   if (hour < 12) return "Good morning";
@@ -35,12 +39,13 @@ export default async function TodayPage() {
     day: "numeric",
   });
   const tech = user.baseRole === "tech";
+  const hello = `${greeting(zonedParts(now, tz).hour)}, ${user.firstName}`;
 
   if (tech) {
     return (
       <PageTransition>
         <LargeTitleHeader
-          title={`${greeting(zonedParts(now, tz).hour)}, ${user.firstName}`}
+          title={hello}
           subtitle={subtitle}
           trailing={<HeaderActions />}
         />
@@ -57,14 +62,14 @@ export default async function TodayPage() {
   return (
     <PageTransition>
       <LargeTitleHeader
-        title="Today"
+        title={hello}
         subtitle={subtitle}
         trailing={<HeaderActions />}
       />
       <Page wide>
         <div className="flex flex-col gap-[var(--section-gap)]">
           {mine.length > 0 && (
-            <ListSection header="Your jobs today">
+            <ListSection variant="title" header="Your jobs today">
               {mine.map((j) => (
                 <JobRow key={j.id} job={j} tz={tz} showDate={false} />
               ))}

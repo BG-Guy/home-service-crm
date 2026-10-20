@@ -90,9 +90,10 @@ export default async function TasksPage({
         </div>
       </LargeTitleHeader>
       <Page>
-        <div className="flex flex-col gap-[var(--section-gap)]">
+        <div className="enter-stagger flex flex-col gap-[var(--section-gap)]">
           {queue.length > 0 && (
             <ListSection
+              variant="title"
               header="Office queue"
               footer="Unassigned — tap a task to assign it."
             >
@@ -106,6 +107,7 @@ export default async function TasksPage({
             </ListSection>
           )}
           <ListSection
+            variant="title"
             header={scope === "all" ? "Assigned" : "Open"}
             trailing={
               <span className="num text-footnote text-label-2">
@@ -127,6 +129,7 @@ export default async function TasksPage({
           </ListSection>
           {closed.length > 0 && (
             <ListSection
+              variant="title"
               header="Recently done"
               footer="Swipe a task to reopen it."
             >

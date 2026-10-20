@@ -174,7 +174,7 @@ export default function RequirementsSheet({
           <section aria-labelledby="req-h">
             <h2
               id="req-h"
-              className="px-4 pb-1.5 text-footnote uppercase text-label-2"
+              className="px-4 pb-1.5 text-subhead font-semibold text-label-2"
             >
               Before you {mode === "start" ? "start" : "finish"}
             </h2>
@@ -251,7 +251,7 @@ export default function RequirementsSheet({
             <section aria-labelledby="rec-h">
               <h2
                 id="rec-h"
-                className="px-4 pb-1.5 text-footnote uppercase text-label-2"
+                className="px-4 pb-1.5 text-subhead font-semibold text-label-2"
               >
                 Recommended
               </h2>

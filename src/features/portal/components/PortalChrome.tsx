@@ -1,4 +1,4 @@
-import { LinkIcon } from "lucide-react";
+import { LinkIcon, ShieldCheck } from "lucide-react";
 import { formatPhoneDisplay } from "@/lib/phone-display";
 import { findCompany, getSettings } from "@/lib/settings";
 import { EmptyState } from "@/ui/components/EmptyState";
@@ -9,7 +9,7 @@ import { EmptyState } from "@/ui/components/EmptyState";
 export async function PortalExpired({ what = "link" }: { what?: string }) {
   const company = await findCompany();
   return (
-    <div className="list-card mt-4">
+    <div className="card mt-4">
       <EmptyState
         icon={<LinkIcon size={44} strokeWidth={1.6} />}
         title={`This ${what} has expired`}
@@ -30,9 +30,14 @@ export async function PortalFooter() {
     (l) => `${l.state} ${l.trade} #${l.number}`,
   );
   return (
-    <footer className="mt-10 space-y-1 border-t border-sep pt-4 text-center text-footnote text-label-2 print:hidden">
-      <p className="font-semibold text-label">
-        Pay only {name}. Never pay a technician personally.
+    <footer className="mt-10 space-y-1.5 pb-2 text-center text-footnote text-label-2 print:hidden">
+      <p className="mx-auto inline-flex max-w-full items-start gap-2 rounded-tile bg-fill-2 px-3.5 py-2 text-left font-semibold text-label">
+        <ShieldCheck
+          size={16}
+          aria-hidden
+          className="mt-px shrink-0 text-success"
+        />
+        Pay only {name.replace(/\.$/, "")}. Never pay a technician personally.
       </p>
       {company?.phone ? (
         <p>

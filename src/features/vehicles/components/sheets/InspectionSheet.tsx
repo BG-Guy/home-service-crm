@@ -135,7 +135,7 @@ export function InspectionSheet({
                       className={cx(
                         "pressable flex size-11 items-center justify-center rounded-full",
                         r?.ok === false
-                          ? "bg-danger text-white"
+                          ? "bg-danger-fill text-white"
                           : "bg-fill-2 text-label-2",
                       )}
                     >

@@ -10,15 +10,15 @@ import { Button } from "@/ui/components/Button";
 import { EmptyState } from "@/ui/components/EmptyState";
 import { ListSection } from "@/ui/components/List";
 import { getJobForUser } from "./api";
+import { AssignJobButton } from "./components/AssignJobButton";
 import { JobRow } from "./components/JobRow";
-import { NotesClient } from "./components/NotesClient";
+import { LazyNotes as NotesClient } from "./components/lazy-islands";
 import type {
   CustomerJobsPanelProps,
   NotesPanelProps,
   ReassignJobsListProps,
 } from "./contracts";
 import { listCustomerJobs, listNotes, listOpenJobsForUser } from "./queries";
-import { AssignJobButton } from "./slots.client";
 
 const canReadJobs = (u: SessionUser) =>
   u.perms.has("jobs.view_all") || u.perms.has("jobs.view_own");
@@ -47,7 +47,7 @@ export async function CustomerJobsPanel({
   ) : null;
   if (upcoming.length === 0 && past.length === 0)
     return (
-      <ListSection header="Jobs" trailing={newJob}>
+      <ListSection variant="title" header="Jobs" trailing={newJob}>
         <EmptyState
           compact
           icon={<Briefcase size={32} />}
@@ -61,7 +61,7 @@ export async function CustomerJobsPanel({
   return (
     <>
       {upcoming.length > 0 && (
-        <ListSection header="Upcoming jobs" trailing={newJob}>
+        <ListSection variant="title" header="Upcoming jobs" trailing={newJob}>
           {upcoming.map((j) => (
             <JobRow key={j.id} job={j} tz={tz} />
           ))}
@@ -69,6 +69,7 @@ export async function CustomerJobsPanel({
       )}
       {past.length > 0 && (
         <ListSection
+          variant="title"
           header="Past jobs"
           trailing={upcoming.length === 0 ? newJob : undefined}
           footer={
@@ -132,7 +133,7 @@ export async function NotesPanel({
   if (!access) return null;
   const notes = await listNotes(entity);
   return (
-    <ListSection header="Notes" id="notes">
+    <ListSection variant="title" header="Notes" id="notes">
       <NotesClient
         entity={{ type: entity.type, id: entity.id }}
         notes={notes}
@@ -155,6 +156,7 @@ export async function ReassignJobsList({ userId }: ReassignJobsListProps) {
   ]);
   return (
     <ListSection
+      variant="title"
       header={`Open jobs (${jobs.length})`}
       footer={
         jobs.length

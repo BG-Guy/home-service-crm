@@ -14,8 +14,10 @@ import { CustomerPicker } from "@/features/customers/slots.client";
 import type { CustomFieldDef } from "@/features/settings/contracts";
 import { CustomFieldsFields } from "@/features/settings/slots.client";
 import { formatMoney } from "@/lib/money";
+import { formatDateKey } from "@/lib/time";
 import { Avatar } from "@/ui/components/Avatar";
 import { Banner } from "@/ui/components/Banner";
+import { BarSummary, BottomBar } from "@/ui/components/BottomBar";
 import { Button } from "@/ui/components/Button";
 import {
   DateField,
@@ -225,7 +227,7 @@ export function NewJobForm({
     <form
       ref={formRef}
       onSubmit={submit}
-      className="flex flex-col gap-[var(--section-gap)] pb-28"
+      className="flex flex-col gap-[var(--section-gap)]"
       noValidate
     >
       {defaults.callbackOf && (
@@ -459,7 +461,7 @@ export function NewJobForm({
                     className={cx(
                       "flex size-6 items-center justify-center rounded-full border-[1.5px] transition-colors",
                       pick
-                        ? "border-transparent bg-accent text-on-accent"
+                        ? "border-transparent bg-accent-fill text-on-accent"
                         : "border-label-3",
                     )}
                   >
@@ -553,19 +555,30 @@ export function NewJobForm({
         </p>
       )}
 
-      <div className="fixed inset-x-0 bottom-[calc(var(--tabbar-space)+4px)] z-[var(--z-bar)] px-[var(--gutter)] lg:bottom-4 lg:left-[260px]">
-        <div className="material mx-auto max-w-[560px] rounded-[22px] p-2 shadow-[var(--shadow-float)]">
+      {/* The booking bar (DESIGN.md §5): sticky, never covers the last field. */}
+      <BottomBar
+        label="Create job"
+        summary={
+          <BarSummary
+            title={d.title.trim() || "New job"}
+            subtitle={
+              d.schedule && d.date
+                ? `${formatDateKey(d.date, "en-US", { weekday: "short", month: "short", day: "numeric" })}${d.start ? ` · ${d.start}` : ""}${d.picks.length ? ` · ${d.picks.length} tech${d.picks.length === 1 ? "" : "s"}` : " · no tech yet"}`
+                : "Not scheduled yet"
+            }
+          />
+        }
+        action={
           <Button
             type="submit"
             size="lg"
-            fullWidth
             loading={pending}
             disabled={!d.title.trim()}
           >
             {d.schedule && d.date && d.picks.length ? "Book job" : "Create job"}
           </Button>
-        </div>
-      </div>
+        }
+      />
     </form>
   );
 }

@@ -10,8 +10,11 @@ import { Badge } from "@/ui/components/Badge";
 import { ListRow, ListSection } from "@/ui/components/List";
 import { Pill } from "@/ui/components/StatusPill";
 import { getOutboxCount } from "./api";
-import { ConsentActions } from "./components/ConsentActions";
-import { LogReplyButton } from "./components/ThreadActions";
+import {
+  ConsentActions,
+  LogReplyButton,
+  MessageComposer,
+} from "./components/islands";
 import { ThreadMessages } from "./components/ThreadMessages";
 import type {
   ConsentPanelProps,
@@ -19,7 +22,6 @@ import type {
   OutboxCountBadgeProps,
 } from "./contracts";
 import { getComposerData, getConsentLedger, getJobThread } from "./queries";
-import { MessageComposer } from "./slots.client";
 
 // Server UI slots produced by B5 (BUILD_PLAN §5.1). Each takes ids, calls
 // getCurrentUser() itself and returns null when the viewer may not see it.
@@ -153,7 +155,7 @@ export async function OutboxCountBadge({
       href={s === "all" ? "/messages/outbox?scope=all" : "/messages/outbox"}
       className="flex min-h-11 items-center gap-3 rounded-card bg-card px-4 py-2.5 shadow-card"
     >
-      <span className="flex size-[29px] items-center justify-center rounded-[7px] bg-accent text-on-accent">
+      <span className="flex size-[29px] items-center justify-center rounded-[7px] bg-accent-fill text-on-accent">
         <Inbox aria-hidden size={18} />
       </span>
       <span className="flex-1 text-body text-label">Outbox</span>

@@ -502,7 +502,7 @@ export default async function ToolPage({
           </ListSection>
 
           <section aria-label="History" className="flex flex-col gap-1.5">
-            <h2 className="px-4 text-footnote uppercase text-label-2">
+            <h2 className="px-4 text-subhead font-semibold text-label-2">
               Activity
             </h2>
             <ActivityTimeline entity={{ type: "tool", id: t.id }} limit={20} />

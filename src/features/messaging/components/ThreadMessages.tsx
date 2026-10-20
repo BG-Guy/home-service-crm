@@ -3,9 +3,10 @@ import Link from "next/link";
 import { dateKey, formatDayShort, formatTime } from "@/lib/time";
 import { EmptyState } from "@/ui/components/EmptyState";
 import { MessageBubble, MessageSeparator } from "@/ui/components/MessageBubble";
+import { toneStyle } from "@/ui/tone";
 import type { ThreadMessage } from "../contracts";
 import { channelLabel, templateLabel } from "../labels";
-import { CancelScheduledButton } from "./ThreadActions";
+import { CancelScheduledButton } from "./islands";
 
 const STATUS_WORD: Record<string, string> = {
   sent: "Sent",
@@ -107,13 +108,15 @@ export function ThreadMessages({
             {upcoming.map((m) => (
               <li
                 key={m.id}
-                className="flex items-start gap-3 rounded-card bg-card px-4 py-3 shadow-card"
+                className="flex items-center gap-3 rounded-[20px] border border-dashed border-sep bg-card/60 py-2.5 pr-3 pl-3"
               >
-                <CalendarClock
+                <span
                   aria-hidden
-                  size={20}
-                  className="mt-0.5 shrink-0 text-label-2"
-                />
+                  className="icon-tile tint-bg tint-fg"
+                  style={toneStyle("blue")}
+                >
+                  <CalendarClock />
+                </span>
                 <div className="min-w-0 flex-1">
                   <p className="text-subhead font-semibold text-label">
                     {templateLabel(m.templateKey)}

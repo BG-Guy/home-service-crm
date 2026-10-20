@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  type KeyboardEvent as ReactKeyboardEvent,
+  type CSSProperties,
   type ReactNode,
   useEffect,
   useId,
@@ -10,6 +10,7 @@ import {
 } from "react";
 import { cx } from "../cx";
 import { haptic } from "../motion/haptics";
+import { onMenuKeyDown, placeMenu } from "./MenuPopover";
 
 export interface MenuAction {
   label: string;
@@ -26,7 +27,9 @@ const MOVE_TOLERANCE = 10;
  * Context menu (SPEC §12.6): long-press 450 ms on touch, right-click on desktop,
  * Shift+F10 / the Menu key from the keyboard. Renders a top-layer
  * `popover="manual"` menu (own light-dismiss so the finger lift after a long
- * press doesn't close it), keyboard navigable (↑/↓/Home/End, Esc).
+ * press doesn't close it), keyboard navigable (↑/↓/Home/End, Esc). It grows
+ * from the press point (docs/DESIGN.md §4 M5): glass, scale .92 → 1 in 220 ms,
+ * items staggered 12 ms (`.menu-pop` in globals.css).
  *
  * ```tsx
  * <ContextMenu actions={[{ label: "Call", onSelect: call }, { label: "Delete", destructive: true, onSelect: del }]}>
@@ -69,19 +72,8 @@ export function ContextMenu({
   const openAt = (x: number, y: number) => {
     const menu = menuRef.current;
     if (!menu || disabled || actions.length === 0) return;
-    if (!menu.matches(":popover-open")) {
-      menu.style.left = `${x}px`;
-      menu.style.top = `${y}px`;
-      menu.showPopover();
-    }
-    const r = menu.getBoundingClientRect();
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    const left = Math.min(Math.max(8, x), vw - r.width - 8);
-    const top = y + r.height + 8 > vh ? Math.max(8, y - r.height) : y;
-    menu.style.left = `${left}px`;
-    menu.style.top = `${top}px`;
-    menu.style.transformOrigin = `${x - left}px ${y - top}px`;
+    if (!menu.matches(":popover-open")) menu.showPopover();
+    placeMenu(menu, { x, y }, "start");
     setOpen(true);
     requestAnimationFrame(() =>
       menu
@@ -133,30 +125,6 @@ export function ContextMenu({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: unmount cleanup only
   useEffect(() => () => clearTimer(), []);
-
-  const onMenuKey = (e: ReactKeyboardEvent<HTMLDivElement>) => {
-    const items = Array.from(
-      menuRef.current?.querySelectorAll<HTMLElement>(
-        "[role=menuitem]:not(:disabled)",
-      ) ?? [],
-    );
-    const i = items.indexOf(document.activeElement as HTMLElement);
-    let next: HTMLElement | undefined;
-    if (e.key === "ArrowDown") next = items[(i + 1) % items.length];
-    else if (e.key === "ArrowUp")
-      next = items[(i - 1 + items.length) % items.length];
-    else if (e.key === "Home") next = items[0];
-    else if (e.key === "End") next = items[items.length - 1];
-    else if (e.key === "Tab") {
-      e.preventDefault();
-      close();
-      return;
-    }
-    if (next) {
-      e.preventDefault();
-      next.focus();
-    }
-  };
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: wrapper forwards gestures; actions are also reachable via Shift+F10
@@ -224,8 +192,8 @@ export function ContextMenu({
         popover="manual"
         role="menu"
         aria-label={label}
-        className="ctx-menu"
-        onKeyDown={onMenuKey}
+        className="ctx-menu menu-pop"
+        onKeyDown={(e) => onMenuKeyDown(e, close)}
       >
         {actions.map((a, i) => (
           <button
@@ -233,19 +201,16 @@ export function ContextMenu({
             type="button"
             role="menuitem"
             disabled={a.disabled}
-            className={cx(
-              "flex min-h-11 w-full items-center justify-between gap-3 px-4 text-left text-body outline-none focus-visible:bg-fill-2 active:bg-fill disabled:opacity-40",
-              i > 0 && "hairline-t",
-              a.destructive ? "text-danger" : "text-label",
-            )}
+            className={cx("menu-pop-item", a.destructive && "text-danger")}
+            style={{ "--i": i } as CSSProperties}
             onClick={() => {
               close();
               a.onSelect();
             }}
           >
-            <span className="truncate">{a.label}</span>
+            <span className="min-w-0 flex-1 truncate">{a.label}</span>
             {a.icon && (
-              <span aria-hidden className="flex shrink-0">
+              <span aria-hidden className="menu-pop-icon">
                 {a.icon}
               </span>
             )}

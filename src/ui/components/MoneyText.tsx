@@ -39,9 +39,7 @@ export function MoneyText({
     <span
       className={cx(
         "num whitespace-nowrap",
-        colorize &&
-          v > 0 &&
-          "text-[color-mix(in_oklab,var(--sys-green)_70%,var(--label))]",
+        colorize && v > 0 && "text-success",
         colorize && v < 0 && "text-danger",
         className,
       )}

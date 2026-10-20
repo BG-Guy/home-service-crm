@@ -151,18 +151,24 @@ BUILD_PLAN §5).
 Tokens live in `src/app/globals.css` (colors, type scale, radii, spring easings, dark mode via
 `prefers-color-scheme` and the `data-theme` override from the Appearance cookie). Tailwind v4
 utilities map to them (`bg-card`, `text-label-2`, `text-large-title`, `rounded-card`,
-`shadow-card`, `bg-accent`, `text-accent-text`). The brand accent from Settings → Branding is
+`shadow-card`, `bg-accent`, `text-accent-text`; v2 adds `shadow-raised`, `rounded-modal`,
+`border-hairline`, `bg-field`, `text-page-title`). The brand accent from Settings → Branding is
 server-rendered by the root layout (`getBrandingStyle()` → `src/lib/branding.ts`, contrast-safe).
+Look and motion rules: `docs/DESIGN.md` (v2). Status text uses the AA `--ink-*` tokens via
+`toneStyle()`; `text-success/warning/danger` are AA too. CSS motion utilities: `.pressable` (M9),
+`.hover-lift` (M16), `.live-dot` (M12), `.shimmer` (M13), `.disclosure` (M15), `.badge-pop`
+(M11), `.success-check` (M10).
 
-Components (`src/ui/components/`, import each file directly): Button, IconButton, List
-(ListGroup/ListSection/ListRow), KeyValueList, StatusPill, Badge, Chip, Avatar, TechCard,
+Components (`src/ui/components/`, import each file directly): Button, IconButton, Card, List
+(ListGroup/ListSection/ListRow/SectionHeader), KeyValueList, StatusPill, Badge, Chip (ChipRow/
+TagChip), Avatar, TechCard,
 MoneyText, Score (ReadinessRing/RiskChip), Toggle, SegmentedControl, Stepper, Field
 (TextField/TextArea/Select/DateField/TimeField), MoneyField, PhoneField, SearchField,
 SubmitButton, Sheet, ActionSheet, Alert (useConfirm), ConfirmTyped, ContextMenu,
-SwipeActions, AddMenu, NavBar (LargeTitleHeader/BackButton), TabBar, Sidebar, AppShell
-(Page/SplitView), Toast, Banner, EmptyState, Skeleton, Spinner, OfflineBanner,
+SwipeActions, AddMenu, MenuPopover, NavBar (LargeTitleHeader/BackButton), TabBar, Sidebar, AppShell
+(Page/SplitView/DetailLayout), BottomBar (BarSummary), Toast, Banner, EmptyState, Skeleton, Spinner, OfflineBanner,
 SlotPlaceholder, FeatureGate, charts (Sparkline/BarChart/LineChart/DonutChart/ProgressRing),
-StatCard, Timeline, MessageBubble, PhotoGrid, PhotoCompare, SignaturePad, CameraButton,
+StatCard, Timeline (+ TripTimeline), SuccessCheck, MessageBubble, PhotoGrid, PhotoCompare, SignaturePad, CameraButton,
 MapView, InstallPrompt, lazy (Lazy* wrappers). Gallery: `/dev/ui` and `/dev/ui/shell` (dev only).
 
 **Use existing components before creating new ones.** Status labels and tones: `src/ui/status.ts`. Icons by name: `src/ui/icons.ts`.
@@ -173,6 +179,22 @@ back come from the nav manifests; pass `title`, `search`, `segments`, `back` whe
 skeletons in `PageTransition`. Small tap targets get `hit-44` (or `hit-44-kids` on a wrapper). Button and menu
 labels are sentence case ("Sign in", "New job"). `StatCard size="sm"` for 3-up rows on phones; money never truncates.
 Phone numbers shown to people go through `formatPhoneDisplay()` (`@/lib/phone-display`).
+
+Shell and motion (v2, DESIGN.md §4–§6):
+- `<Morph name="job-<id>-title">` (`@/ui/motion/Morph`) wraps the same single element on the list
+  and the detail screen (M3); names unique per page. Pairs on router-cache hits / no `loading.tsx`.
+- `TabLink` / `NAV_TAB` for root-section links (M2 cross-fade); `PushLink` / `BackLink` as before.
+- `<Sheet presentation="modal" | "drawer" footer={<Button block>…</Button>}>` (desktop = ≥ 768 px or a
+  fine pointer; `desktop="panel"` = drawer). Phone large detent steps the page back (card stack).
+- `<BottomBar summary={<BarSummary title subtitle />} action={…} secondary? edge? label? />`: sticky,
+  render it last in the page (or `DetailLayout bar`); publishes `--bottombar-h`. No `position: fixed`
+  docks in pages (they'd move with the card-stack layer).
+- `<DetailLayout rail={…} bar={…} railOnPhone="stack" | "hide" railLabel?>{main}</DetailLayout>`
+  inside `<Page>`: two columns `minmax(0,1fr) 360px` with a sticky rail at ≥ 1200 px, stacked below.
+  `DetailLoading rail` matches it.
+- `.enter-stagger` on a list container (M8, tab roots only); `.glass-chrome` for floating chrome.
+- Shell JS: the outbox replay, sync capsule, install nudge and tech location pill load after idle
+  (`ShellDeferred`); don't import them (or `@/client/outbox`) from shell modules.
 
 ## 9. Glossary
 

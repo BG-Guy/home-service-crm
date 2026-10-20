@@ -3,7 +3,11 @@ import { notFound } from "next/navigation";
 import { CustomerCard } from "@/features/customers/slots";
 import { assertEstimateAccess } from "@/features/estimates/access";
 import { complianceNotes } from "@/features/estimates/compliance";
-import { EstimateBuilder } from "@/features/estimates/components/EstimateBuilder";
+import {
+  EstimateActionsProvider,
+  EstimateBuilder,
+  EstimateSendButton,
+} from "@/features/estimates/components/EstimateBuilder";
 import { EstimateDocument } from "@/features/estimates/components/EstimateDocument";
 import { loadEstimateDocForViewer } from "@/features/estimates/doc";
 import { isEstimateOpen } from "@/features/estimates/logic";
@@ -17,13 +21,14 @@ import { isUuid } from "@/lib/ids";
 import { formatMoney } from "@/lib/money";
 import { findCompany, getSettings, isEnabled } from "@/lib/settings";
 import { dateKey, formatDate, formatDateTime } from "@/lib/time";
-import { Page } from "@/ui/components/AppShell";
+import { DetailLayout, Page } from "@/ui/components/AppShell";
 import { Banner } from "@/ui/components/Banner";
-import { Button } from "@/ui/components/Button";
+import { BarSummary, BottomBar } from "@/ui/components/BottomBar";
 import { ListRow, ListSection } from "@/ui/components/List";
 import { MoneyText } from "@/ui/components/MoneyText";
 import { NavBar } from "@/ui/components/NavBar";
 import { StatusPill } from "@/ui/components/StatusPill";
+import { Morph } from "@/ui/motion/Morph";
 import { PageTransition } from "@/ui/motion/PageTransition";
 
 export const metadata: Metadata = { title: "Estimate" };
@@ -62,6 +67,49 @@ export default async function EstimatesIdPage({
     enabled: settings.compliance.contract_templates,
   });
   const approvedOption = doc.options.find((o) => o.id === e.approvedOptionId);
+  const RAIL = (
+    <>
+      <CustomerCard
+        customerId={doc.customer.id}
+        jobId={doc.job?.id}
+        variant="compact"
+      />
+      {doc.job && canCreate && e.status === "approved" ? (
+        <ListSection header="Changes after approval">
+          <ListRow
+            href={`/jobs/${doc.job.id}?tab=estimate`}
+            title="Change orders"
+            subtitle="Extra work beyond the signed amount needs a signed change order"
+          />
+        </ListSection>
+      ) : null}
+      {Object.values(doc.deposits).some(Boolean) && open ? (
+        <ListSection header="Deposit">
+          {doc.options.map((o) =>
+            doc.deposits[o.id] ? (
+              <ListRow
+                key={o.id}
+                title={o.label}
+                subtitle={doc.deposits[o.id]?.ruleName}
+                detail={formatMoney(doc.deposits[o.id]?.amountCents ?? 0)}
+              />
+            ) : null,
+          )}
+        </ListSection>
+      ) : null}
+      <ListSection header="Tags">
+        <div className="px-4 py-3">
+          <TagEditor
+            entityType="estimate"
+            entityId={e.id}
+            initial={(tagMap as Record<string, never[]>)[e.id] ?? []}
+            readOnly={!canCreate}
+          />
+        </div>
+      </ListSection>
+      <ActivityTimeline entity={{ type: "estimate", id: e.id }} limit={15} />
+    </>
+  );
 
   return (
     <PageTransition>
@@ -80,11 +128,50 @@ export default async function EstimatesIdPage({
         {/* Print shows only the estimate as paper (QA T4-08); the builder and the
             side panels are app chrome and carry print:hidden. */}
         <EstimateDocument doc={doc} className="hidden print:block" />
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start print:hidden">
-          <div className="min-w-0 space-y-6">
-            <section className="px-1">
-              <StatusPill kind="estimate" status={e.status} />
-              <p className="mt-2 text-footnote text-label-2">
+        <EstimateActionsProvider>
+          <DetailLayout
+            className="print:hidden"
+            railLabel="Estimate summary"
+            bar={
+              open && user.perms.has("estimates.send") ? (
+                <BottomBar
+                  label="Estimate actions"
+                  summary={
+                    <BarSummary
+                      title={
+                        <MoneyText
+                          cents={
+                            approvedOption?.totals.totalCents ??
+                            doc.headlineCents
+                          }
+                        />
+                      }
+                      subtitle={
+                        doc.options.length > 1 ? "Recommended option" : "Total"
+                      }
+                    />
+                  }
+                  action={
+                    <EstimateSendButton
+                      status={e.status}
+                      disabled={!doc.options.some((o) => o.lines.length > 0)}
+                    />
+                  }
+                />
+              ) : undefined
+            }
+            rail={RAIL}
+          >
+            <section className="flex flex-col gap-1 px-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <Morph name={`estimate-${e.id}-title`}>
+                  <h1 className="inline-block text-headline text-label-2">
+                    {e.title ? `${e.number} · ${e.title}` : e.number}
+                  </h1>
+                </Morph>
+                <StatusPill kind="estimate" status={e.status} />
+              </div>
+              <p className="mt-1 text-footnote font-medium text-label-2">
                 {approvedOption
                   ? `Approved · ${approvedOption.label}`
                   : doc.options.length > 1
@@ -93,11 +180,10 @@ export default async function EstimatesIdPage({
               </p>
               <MoneyText
                 cents={approvedOption?.totals.totalCents ?? doc.headlineCents}
-                className="text-large-title font-bold"
+                className="text-large-title font-bold text-label"
               />
               <p className="text-subhead text-label-2">
                 {doc.customer.displayName}
-                {e.title ? ` · ${e.title}` : ""}
                 {e.expiresAt && open
                   ? ` · valid until ${formatDate(e.expiresAt, tz)}`
                   : ""}
@@ -215,10 +301,12 @@ export default async function EstimatesIdPage({
               }}
               consentText={doc.consentText}
               coolingOff={doc.coolingOff}
+              hidePrimary
             />
 
             {doc.job ? (
               <ListSection
+                variant="title"
                 header="Photos of the problem"
                 footer="Problem photos show on the estimate the customer sees."
               >
@@ -249,56 +337,8 @@ export default async function EstimatesIdPage({
                 ) : null}
               </ListSection>
             ) : null}
-          </div>
-
-          <aside className="min-w-0 space-y-6">
-            <CustomerCard
-              customerId={doc.customer.id}
-              jobId={doc.job?.id}
-              variant="compact"
-            />
-            {doc.job && canCreate && e.status === "approved" ? (
-              <ListSection header="Changes after approval">
-                <ListRow
-                  href={`/jobs/${doc.job.id}?tab=estimate`}
-                  title="Change orders"
-                  subtitle="Extra work beyond the signed amount needs a signed change order"
-                />
-              </ListSection>
-            ) : null}
-            {Object.values(doc.deposits).some(Boolean) && open ? (
-              <ListSection header="Deposit">
-                {doc.options.map((o) =>
-                  doc.deposits[o.id] ? (
-                    <ListRow
-                      key={o.id}
-                      title={o.label}
-                      subtitle={doc.deposits[o.id]?.ruleName}
-                      detail={formatMoney(doc.deposits[o.id]?.amountCents ?? 0)}
-                    />
-                  ) : null,
-                )}
-              </ListSection>
-            ) : null}
-            <ListSection header="Tags">
-              <div className="px-4 py-3">
-                <TagEditor
-                  entityType="estimate"
-                  entityId={e.id}
-                  initial={(tagMap as Record<string, never[]>)[e.id] ?? []}
-                  readOnly={!canCreate}
-                />
-              </div>
-            </ListSection>
-            <ActivityTimeline
-              entity={{ type: "estimate", id: e.id }}
-              limit={15}
-            />
-            <Button href={`/estimates/${e.id}/print`} variant="gray" fullWidth>
-              Print / PDF
-            </Button>
-          </aside>
-        </div>
+          </DetailLayout>
+        </EstimateActionsProvider>
       </Page>
     </PageTransition>
   );

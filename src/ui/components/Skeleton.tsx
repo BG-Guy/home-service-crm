@@ -6,9 +6,9 @@ import type { BackTarget } from "./NavBar";
 import { SkeletonHeader } from "./NavTitles";
 
 /*
- * Loading placeholders for `loading.tsx` files (SPEC §12.6): shimmer-free
- * opacity pulse that stops under reduced motion. Each variant matches the
- * geometry of the real component so content doesn't jump when it arrives.
+ * Loading placeholders for `loading.tsx` files (DESIGN.md §4 M13): a shimmer
+ * sweep (transform only) that stops under reduced motion. Each variant matches
+ * the geometry of the real component so content doesn't jump when it arrives.
  */
 
 /** A single block. Give it a size with className or width/height. */
@@ -63,7 +63,7 @@ export function SkeletonText({
   );
 }
 
-/** A list row placeholder (44+ px, optional leading tile/avatar). */
+/** A list row placeholder (52 px like ListRow, optional leading tile/avatar). */
 export function SkeletonRow({
   leading = "icon",
   subtitle = true,
@@ -76,11 +76,11 @@ export function SkeletonRow({
   return (
     <div
       aria-hidden
-      className="list-row flex min-h-11 items-center gap-3 px-4 py-2.5"
+      className="list-row flex min-h-[var(--row-min)] items-center gap-3 px-4 py-2.5"
       data-icon={leading === "icon" ? "" : undefined}
     >
       {leading === "icon" && (
-        <Skeleton width={29} height={29} className="rounded-[7px]" />
+        <Skeleton width={32} height={32} className="rounded-[10px]" />
       )}
       {leading === "avatar" && (
         <Skeleton width={40} height={40} rounded="full" />
@@ -106,7 +106,7 @@ export function SkeletonList({
 }) {
   return (
     <div aria-hidden>
-      {header && <Skeleton height={11} width={96} className="mx-4 mb-2.5" />}
+      {header && <Skeleton height={14} width={110} className="mx-4 mb-3" />}
       <div className="list-card">
         {Array.from({ length: rows }, (_, i) => (
           // biome-ignore lint/suspicious/noArrayIndexKey: static placeholder list
@@ -126,11 +126,8 @@ export function SkeletonCard({
   className?: string;
 }) {
   return (
-    <div
-      aria-hidden
-      className={cx("rounded-card bg-card p-4 shadow-card", className)}
-    >
-      <Skeleton height={16} width="40%" className="mb-3" />
+    <div aria-hidden className={cx("card p-[var(--card-pad)]", className)}>
+      <Skeleton height={18} width="40%" className="mb-3" />
       <SkeletonText lines={lines} />
     </div>
   );
@@ -139,13 +136,10 @@ export function SkeletonCard({
 /** A StatCard placeholder. */
 export function SkeletonStat({ className }: { className?: string }) {
   return (
-    <div
-      aria-hidden
-      className={cx("rounded-tile bg-card p-4 shadow-card", className)}
-    >
-      <Skeleton height={12} width="50%" />
-      <Skeleton height={28} width="70%" className="mt-2.5" />
-      <Skeleton height={12} width="40%" className="mt-2.5" />
+    <div aria-hidden className={cx("card p-4", className)}>
+      <Skeleton height={13} width="50%" />
+      <Skeleton height={30} width="70%" className="mt-2.5" />
+      <Skeleton height={20} width="45%" className="mt-2" rounded="full" />
     </div>
   );
 }

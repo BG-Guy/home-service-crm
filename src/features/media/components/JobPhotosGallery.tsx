@@ -23,7 +23,7 @@ import { cx } from "@/ui/cx";
 import { deletePhoto, setPhotoStarred, updatePhoto } from "../actions";
 import type { MediaTag } from "../contracts";
 import { FLAG_HINT, FLAG_LABEL, TAG_LABEL } from "../labels";
-import { CameraCaptureButton } from "../slots.client";
+import { CameraCaptureButton } from "./capture";
 
 export interface GalleryPhoto {
   id: string;

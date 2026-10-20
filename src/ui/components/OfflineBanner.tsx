@@ -11,7 +11,8 @@ const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
 /**
  * Floating sync-status capsule (SPEC §12.6): offline + pending count, syncing
  * progress, or a retry when the last sync failed. Hidden when all is well.
- * Sits above the tab bar on phones, bottom-center on desktop.
+ * Glass, above the tab bar (and a bottom bar) on phones, bottom-center on
+ * desktop. The app shell loads it after idle (`ShellDeferred`), with the outbox.
  */
 export function OfflineBanner({ className }: { className?: string }) {
   const s = useOutboxState();
@@ -67,12 +68,12 @@ export function OfflineBanner({ className }: { className?: string }) {
       aria-live="polite"
       data-chrome
       className={cx(
-        "pointer-events-none fixed inset-x-0 bottom-[calc(var(--tabbar-space)+4px)] z-[var(--z-toast)] flex justify-center px-4 lg:bottom-6",
+        "pointer-events-none fixed inset-x-0 bottom-[calc(var(--tabbar-space)+var(--bottombar-h,0px)+4px)] z-[var(--z-toast)] flex justify-center px-4 lg:bottom-[calc(var(--bottombar-h,0px)+24px)]",
         className,
       )}
     >
       {body && (
-        <div className="enter-fade-up material pointer-events-auto flex min-h-9 items-center gap-2 rounded-pill px-4 py-1.5 text-footnote font-medium shadow-[var(--shadow-float),0_0_0_0.5px_var(--sep)]">
+        <div className="enter-rise glass-chrome pointer-events-auto flex min-h-9 items-center gap-2 rounded-pill px-4 py-1.5 text-footnote font-medium">
           {body}
         </div>
       )}

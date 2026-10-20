@@ -73,7 +73,7 @@ export default function EtaSheet({
               className={cx(
                 "pressable flex min-h-[64px] flex-col items-center justify-center rounded-tile text-title3 font-semibold",
                 eta === m
-                  ? "bg-accent text-on-accent"
+                  ? "bg-accent-fill text-on-accent"
                   : "bg-card shadow-[0_0_0_0.5px_var(--sep)]",
               )}
             >

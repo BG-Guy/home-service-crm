@@ -304,13 +304,11 @@ export function PermissionGrid({
                 <th
                   scope="rowgroup"
                   colSpan={roles.length + 1}
-                  className="bg-fill-3 px-4 py-1.5 text-footnote font-semibold uppercase text-label-2"
+                  className="bg-fill-3 px-4 py-1.5 text-subhead font-semibold text-label-2"
                 >
                   {s.name}
                   {s.flagOff && (
-                    <span className="ml-2 font-normal normal-case">
-                      (module off)
-                    </span>
+                    <span className="ml-2 font-normal">(module off)</span>
                   )}
                 </th>
               </tr>

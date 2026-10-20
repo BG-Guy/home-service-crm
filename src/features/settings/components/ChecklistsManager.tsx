@@ -236,7 +236,7 @@ function ChecklistSheet({
           />
         </div>
         <section aria-label="Items">
-          <h2 className="px-4 pb-1.5 text-footnote uppercase text-label-2">
+          <h2 className="px-4 pb-2 text-subhead font-semibold text-label-2">
             Items
           </h2>
           <ol className="flex flex-col gap-3">

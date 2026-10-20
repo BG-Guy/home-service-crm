@@ -1,6 +1,5 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { LocationSharer } from "@/features/map/slots.client";
 import { requireUser } from "@/lib/auth/current";
 import { getBadgeCounts } from "@/lib/badges";
 import { maybeTickSoon } from "@/lib/cron";
@@ -17,11 +16,9 @@ import {
   type ShellNavItem,
 } from "@/ui/components/AppShell";
 import { Avatar } from "@/ui/components/Avatar";
-import { LazyInstallPrompt } from "@/ui/components/lazy";
-import { OfflineBanner } from "@/ui/components/OfflineBanner";
 import { cx } from "@/ui/cx";
-import { OutboxAutoFlush } from "../_components/OutboxAutoFlush";
 import { SearchLauncher } from "./_components/SearchLauncher";
+import { ShellDeferred } from "./_components/ShellDeferred";
 
 // Signed-in shell (SPEC §13; BUILD_PLAN §3.3 F). Everything is resolved on the server
 // per request: the user (React cache()), nav from the module manifests filtered by
@@ -106,12 +103,12 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       ].map((i) => ({ href: i.href, label: i.label }))}
       badges={badges as Record<string, number>}
       brand={brand}
-      banner={
+      // After load + idle: outbox replay, sync capsule, install nudge, the tech
+      // location pill (one lazy chunk, none of it in the shell's initial JS).
+      overlays={
         <>
-          <OfflineBanner />
-          <div className="mx-auto max-w-[var(--content-max)] px-[var(--gutter)] pt-2 empty:hidden print:hidden">
-            <LazyInstallPrompt appName={brand} />
-          </div>
+          <ShellDeferred appName={brand} tech={user.baseRole === "tech"} />
+          <SearchLauncher />
         </>
       }
       sidebarFooter={
@@ -136,9 +133,6 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       }
     >
       {children}
-      {user.baseRole === "tech" && <LocationSharer />}
-      <OutboxAutoFlush />
-      <SearchLauncher />
     </AppShell>
   );
 }

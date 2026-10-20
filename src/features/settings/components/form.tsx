@@ -12,6 +12,7 @@ import {
   useEffect,
   useId,
   useRef,
+  useState,
 } from "react";
 import type { ActionResult } from "@/lib/types";
 import {
@@ -25,6 +26,7 @@ import {
 import { MoneyField } from "@/ui/components/MoneyField";
 import { toast } from "@/ui/components/Toast";
 import { cx } from "@/ui/cx";
+import { SaveBar } from "./SaveBar";
 
 // Small form kit for B8 screens (settings, team): a server action bound with
 // useActionState, toast feedback, and field errors from action() fed to the UI-kit
@@ -192,7 +194,7 @@ export function FieldCard({
   return (
     <section className={className}>
       {header && (
-        <h2 className="px-4 pb-1.5 text-footnote uppercase text-label-2">
+        <h2 className="px-4 pb-2 text-subhead font-semibold text-label-2">
           {header}
         </h2>
       )}
@@ -224,8 +226,10 @@ export function FieldErrorText({
 }
 
 /**
- * Floating Save bar for long settings forms: stays above the tab bar on phones and
- * at the bottom of the content on desktop. Render it inside the `<form>`.
+ * Save bar for long settings forms (DESIGN.md §5 bottom action bar): sticky above
+ * the tab bar on phones, at the bottom of the content on desktop. It watches its
+ * `<form>` for edits and says whether there are unsaved changes. Render it inside
+ * the `<form>`, last.
  */
 export function StickySave({
   pending,
@@ -236,22 +240,35 @@ export function StickySave({
   label?: string;
   disabled?: boolean;
 }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [dirty, setDirty] = useState(false);
+  const wasPending = useRef(false);
+  useEffect(() => {
+    const form = ref.current?.closest("form");
+    if (!form) return;
+    const on = () => setDirty(true);
+    form.addEventListener("input", on);
+    form.addEventListener("change", on);
+    return () => {
+      form.removeEventListener("input", on);
+      form.removeEventListener("change", on);
+    };
+  }, []);
+  // A finished save clears the flag (errors keep the form as it was typed).
+  useEffect(() => {
+    if (wasPending.current && !pending) setDirty(false);
+    wasPending.current = pending;
+  }, [pending]);
   return (
-    <div className="pointer-events-none sticky bottom-[calc(var(--tabbar-space)+4px)] z-10 mt-6 flex justify-center lg:bottom-6">
-      <button
-        type="submit"
-        disabled={pending || disabled}
-        aria-busy={pending || undefined}
-        className="pressable pointer-events-auto flex min-h-[50px] w-full max-w-md items-center justify-center gap-2 rounded-full bg-accent px-6 text-body font-semibold text-on-accent shadow-float disabled:opacity-60"
-      >
-        {pending && (
-          <span
-            aria-hidden
-            className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent"
-          />
-        )}
-        {pending ? "Saving…" : label}
-      </button>
-    </div>
+    <>
+      <span ref={ref} hidden />
+      <SaveBar
+        dirty={dirty}
+        pending={pending}
+        label={label}
+        disabled={disabled}
+        className="mt-6"
+      />
+    </>
   );
 }

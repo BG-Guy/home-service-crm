@@ -65,7 +65,7 @@ export function PhotoCompare({
         className="pointer-events-none absolute inset-y-0 w-0.5 -translate-x-1/2 bg-white shadow-[0_0_6px_rgb(0_0_0/0.4)]"
         style={{ left: "var(--pos)" }}
       >
-        <span className="absolute left-1/2 top-1/2 flex size-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white text-[13px] font-bold text-black shadow-[0_2px_8px_rgb(0_0_0/0.3)]">
+        <span className="absolute left-1/2 top-1/2 flex size-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white text-[13px] font-bold text-black shadow-[0_4px_14px_rgb(0_0_0/0.3)]">
           ‹ ›
         </span>
       </span>
