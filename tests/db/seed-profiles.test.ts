@@ -35,7 +35,9 @@ describe("default demo plan", () => {
     // Pins the mixed demo the other tests rely on (job numbers, names, amounts). If
     // you change it on purpose, update this hash with the new one.
     const sha = createHash("sha1").update(JSON.stringify(plan)).digest("hex");
-    expect(sha).toBe("23f886a3d322daa94c644d32dfed049c85528727");
+    // Assign hub: J89 / J90 gained a booked window today / tomorrow (still
+    // unscheduled, no tech) so /dispatch has a job to recommend for.
+    expect(sha).toBe("63608205abc23cea1eccbe80ec86f81db61541ec");
   });
 
   it("rejects unknown profile keys", () => {

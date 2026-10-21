@@ -58,6 +58,7 @@ live in `jobs/machine.ts`. Every status change goes through `jobs/transition.ts`
 writes a geostamped status history and emits the specific event plus
 `job.status_changed`. The modules also cover:
 - the schedule board (tech columns with desktop drag-and-drop; 3-day and week views; queues; conflict and travel hints) and the S9 assign sheet
+- the Assign hub `/dispatch` (`jobs/dispatch/`): every tech's day on a route map, the tech's profile and day, and a ranked "who should take it" for `?job=` from the pure `recommend.ts` (extra route miles + load, clock and skill penalties; never age). Assigning reuses `scheduleJob`
 - `/jobs/[id]`: tabs for the office; a single scroll with a sticky action bar for techs, which enforces photos, signature, checklist and risk controls (admin override with a reason)
 - the tech's My Day and Finish my day
 - tasks and the time clock

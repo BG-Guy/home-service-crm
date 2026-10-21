@@ -408,12 +408,24 @@ describe("navigation (SPEC §13)", () => {
       ?.items.map((i) => i.label);
     expect(work).toEqual([
       "Schedule",
+      "Assign",
       "Leads",
       "Jobs",
       "Estimates",
       "Invoices",
       "Tasks",
     ]);
+    // The Assign hub is office/admin only (jobs.assign) and in the phone More list.
+    const officeNav = navForUser(viewer(office), allOn);
+    expect(officeNav.more.flatMap((g) => g.items.map((i) => i.key))).toContain(
+      "dispatch",
+    );
+    const techNav = navForUser(viewer(tech), allOn);
+    const techKeys = [
+      ...techNav.sidebar.flatMap((s) => s.items.map((i) => i.key)),
+      ...techNav.more.flatMap((g) => g.items.map((i) => i.key)),
+    ];
+    expect(techKeys).not.toContain("dispatch");
     // Time clock sits in Operations next to Team (QA T3-22).
     const operations = nav.sidebar
       .find((s) => s.key === "operations")

@@ -6,6 +6,7 @@ import {
   MessageCircle,
   Package,
   Receipt,
+  Route,
   ShieldCheck,
 } from "lucide-react";
 import type { Metadata } from "next";
@@ -37,6 +38,7 @@ import {
   LazyTagEditor as TagEditor,
 } from "@/features/jobs/components/lazy-islands";
 import { StatusEventList } from "@/features/jobs/components/StatusEventList";
+import { hubHrefForJob } from "@/features/jobs/dispatch/href";
 import type { GuardMiss } from "@/features/jobs/machine";
 import {
   CALLBACK_REASON_LABEL,
@@ -78,6 +80,7 @@ import type { SessionUser } from "@/lib/types";
 import { DetailLayout, Page } from "@/ui/components/AppShell";
 import { Banner } from "@/ui/components/Banner";
 import { BarSummary, BottomBar } from "@/ui/components/BottomBar";
+import { IconButton } from "@/ui/components/IconButton";
 import { type KeyValueItem, KeyValueList } from "@/ui/components/KeyValueList";
 import { ListRow, ListSection } from "@/ui/components/List";
 import { NavBar } from "@/ui/components/NavBar";
@@ -778,6 +781,17 @@ export default async function JobPage({
           title={windowLabel ?? "Not scheduled"}
           subtitle="No technician yet"
         />
+      }
+      secondary={
+        <IconButton
+          label="Open assign hub"
+          variant="secondary"
+          size={44}
+          transition="push"
+          href={hubHrefForJob(job.id, start ? dateKey(start, tz) : null)}
+        >
+          <Route size={20} aria-hidden />
+        </IconButton>
       }
       action={
         <AssignJobButton

@@ -25,6 +25,18 @@ export const nav: readonly NavItem[] = [
     order: 3,
   },
   {
+    // Assign hub: tech routes on a map + who to send (lead decision, Oct 2026).
+    key: "dispatch",
+    href: "/dispatch",
+    label: "Assign",
+    icon: "route",
+    perm: "jobs.assign",
+    section: "work",
+    order: 1.5,
+    more: "work",
+    moreOrder: 1.5,
+  },
+  {
     key: "tasks",
     href: "/tasks",
     label: "Tasks",

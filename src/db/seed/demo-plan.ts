@@ -1129,6 +1129,16 @@ export function buildPlan(profile: DemoProfile) {
           LABOR_SCENARIOS[n % LABOR_SCENARIOS.length] as ProfileScenario,
           null,
         );
+        // Assign hub demo: two booked windows still waiting for a tech (today
+        // and tomorrow), so /dispatch has a recommendation to show. J88 stays
+        // fully unscheduled (no date).
+        if (n === 89) {
+          j.dayOffset = 0;
+          j.windowStart = "16:00";
+        } else if (n === 90) {
+          j.dayOffset = 1;
+          j.windowStart = "11:00";
+        }
       }
       jobs.push(j);
     }

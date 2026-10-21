@@ -1039,14 +1039,20 @@ export const HANDYMAN_PROFILE: DemoProfile = {
     members: {
       admin: {
         hireDate: "2018-04-02",
+        experienceYears: 22,
+        birthDate: "1975-08-21",
         home: home("1601 Ramsey Ave", "78756", 30.3171, -97.7418),
       },
       office: {
         hireDate: "2023-01-09",
+        experienceYears: 5,
+        birthDate: "1993-05-09",
         home: home("3809 Avenue F", "78751", 30.304, -97.7275),
       },
       tech1: {
         hireDate: "2020-06-15",
+        experienceYears: 14,
+        birthDate: "1986-01-14",
         licenses: [
           {
             state: "TX",
@@ -1066,6 +1072,8 @@ export const HANDYMAN_PROFILE: DemoProfile = {
       },
       tech2: {
         hireDate: "2022-03-21",
+        experienceYears: 9,
+        birthDate: "1990-12-02",
         licenses: [
           {
             state: "TX",
@@ -1080,6 +1088,8 @@ export const HANDYMAN_PROFILE: DemoProfile = {
       },
       tech3: {
         hireDate: "2024-08-12",
+        experienceYears: 3,
+        birthDate: "1999-07-25",
         licenses: [
           {
             state: "TX",

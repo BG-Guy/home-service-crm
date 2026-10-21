@@ -74,6 +74,10 @@ export interface ProfileZipArea {
 
 export interface ProfileTeamMember {
   hireDate: string;
+  /** Years in the trade (Assign hub). */
+  experienceYears?: number;
+  /** Date of birth, 'YYYY-MM-DD' (private; never used for dispatch ranking). */
+  birthDate?: string;
   licenses?: {
     state: string;
     trade: string;

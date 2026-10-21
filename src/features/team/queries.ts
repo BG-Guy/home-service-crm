@@ -247,6 +247,9 @@ export interface TeamMemberDetail {
     zip?: string;
   } | null;
   hireDate: string | null;
+  experienceYears: number | null;
+  /** Only the date; age is derived on render. users.manage pages only. */
+  birthDate: string | null;
   usesCompanyTools: boolean;
   usesCompanyVehicle: boolean;
   monitoringNoticeAckAt: Date | null;
@@ -291,6 +294,8 @@ export async function getTeamMember(
     serviceZips: u.serviceZips ?? [],
     homeBase: u.homeBase ?? null,
     hireDate: u.hireDate ?? null,
+    experienceYears: u.experienceYears ?? null,
+    birthDate: u.birthDate ?? null,
     usesCompanyTools: u.usesCompanyTools,
     usesCompanyVehicle: u.usesCompanyVehicle,
     monitoringNoticeAckAt: u.monitoringNoticeAckAt,

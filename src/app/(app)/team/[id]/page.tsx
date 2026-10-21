@@ -22,7 +22,8 @@ import { AssignedVehicleRow } from "@/features/vehicles/slots";
 import { requireUser } from "@/lib/auth/current";
 import { formatPhoneDisplay } from "@/lib/phone-display";
 import { getCompanyTimezone } from "@/lib/settings";
-import { formatDate, formatDateKey, formatRelative } from "@/lib/time";
+import { ageOn, experienceLabel, tenureLabel } from "@/lib/tenure";
+import { dateKey, formatDate, formatDateKey, formatRelative } from "@/lib/time";
 import { Page } from "@/ui/components/AppShell";
 import { Avatar } from "@/ui/components/Avatar";
 import { Banner } from "@/ui/components/Banner";
@@ -59,6 +60,9 @@ export default async function TeamMemberPage({
   const isSelf = viewer.id === m.id;
   const offboarding = deactivated ? await getOffboardingState(m.id) : null;
   const tech = m.baseRole === "tech";
+  const today = dateKey(new Date(), tz);
+  const tenure = tenureLabel(m.hireDate, today);
+  const age = ageOn(m.birthDate, today);
   const skillNames = skills
     .filter((s) => m.skills.includes(s.id))
     .map((s) => s.name);
@@ -91,6 +95,8 @@ export default async function TeamMemberPage({
                 color: m.color,
                 avatarUrl: m.avatarUrl,
                 hireDate: m.hireDate,
+                experienceYears: m.experienceYears,
+                birthDate: m.birthDate,
                 workerType: m.workerType,
                 baseRole: m.baseRole,
                 usesCompanyTools: m.usesCompanyTools,
@@ -238,7 +244,23 @@ export default async function TeamMemberPage({
               {
                 key: "hire",
                 label: "Hire date",
-                value: m.hireDate ? formatDateKey(m.hireDate) : "",
+                value: m.hireDate
+                  ? `${formatDateKey(m.hireDate)}${tenure ? ` · ${tenure}` : ""}`
+                  : "",
+              },
+              {
+                key: "exp",
+                label: "Experience",
+                value: experienceLabel(m.experienceYears) ?? "",
+              },
+              // ⚖️ This page requires users.manage, the only role (with the member
+              // themself) allowed to see the date of birth and age.
+              {
+                key: "dob",
+                label: "Date of birth",
+                value: m.birthDate
+                  ? `${formatDateKey(m.birthDate)}${age != null ? ` · ${age}` : ""}`
+                  : "",
               },
               {
                 key: "login",

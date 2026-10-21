@@ -858,14 +858,20 @@ export const DEFAULT_PROFILE: DemoProfile = {
     members: {
       admin: {
         hireDate: "2019-03-04",
+        experienceYears: 18,
+        birthDate: "1979-06-12",
         home: TEAM_HOME("1100 Congress Ave", "78701", 30.2747, -97.7404),
       },
       office: {
         hireDate: "2023-08-14",
+        experienceYears: 6,
+        birthDate: "1991-02-27",
         home: TEAM_HOME("500 E 7th St", "78701", 30.2681, -97.7375),
       },
       tech1: {
         hireDate: "2021-05-17",
+        experienceYears: 11,
+        birthDate: "1988-09-03",
         licenses: [
           {
             state: "TX",
@@ -885,6 +891,8 @@ export const DEFAULT_PROFILE: DemoProfile = {
       },
       tech2: {
         hireDate: "2022-02-07",
+        experienceYears: 8,
+        birthDate: "1994-04-18",
         licenses: [
           {
             state: "TX",
@@ -905,6 +913,8 @@ export const DEFAULT_PROFILE: DemoProfile = {
       },
       tech3: {
         hireDate: "2024-09-23",
+        experienceYears: 2,
+        birthDate: "2001-11-30",
         licenses: [
           {
             state: "TX",

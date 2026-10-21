@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+### Assign hub (2026-10-21)
+Owner request: "a new assign to tech hub … tech list, a date, … a map, their jobs, their route,
+the tech details … recommend which tech to assign to, based on their route … responsive."
+- New `/dispatch` ("Assign", sidebar Work + phone More, `jobs.assign`: admin and office). Query
+  `?date=YYYY-MM-DD` (default today, company zone), `?tech=<userId>`, `?job=<jobId>`. A job that
+  already has a window pins the hub to its day (a banner says so).
+- Layout by the hub's own width (container queries, because the sidebar takes 256 px): one column
+  on phones (list → pushed tech view with a 40 % map, M1 push and an M3 avatar morph), list | map
+  over panel from 640 px, list | map | panel from 1040 px. Picking a tech is client state mirrored
+  into `?tech=` with `history.pushState`: instant, back works, no server round trip.
+- Map (`src/features/map/components/RouteMap.tsx`, lazy Leaflet chunk like `/map`): each tech's
+  day as a straight-line polyline in their color with numbered stops, the job as an accent pin
+  and the recommended insertion as a dashed detour; auto-fits; works with "Street map is off".
+- Tech panel: status, load, the recommendation's reasons, the day as a `TripTimeline` with the
+  new stop dropped into its slot, and details (experience, time at the company, age for team
+  managers only, phone, vehicle, skills, where the day starts). One primary "Assign <Name>"
+  (BottomBar on phone, rail card on desktop) calls the existing `scheduleJob` action; an untimed
+  job also gets the suggested arrival on that day.
+- Recommendation engine `src/features/jobs/dispatch/recommend.ts` (pure, golden-tested): extra
+  haversine miles at the cheapest feasible slot plus penalties for overlaps, the daily cap (6),
+  not being clocked in today, a missing skill and tight drives, plus 1.5 per booked job. Jobs
+  without coordinates rank by load. ⚖️ Age is never an input (test + comment).
+- Team profile: `experience_years` and `birth_date` on `users` (migration
+  `0004_team_profile_dispatch`; the existing `hire_date` is reused). Edit profile validates hire
+  date not in the future, 0–60 years, birth date in the past and age 16–100. ⚖️ Date of birth and
+  age are shown only with `users.manage` (or on your own record), never in audit payloads (only
+  `birth_date_changed`), never on public pages, and the AI PII guard now refuses DOB text.
+- Entry points: "See routes" in the assign sheet and an "Open assign hub" button in the job's
+  bottom bar while it has no tech.
+- Demo: every seeded person has experience and a birth date in all four profiles; J89 / J90 are
+  booked today 4 PM / tomorrow 11 AM without a tech (default plan sha pin updated for that).
+
 ### Design refresh v2 (2026-10-19)
 Spec: `docs/DESIGN.md`. CSS and markup only; no new dependencies, no new client JS in the shell.
 

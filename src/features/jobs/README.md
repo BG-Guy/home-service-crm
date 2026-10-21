@@ -13,6 +13,7 @@ screen (office tabs and the tech action bar), notes and the job settings page.
 | `actions.ts` | Server actions (all via `action()`): create/edit, `scheduleJob`, `setJobStatus` (offline key `jobs.setStatus`), running late, start approval, confirm, close, checklist, completion/checklist signatures (S15 `action`), call logging, notes, `/settings/jobs`. |
 | `queries.ts` | Read DAL with row scope in SQL (`jobScope`: view_all or an assignment). Lists (cursor), detail, notes, My Day, left-open jobs. |
 | `schedule-queries.ts`, `dispatch-reads.ts` | Schedule board data (tech roster, conflicts, travel hints, deposit flags, queues) and the S9 assign-sheet options. |
+| `dispatch/` | Assign hub `/dispatch`: `queries.ts` (day per tech, routes, profile facts, the job queue), `recommend.ts` (pure ranking: extra route miles + load / overlap / clock / skill penalties; never age), `href.ts`, `components/` (client `DispatchHub` shell, server `HubViews`, `HubAssignButton` → `scheduleJob`). |
 | `portal-actions.ts` | Public S8 actions (token re-validated, rate-limited). |
 | `approval-kinds.tsx` | `job_cancel` (after-arrival cancel review) and `job_start` (Critical risk) kinds for `/approvals`. |
 | `events.ts`, `cron.ts` | Recurring next job on `job.completed`; `jobs.stale_tracking` (revoke tracking links after 3 h en route). |

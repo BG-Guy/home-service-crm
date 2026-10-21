@@ -1,6 +1,7 @@
 "use client";
 
 import { CircleAlert, Star } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { Avatar } from "@/ui/components/Avatar";
 import { Banner } from "@/ui/components/Banner";
@@ -16,6 +17,7 @@ import { toast } from "@/ui/components/Toast";
 import { cx } from "@/ui/cx";
 import { haptic } from "@/ui/motion/haptics";
 import { scheduleJob } from "../actions";
+import { hubHrefForJob } from "../dispatch/href";
 import { loadAssignOptions } from "../dispatch-reads";
 import type { AssignOptions } from "../types";
 import { splitFor } from "./split";
@@ -264,6 +266,16 @@ export default function AssignSheet({
               <span className="flex items-center gap-2">
                 Technicians {loading && <Spinner size={12} />}
               </span>
+            }
+            action={
+              <Link
+                href={hubHrefForJob(jobId, date || null)}
+                transitionTypes={["nav-forward"]}
+                onClick={() => onOpenChange(false)}
+                className="font-semibold text-accent-text"
+              >
+                See routes
+              </Link>
             }
             footer={
               picks.length === 0

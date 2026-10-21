@@ -46,6 +46,7 @@ Scripts that touch the DB run with `tsx --conditions=react-server` (so `server-o
   (auth → feature flag → zod → `clientId` idempotency → one transaction with domain write + `emit()` + audit + activity → `revalidatePath` + `refresh()` → `after(processEvents)`).
 - Domain events: transactional outbox (`events` table) → `processEvents()` in `after()` and the cron tick → handlers in each module's `events.ts`.
 - Scheduler: `/api/cron/tick` (Bearer `CRON_SECRET`, advisory lock 42) plus a throttled piggy-back (`maybeTickSoon()` in the `(app)` layout, ≤ once a minute).
+- Assign hub `/dispatch` (`jobs.assign`; `?date=&tech=&job=`): reads in `src/features/jobs/dispatch/queries.ts`, pure ranking in `dispatch/recommend.ts` (golden-tested), assigning through the existing `scheduleJob`. Tech selection is client state mirrored with `history.pushState` (no server round trip); the map is `src/features/map/components/RouteMap.tsx` (lazy Leaflet).
 
 **Folders**
 ```
@@ -94,6 +95,7 @@ BUILD_PLAN §5).
 - Animations: CSS spring tokens first (`--ease-spring*` in `globals.css`), `motion/react-m` second — wrap only the component that uses `m.*` in `<MotionProvider>` (`src/ui/motion/MotionProvider.tsx`; it is **not** mounted globally, to keep ~30 KB out of the shell), preferably inside a lazily loaded chunk; never the full `motion` bundle. `<ViewTransition>` (stable in React 19.3) via `PageTransition`/`PushLink`/`BackLink`.
 - ⚖️ features default OFF or conservative. Never remove compliance warnings.
 - No AI on the money path. No PII to free-tier AI (`src/adapters/ai/policy.ts`).
+- ⚖️ Team members' date of birth / age: shown only with `users.manage` (or on your own record), never on public pages, never to AI, never in audit payloads, and never an input to dispatch ranking (`recommend.ts` has no such field; a golden test checks it).
 - Don't run `drizzle-kit push/studio` against PGlite while `next dev` is running.
 - Never edit an applied migration (`drizzle/0000_*` … `0003_*`); generate a new one. Views/triggers: `npx drizzle-kit generate --custom --name <x>` (e.g. `0003_invoice_balances_tip_cap.sql` replaces the `invoice_balances` view).
 - Schema files use relative imports only and never import `server-only` (drizzle-kit loads them).

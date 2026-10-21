@@ -29,6 +29,13 @@
       "when": 1792256754096,
       "tag": "0003_invoice_balances_tip_cap",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792585476913,
+      "tag": "0004_team_profile_dispatch",
+      "breakpoints": true
     }
   ]
 }

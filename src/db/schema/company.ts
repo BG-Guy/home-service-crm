@@ -98,6 +98,12 @@ export const users = pgTable(
     serviceZips: textArray("service_zips"),
     homeBase: jsonb("home_base").$type<AddressJson>(),
     hireDate: day("hire_date"),
+    // Assign hub (team profile). Shown to dispatchers; never an input to the
+    // dispatch recommendation (src/features/jobs/dispatch/recommend.ts).
+    experienceYears: smallint("experience_years"), // years in the trade (0-60)
+    // ⚖️ Personal data: visible only with users.manage or to the member themself;
+    // never sent to AI, never on public pages, never used for dispatch ranking.
+    birthDate: day("birth_date"),
     monitoringNoticeAckAt: tz("monitoring_notice_ack_at"), // ⚖️ required before location.share
     esignConsentAt: tz("esign_consent_at"),
     bankRoutingEnc: text("bank_routing_enc"),

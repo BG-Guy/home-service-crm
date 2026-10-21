@@ -29,6 +29,8 @@ export interface EditableMember {
   color: string | null;
   avatarUrl: string | null;
   hireDate: string | null;
+  experienceYears: number | null;
+  birthDate: string | null;
   workerType: "w2" | "1099";
   baseRole: string;
   usesCompanyTools: boolean;
@@ -144,11 +146,37 @@ export default function EditMemberSheet({
               inputMode="tel"
               defaultValue={member.phone ?? ""}
             />
+          </FieldCard>
+
+          <FieldCard
+            header="Experience"
+            footer="⚖️ Date of birth is private: only people who manage the team (and the member) see it or the age. It is never used to rank who gets a job."
+          >
             <FText
               name="hireDate"
               label="Hire date"
               type="date"
               defaultValue={member.hireDate ?? ""}
+            />
+            <FText
+              name="experienceYears"
+              label="Years in the trade"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={60}
+              step={1}
+              defaultValue={
+                member.experienceYears == null
+                  ? ""
+                  : String(member.experienceYears)
+              }
+            />
+            <FText
+              name="birthDate"
+              label="Date of birth"
+              type="date"
+              defaultValue={member.birthDate ?? ""}
             />
           </FieldCard>
 

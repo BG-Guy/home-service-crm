@@ -17,8 +17,10 @@ import { normalizeHex } from "@/lib/branding";
 import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
 import { toBaseRole } from "@/lib/permissions";
 import { normalizePhone } from "@/lib/phone";
+import { getCompanyTimezone } from "@/lib/settings";
+import { dateKey } from "@/lib/time";
 import type { Actor, SessionUser } from "@/lib/types";
-import { lastAdminBlock } from "./rules";
+import { lastAdminBlock, memberProfileDateErrors } from "./rules";
 
 // Team mutations (SPEC M01/M02; BUILD_PLAN §9 B8). Every write goes through action():
 // perm → zod → one transaction (write + audit + events + activity) → revalidate.
@@ -68,6 +70,7 @@ async function loadUser(tx: Tx, id: string) {
       role: users.role,
       status: users.status,
       workerType: users.workerType,
+      birthDate: users.birthDate,
       baseRole: roles.baseRole,
     })
     .from(users)
@@ -336,6 +339,20 @@ export const updateMemberAction = action({
       (v) => (v === "" ? null : v),
       z.iso.date().nullable().optional(),
     ),
+    experienceYears: z.preprocess(
+      (v) => (v === "" || v == null ? null : Number(v)),
+      z
+        .number("Enter 0 to 60 years.")
+        .int("Enter whole years.")
+        .min(0, "Enter 0 to 60 years.")
+        .max(60, "Enter 0 to 60 years.")
+        .nullable()
+        .optional(),
+    ),
+    birthDate: z.preprocess(
+      (v) => (v === "" ? null : v),
+      z.iso.date("Enter a valid date.").nullable().optional(),
+    ),
     workerType: z.enum(["w2", "1099"]),
     usesCompanyTools: zf.checkbox(),
     usesCompanyVehicle: zf.checkbox(),
@@ -354,6 +371,11 @@ export const updateMemberAction = action({
   }),
   async run({ input, tx, audit, activity }) {
     const before = await loadUser(tx, input.userId);
+    const dateErrors = memberProfileDateErrors(
+      input,
+      dateKey(new Date(), await getCompanyTimezone()),
+    );
+    if (Object.keys(dateErrors).length) throw new ValidationError(dateErrors);
     const [clash] = await tx
       .select({ id: users.id })
       .from(users)
@@ -407,6 +429,7 @@ export const updateMemberAction = action({
       phone,
       color,
       hireDate: input.hireDate ?? null,
+      experienceYears: input.experienceYears ?? null,
       workerType: input.workerType,
       usesCompanyTools: input.usesCompanyTools,
       usesCompanyVehicle: input.usesCompanyVehicle,
@@ -415,9 +438,12 @@ export const updateMemberAction = action({
       licenseNumbers: licenses,
       homeBase,
     };
+    // Date of birth is written but kept out of the (immutable) audit payload: the
+    // log only records that it changed.
+    const birthDate = input.birthDate ?? null;
     await tx
       .update(users)
-      .set({ ...next, updatedAt: new Date() })
+      .set({ ...next, birthDate, updatedAt: new Date() })
       .where(eq(users.id, input.userId));
     const entity = { type: "user" as const, id: input.userId };
     await audit({
@@ -429,7 +455,10 @@ export const updateMemberAction = action({
         phone: before.phone,
         worker_type: before.workerType,
       },
-      after: next,
+      after: {
+        ...next,
+        birth_date_changed: (before.birthDate ?? null) !== birthDate,
+      },
     });
     if (before.workerType !== input.workerType) {
       await audit({

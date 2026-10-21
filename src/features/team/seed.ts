@@ -33,6 +33,8 @@ export async function seedDemo(db: DB, ctx: DemoSeedCtx): Promise<void> {
         serviceZips: zips,
         homeBase: prof.home ?? null,
         hireDate: prof.hireDate ?? null,
+        experienceYears: prof.experienceYears ?? null,
+        birthDate: prof.birthDate ?? null,
         lastLoginAt: new Date(
           now.getTime() - (u.role === "tech" ? 2 : 20) * 3600_000,
         ),

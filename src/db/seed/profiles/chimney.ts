@@ -1081,6 +1081,8 @@ export const CHIMNEY_PROFILE: DemoProfile = {
     members: {
       admin: {
         hireDate: "2014-09-02",
+        experienceYears: 25,
+        birthDate: "1972-03-17",
         home: home(
           "1460 Grandview Ave",
           "43212",
@@ -1091,10 +1093,14 @@ export const CHIMNEY_PROFILE: DemoProfile = {
       },
       office: {
         hireDate: "2021-08-16",
+        experienceYears: 7,
+        birthDate: "1989-10-08",
         home: home("212 E Weber Rd", "43202", 40.021, -83.004),
       },
       tech1: {
         hireDate: "2018-08-27",
+        experienceYears: 16,
+        birthDate: "1984-06-29",
         licenses: [
           {
             state: "OH",
@@ -1115,6 +1121,8 @@ export const CHIMNEY_PROFILE: DemoProfile = {
       },
       tech2: {
         hireDate: "2021-03-01",
+        experienceYears: 10,
+        birthDate: "1992-02-11",
         licenses: [
           {
             state: "OH",
@@ -1129,6 +1137,8 @@ export const CHIMNEY_PROFILE: DemoProfile = {
       },
       tech3: {
         hireDate: "2024-10-07",
+        experienceYears: 1,
+        birthDate: "2003-09-19",
         licenses: [
           {
             state: "OH",

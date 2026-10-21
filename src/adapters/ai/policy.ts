@@ -29,6 +29,11 @@ const PII_PATTERNS: { name: string; re: RegExp }[] = [
     re: /\b\d{1,6}\s+[A-Z0-9][A-Za-z0-9.'-]*(\s+[A-Za-z0-9.'-]+){0,4}\s+(st|street|ave|avenue|rd|road|blvd|dr|drive|ln|lane|ct|court|way|pl|place|pkwy|hwy)\b/i,
   },
   { name: "ssn", re: /\b\d{3}-\d{2}-\d{4}\b/ },
+  // Team members' dates of birth never go to AI (Assign hub fields).
+  {
+    name: "date of birth",
+    re: /\b(dob|date of birth|birth ?date|birthday|born on)\b/i,
+  },
 ];
 
 /** Returns the PII categories found in a text prompt (empty = clean). */

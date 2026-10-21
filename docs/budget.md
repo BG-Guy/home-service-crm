@@ -14,6 +14,7 @@ Previous measurement (2026-10-15 integration) in brackets.
 | `public/embed.js` | ≤ 3 KB gz | 3,783 B raw, 1.8 KB gz | ok |
 | `public/sw.js` | ~3 KB | 1.4 KB gz | ok |
 | `/map` (excluded from the route budget) | — | 22.7 KB + Leaflet ~43 KB in a lazy `ssr:false` chunk | ok |
+| `/dispatch` Assign hub (Leaflet excluded, as `/map`) | ≤ 30 KB gz | 10.7 KB route JS + `RouteMap` / Leaflet in a lazy `ssr:false` chunk loaded only once the map is on screen (never on the phone list); layout CSS is route-local, global CSS +0 | ok |
 
 **Design refresh v2 (2026-10-19, F2):** 149.6 → 139.2 KB gz (framework 129.2 + root layout 3.9 +
 `(app)` layout 6.1), measured on `.next` (HEAD) vs `.next-f2` with the same script (framework root

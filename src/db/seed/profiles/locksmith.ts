@@ -1081,14 +1081,20 @@ export const LOCKSMITH_PROFILE: DemoProfile = {
     members: {
       admin: {
         hireDate: "2016-05-02",
+        experienceYears: 20,
+        birthDate: "1978-11-05",
         home: home("2150 S Josephine St", "80210", 39.6788, -104.9573),
       },
       office: {
         hireDate: "2022-10-03",
+        experienceYears: 4,
+        birthDate: "1996-03-22",
         home: home("1340 N Downing St", "80218", 39.7375, -104.973),
       },
       tech1: {
         hireDate: "2019-07-08",
+        experienceYears: 13,
+        birthDate: "1987-08-16",
         licenses: [
           {
             state: "CO",
@@ -1108,6 +1114,8 @@ export const LOCKSMITH_PROFILE: DemoProfile = {
       },
       tech2: {
         hireDate: "2021-02-15",
+        experienceYears: 9,
+        birthDate: "1991-05-30",
         licenses: [
           {
             state: "CO",
@@ -1128,6 +1136,8 @@ export const LOCKSMITH_PROFILE: DemoProfile = {
       },
       tech3: {
         hireDate: "2024-04-29",
+        experienceYears: 2,
+        birthDate: "2000-01-08",
         licenses: [
           {
             state: "CO",

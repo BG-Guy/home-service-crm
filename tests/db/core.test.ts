@@ -466,7 +466,11 @@ describe("events outbox + processor (SPEC §7.1)", () => {
     const [row] = await db
       .select()
       .from(events)
-      .where(sql`${events.type} = 'digest.daily'`);
+      // Only this test's event: the tick in the test above may have emitted (and
+      // processed) its own digest.daily, depending on the time of day.
+      .where(
+        sql`${events.type} = 'digest.daily' and ${events.payload}->>'date' = '2026-10-15'`,
+      );
     expect(row?.processedAt).toBeNull();
     expect(row?.attempts).toBe(MAX_EVENT_ATTEMPTS);
     const err = JSON.parse(row?.error ?? "{}");
