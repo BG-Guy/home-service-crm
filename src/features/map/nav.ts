@@ -16,14 +16,14 @@ export const nav: readonly NavItem[] = [
     moreOrder: 2,
   },
   {
+    // No flag: the street map (tiles) serves every map, live map on or off.
     key: "settings.map",
     href: "/settings/map",
-    label: "Live map",
+    label: "Map",
     icon: "map",
     perm: "settings.manage",
     section: "settings",
     settingsGroup: "fleet",
-    flag: "map",
-    description: "Ping interval and breadcrumbs",
+    description: "Street map, location pings and breadcrumbs",
   },
 ];

@@ -1,25 +1,20 @@
 "use client";
 
-import {
-  Columns2,
-  Images,
-  Lock,
-  MapPin,
-  Star,
-  Trash2,
-  TriangleAlert,
-} from "lucide-react";
-import { useState, useTransition } from "react";
+import { Images, Info, Lock, MapPin, Star, Trash2 } from "lucide-react";
+import { useMemo, useState, useTransition } from "react";
 import { Banner } from "@/ui/components/Banner";
 import { Button } from "@/ui/components/Button";
 import { EmptyState } from "@/ui/components/EmptyState";
 import { TextArea, TextField } from "@/ui/components/Field";
+import { IconButton } from "@/ui/components/IconButton";
 import { KeyValueList } from "@/ui/components/KeyValueList";
-import { LazyPhotoCompare } from "@/ui/components/lazy";
+import { PhotoGrid } from "@/ui/components/PhotoGrid";
+import { JOB_PHOTO_GROUPS, type Photo } from "@/ui/components/photos";
 import { SegmentedControl } from "@/ui/components/SegmentedControl";
 import { Sheet, useSheetState } from "@/ui/components/Sheet";
 import { toast } from "@/ui/components/Toast";
 import { cx } from "@/ui/cx";
+import { humanize } from "@/ui/status";
 import { deletePhoto, setPhotoStarred, updatePhoto } from "../actions";
 import type { MediaTag } from "../contracts";
 import { FLAG_HINT, FLAG_LABEL, TAG_LABEL } from "../labels";
@@ -40,10 +35,14 @@ export interface GalleryPhoto {
   uploader: string | null;
 }
 
-type Filter = "all" | "before" | "after" | "other";
 const EDIT_TAGS: MediaTag[] = ["before", "during", "after", "problem", "other"];
+const tagLabel = (t: string) => TAG_LABEL[t as MediaTag] ?? humanize(t);
 
-/** S23 body: grid by tag, viewer with details, star, caption/tag edit, delete, compare. */
+/**
+ * S23 body: the job's photos grouped by tag (Before / During / After / Problem /
+ * Other), each opening the full-screen viewer (swipe through all of them); its
+ * Info button opens the details sheet (star, re-tag, caption, delete).
+ */
 export function JobPhotosGallery({
   jobId,
   photos,
@@ -61,33 +60,39 @@ export function JobPhotosGallery({
   beforeAfter: boolean;
   required: { before: number; after: number };
 }) {
-  const [filter, setFilter] = useState<Filter>("all");
   const [openId, setOpenId] = useState<string | null>(null);
-  const viewer = useSheetState();
-  const compare = useSheetState();
-  const before = photos.filter((p) => p.tag === "before");
-  const after = photos.filter((p) => p.tag === "after");
-  const shown = photos.filter((p) =>
-    filter === "all"
-      ? true
-      : filter === "other"
-        ? p.tag !== "before" && p.tag !== "after"
-        : p.tag === filter,
-  );
+  const details = useSheetState();
+  const before = photos.filter((p) => p.tag === "before").length;
+  const after = photos.filter((p) => p.tag === "after").length;
   const open = photos.find((p) => p.id === openId) ?? null;
+  const grid = useMemo<Photo[]>(
+    () =>
+      photos.map((p) => ({
+        id: p.id,
+        url: p.url,
+        thumbUrl: p.thumbUrl,
+        tag: p.tag,
+        caption: p.caption,
+        takenAt: p.takenAt,
+        by: p.uploader,
+        starred: p.starred,
+        flagged: p.flags.length > 0,
+        alt: p.caption ?? (p.tag ? `${TAG_LABEL[p.tag]} photo` : "Job photo"),
+      })),
+    [photos],
+  );
 
   const need =
     beforeAfter && (required.before > 0 || required.after > 0)
       ? [
           required.before > 0 &&
-            `Before ${Math.min(before.length, required.before)}/${required.before}`,
+            `Before ${Math.min(before, required.before)}/${required.before}`,
           required.after > 0 &&
-            `After ${Math.min(after.length, required.after)}/${required.after}`,
+            `After ${Math.min(after, required.after)}/${required.after}`,
         ].filter(Boolean)
       : [];
   const missing =
-    beforeAfter &&
-    (before.length < required.before || after.length < required.after);
+    beforeAfter && (before < required.before || after < required.after);
 
   return (
     <div className="flex flex-col gap-3">
@@ -120,108 +125,36 @@ export function JobPhotosGallery({
           />
         </div>
       ) : (
-        <>
-          {/* T4-15/T1-22: the 4-segment filter gets its own full-width row so the
-              counts never truncate at 390 px; Compare sits on the row below. */}
-          <div className="flex flex-col gap-2">
-            {beforeAfter ? (
-              <SegmentedControl<Filter>
-                className="w-full"
-                label="Show photos"
-                value={filter}
-                onChange={setFilter}
-                segments={[
-                  { value: "all", label: `All ${photos.length}` },
-                  { value: "before", label: `Before ${before.length}` },
-                  { value: "after", label: `After ${after.length}` },
-                  {
-                    value: "other",
-                    label: `Other ${photos.length - before.length - after.length}`,
-                  },
-                ]}
-              />
-            ) : (
-              <span className="px-1 text-footnote text-label-2">
-                {photos.length} photo{photos.length === 1 ? "" : "s"}
-              </span>
-            )}
-            {beforeAfter && before.length > 0 && after.length > 0 && (
-              <div className="flex justify-end">
-                <Button
-                  size="sm"
-                  variant="gray"
-                  icon={<Columns2 size={16} />}
-                  onClick={compare.show}
-                >
-                  Compare before and after
-                </Button>
-              </div>
-            )}
-          </div>
-          {shown.length === 0 ? (
-            <p className="px-4 py-6 text-center text-subhead text-label-2">
-              No {filter} photos.
-            </p>
-          ) : (
-            <ul className="grid grid-cols-3 gap-1 md:grid-cols-4 lg:grid-cols-5">
-              {shown.map((p) => (
-                <li key={p.id}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setOpenId(p.id);
-                      viewer.show();
-                    }}
-                    className="pressable relative block aspect-square w-full overflow-hidden rounded-[8px] bg-fill-2 outline-offset-2"
-                    aria-label={`${p.tag ? TAG_LABEL[p.tag] : "Photo"} taken ${p.takenAt}${p.starred ? ", starred" : ""}${p.flags.length ? ", flagged" : ""}`}
-                  >
-                    {/* biome-ignore lint/performance/noImgElement: signed thumbnails */}
-                    <img
-                      src={p.thumbUrl}
-                      alt={p.caption ?? ""}
-                      loading="lazy"
-                      decoding="async"
-                      className="size-full object-cover"
-                    />
-                    {p.tag && (
-                      <span className="absolute bottom-1 left-1 rounded-pill bg-black/55 px-1.5 py-px text-[11px] font-semibold text-white">
-                        {TAG_LABEL[p.tag]}
-                      </span>
-                    )}
-                    <span className="absolute top-1 right-1 flex gap-0.5">
-                      {p.flags.length > 0 && (
-                        <TriangleAlert
-                          aria-hidden
-                          size={15}
-                          className="drop-shadow"
-                          fill="var(--sys-orange)"
-                          stroke="#fff"
-                        />
-                      )}
-                      {p.starred && (
-                        <Star
-                          aria-hidden
-                          size={15}
-                          className="drop-shadow"
-                          fill="var(--sys-yellow)"
-                          stroke="#0006"
-                        />
-                      )}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+        <PhotoGrid
+          photos={grid}
+          groups={JOB_PHOTO_GROUPS}
+          tagLabel={tagLabel}
+          actions={(p) => (
+            <IconButton
+              label="Photo details"
+              variant="material"
+              size={44}
+              aria-haspopup="dialog"
+              onClick={() => {
+                setOpenId(p.id);
+                details.show();
+              }}
+            >
+              <Info size={20} aria-hidden />
+            </IconButton>
           )}
-        </>
+        />
       )}
 
+      {/* A direct child of the gallery: it opens over the full-screen viewer
+          (a <dialog> stacks above the hub) and must not sit inside a wrapper
+          the hub marks inert while it is open. */}
       <Sheet
-        {...viewer.props}
+        {...details.props}
         title={open?.tag ? TAG_LABEL[open.tag] : "Photo"}
-        detents={["large"]}
+        detents={["medium", "large"]}
         trailing={
-          <Button size="sm" variant="plain" onClick={viewer.hide}>
+          <Button size="sm" variant="plain" onClick={details.hide}>
             Done
           </Button>
         }
@@ -234,79 +167,10 @@ export function JobPhotosGallery({
             canEdit={canEdit}
             canDelete={canDelete}
             beforeAfter={beforeAfter}
-            onDeleted={viewer.hide}
+            onDeleted={details.hide}
           />
         )}
       </Sheet>
-
-      {beforeAfter && before.length > 0 && after.length > 0 && (
-        <Sheet
-          {...compare.props}
-          title="Before & after"
-          trailing={
-            <Button size="sm" variant="plain" onClick={compare.hide}>
-              Done
-            </Button>
-          }
-        >
-          {compare.open && <ComparePane before={before} after={after} />}
-        </Sheet>
-      )}
-    </div>
-  );
-}
-
-function ComparePane({
-  before,
-  after,
-}: {
-  before: GalleryPhoto[];
-  after: GalleryPhoto[];
-}) {
-  const [b, setB] = useState(before[0]?.id);
-  const [a, setA] = useState(after[after.length - 1]?.id);
-  const bp = before.find((p) => p.id === b) ?? before[0];
-  const ap = after.find((p) => p.id === a) ?? after[0];
-  if (!bp || !ap) return null;
-  const strip = (
-    list: GalleryPhoto[],
-    cur: string | undefined,
-    set: (id: string) => void,
-    label: string,
-  ) =>
-    list.length > 1 && (
-      <fieldset className="flex flex-col gap-1">
-        <legend className="px-1 pb-1 text-footnote text-label-2">
-          {label}
-        </legend>
-        <div className="flex gap-1.5 overflow-x-auto pb-1">
-          {list.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              aria-pressed={p.id === cur}
-              aria-label={`${label} photo, ${p.takenAt}`}
-              onClick={() => set(p.id)}
-              className={cx(
-                "pressable size-14 shrink-0 overflow-hidden rounded-[8px] bg-fill-2",
-                p.id === cur && "ring-[3px] ring-accent ring-inset",
-              )}
-            >
-              {/* biome-ignore lint/performance/noImgElement: signed thumbnails */}
-              <img src={p.thumbUrl} alt="" className="size-full object-cover" />
-            </button>
-          ))}
-        </div>
-      </fieldset>
-    );
-  return (
-    <div className="flex flex-col gap-4 p-4">
-      <LazyPhotoCompare beforeUrl={bp.url} afterUrl={ap.url} />
-      <p className="text-center text-footnote text-label-2">
-        Drag the handle to compare. Before {bp.takenAt} · After {ap.takenAt}
-      </p>
-      {strip(before, bp.id, setB, "Before")}
-      {strip(after, ap.id, setA, "After")}
     </div>
   );
 }
@@ -344,17 +208,6 @@ function PhotoDetail({
 
   return (
     <div className="flex flex-col gap-4 pb-4">
-      <div className="relative bg-black">
-        {/* biome-ignore lint/performance/noImgElement: signed URL */}
-        <img
-          src={photo.url}
-          alt={
-            photo.caption ??
-            (photo.tag ? `${TAG_LABEL[photo.tag]} photo` : "Job photo")
-          }
-          className="mx-auto max-h-[55dvh] w-auto object-contain"
-        />
-      </div>
       <div className="flex flex-col gap-4 px-4">
         {canEdit && (
           <div className="flex gap-2">

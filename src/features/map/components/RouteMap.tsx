@@ -4,12 +4,21 @@ import "leaflet/dist/leaflet.css";
 import type * as Leaflet from "leaflet";
 import { useEffect, useRef } from "react";
 import { cx } from "@/ui/cx";
+import {
+  drawArrows,
+  drawRoute,
+  type LatLng,
+  ROUTE_CSS,
+  styleRoute,
+} from "../route-draw";
 
 // Route map for the Assign hub (/dispatch): every tech's day as a straight-line
-// polyline in their color with numbered stop pins, the job being assigned as an
-// accent pin, and the recommended insertion as a dashed detour. Same Leaflet setup
-// as TechMap (lazy chunk via next/dynamic ssr:false, L.divIcon pins, no tiles
-// unless NEXT_PUBLIC_TILE_URL is set). Bounds auto-fit to the selection.
+// route in their color, drawn like the schedule map's (../route-draw.ts: cased
+// line, direction chevrons, the picked tech's route on top and the rest faded),
+// with numbered stop pins, the job being assigned as an accent pin, and the
+// recommended insertion as a dashed detour. Same Leaflet setup as TechMap (lazy
+// chunk via next/dynamic ssr:false, L.divIcon pins, no tiles unless a street map
+// is set: NEXT_PUBLIC_TILE_URL or Settings → Map). Bounds auto-fit to the selection.
 
 export interface RouteMapStop {
   id: string;
@@ -73,6 +82,11 @@ export default function RouteMap({
   const L = useRef<typeof Leaflet | null>(null);
   const map = useRef<Leaflet.Map | null>(null);
   const layer = useRef<Leaflet.LayerGroup | null>(null);
+  const arrowLayer = useRef<Leaflet.LayerGroup | null>(null);
+  /** The drawn routes' points and fades, for the arrows (redrawn on zoom). */
+  const drawn = useRef<{ color: string; points: LatLng[]; fade: boolean }[]>(
+    [],
+  );
   const fitKey = useRef<string | null>(null);
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
@@ -92,23 +106,21 @@ export default function RouteMap({
     const ordered = [...rs].sort(
       (a, b) => Number(a.techId === sel) - Number(b.techId === sel),
     );
+    drawn.current = [];
     for (const r of ordered) {
       const on = !sel || r.techId === sel;
-      const line: [number, number][] = [];
+      const line: LatLng[] = [];
       if (r.start) line.push([r.start.lat, r.start.lng]);
       for (const s of r.stops) line.push([s.lat, s.lng]);
       all.push(...line);
       if (r.techId === sel) focus.push(...line);
-      if (line.length > 1)
-        lib
-          .polyline(line, {
-            color: r.color,
-            weight: r.techId === sel ? 5 : 3,
-            opacity: on ? 0.9 : 0.28,
-            lineJoin: "round",
-          })
-          .on("click", () => onSelectRef.current(r.techId))
-          .addTo(g);
+      if (line.length > 1) {
+        styleRoute(
+          drawRoute(lib, g, line, r.color, () => onSelectRef.current(r.techId)),
+          { focus: r.techId === sel, fade: !on },
+        );
+        drawn.current.push({ color: r.color, points: line, fade: !on });
+      }
       if (r.start && r.techId === sel)
         lib
           .marker([r.start.lat, r.start.lng], {
@@ -198,6 +210,8 @@ export default function RouteMap({
           animate: false,
         });
     }
+    const al = arrowLayer.current;
+    if (al) drawArrows(lib, m, al, drawn.current);
   };
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: create the map once
@@ -222,8 +236,14 @@ export default function RouteMap({
           .tileLayer(tileUrl, { attribution, maxZoom: 19, detectRetina: true })
           .addTo(m);
       layer.current = lib.layerGroup().addTo(m);
+      arrowLayer.current = lib.layerGroup().addTo(m);
       map.current = m;
       draw();
+      // Arrows depend on the zoom (legs too short on screen get none).
+      m.on("zoomend", () => {
+        const al = arrowLayer.current;
+        if (al) drawArrows(lib, m, al, drawn.current);
+      });
       // The map lives in a column that can be hidden (phone list) or resized
       // (tablet ↔ desktop): keep Leaflet's size in step, and re-fit on reveal.
       let last = "";
@@ -244,6 +264,7 @@ export default function RouteMap({
       map.current?.remove();
       map.current = null;
       layer.current = null;
+      arrowLayer.current = null;
       fitKey.current = null;
     };
   }, []);
@@ -255,6 +276,9 @@ export default function RouteMap({
 
   return (
     <div className={cx("map-view relative overflow-hidden", className)}>
+      <style href="map-routes" precedence="default">
+        {ROUTE_CSS}
+      </style>
       <div
         ref={el}
         role="application"
@@ -272,7 +296,7 @@ export default function RouteMap({
             <>
               Street map is off.{" "}
               <a
-                href="/settings/integrations"
+                href="/settings/map"
                 style={{ pointerEvents: "auto" }}
                 className="text-accent-text"
               >

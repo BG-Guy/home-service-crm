@@ -14,3 +14,15 @@ Customer pages behind magic links — no login, server-rendered, tiny client isl
   paper's life for printed QR codes). Raw tokens never touch the DB or events.
 - `actions.ts`: public server actions (no session) that re-validate the token, rate-limit, write in
   one transaction with audit + activity + events, log the portal action, then `refresh()`.
+- **Present mode** (`/e/[token]?present=1`): the staff estimate page's "Present to customer"
+  (`estimates.presentEstimate`, `mintEstimatePresentLink` = `mintOrReusePublicToken` purpose
+  `estimate.present`, 12–24 h) opens the customer's own page on the staff device. Only with a
+  signed-in user who may present it (`present.ts` `presentingUser`: `estimates.send` + row access)
+  is the page wrapped in `components/PresentMode.tsx` (lazy `LazyPresentMode`): a full-screen hub
+  with a "Tap to start" screen (its tap asks for browser full screen), a slim top row with "Exit
+  presentation" (confirm → staff page) and a "Full screen" button when the browser left it. Back
+  pauses (Resume / Exit); Esc and leaving browser full screen keep presenting
+  (`present-policy.ts`). `approveEstimatePublic({ present: true })` re-checks the session and
+  records the signature `in_person`, with `present_mode` + `presented_by` in the audit row.
+- Photos on `/e` ("What we found" strip), `/j` (S27) and `/i` open the kit's full-screen
+  `PhotoViewer` (lazy; the pages carry only the grid).

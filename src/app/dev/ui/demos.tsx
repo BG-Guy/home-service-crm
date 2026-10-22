@@ -32,9 +32,14 @@ import {
 import { MoneyField } from "@/ui/components/MoneyField";
 import { PhoneField } from "@/ui/components/PhoneField";
 import { type Photo, PhotoGrid } from "@/ui/components/PhotoGrid";
+import { JOB_PHOTO_GROUPS } from "@/ui/components/photos";
 import { SearchField } from "@/ui/components/SearchField";
 import { SegmentedControl } from "@/ui/components/SegmentedControl";
 import { Sheet, useSheetState } from "@/ui/components/Sheet";
+import {
+  type CapturedSignature,
+  SignatureField,
+} from "@/ui/components/SignatureField";
 import type { SignaturePadHandle } from "@/ui/components/SignaturePad";
 import { Stepper } from "@/ui/components/Stepper";
 import { SubmitButton } from "@/ui/components/SubmitButton";
@@ -69,7 +74,9 @@ const PHOTOS: Photo[] = [
   tag: String(tag),
   caption: i === 0 ? "Front door deadbolt, seized cylinder" : null,
   takenAt: "Oct 14, 3:45 PM",
+  by: "Mike Chen",
   starred: i === 3,
+  flagged: i === 2,
 }));
 
 /* ---------- theme ---------- */
@@ -515,9 +522,21 @@ export function GestureDemos() {
 export function MediaDemos() {
   const sig = useRef<SignaturePadHandle>(null);
   const [signed, setSigned] = useState(false);
+  const [captured, setCaptured] = useState<CapturedSignature | null>(null);
   return (
     <div className="flex flex-col gap-6">
       <PhotoGrid photos={PHOTOS} />
+      <PhotoGrid
+        photos={PHOTOS}
+        groups={JOB_PHOTO_GROUPS}
+        historyKey="photo2"
+      />
+      <SignatureField
+        value={captured}
+        onChange={setCaptured}
+        title="Customer signature"
+        subtitle="Dana Whitaker"
+      />
       <LazyPhotoCompare
         beforeUrl={fakePhoto("BEFORE", 20, 1200, 900)}
         afterUrl={fakePhoto("AFTER", 140, 1200, 900)}

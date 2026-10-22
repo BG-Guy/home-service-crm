@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { HeaderActions } from "@/app/(app)/_components/HeaderActions";
 import { DispatchHub } from "@/features/jobs/dispatch/components/DispatchHub";
 import {
+  HubFsFooter,
   HubList,
   PhoneTrailing,
   TechPanel,
@@ -64,14 +65,23 @@ export default async function DispatchPage({
   const names: Record<string, string> = {};
   const phoneTrailing: Record<string, React.ReactNode> = {};
   const proposals: Record<string, RouteMapProps["proposal"]> = {};
+  // Full screen (the map's FullscreenHub): the job and "Assign <name>" per tech.
+  const footers: Record<string, React.ReactNode> = {};
   for (const t of data.techs) {
     const r = recByTech.get(t.id);
     panels[t.id] = <TechPanel t={t} data={data} rec={r} />;
     names[t.id] = t.name;
     phoneTrailing[t.id] = <PhoneTrailing t={t} />;
+    if (data.job) footers[t.id] = <HubFsFooter t={t} data={data} rec={r} />;
     if (r && data.job?.lat != null && !data.job.assigneeIds.includes(t.id))
       proposals[t.id] = detour(t, r);
   }
+  const chips = data.techs.map((t) => ({
+    id: t.id,
+    name: t.name,
+    color: t.color,
+    count: t.jobs.length,
+  }));
   const routes = data.techs.map((t) => ({
     techId: t.id,
     name: t.name,
@@ -94,13 +104,12 @@ export default async function DispatchPage({
       ? { lat: data.job.lat, lng: data.job.lng, label: data.job.number }
       : null;
   const unassigned = data.toAssign.length;
+  const needs = unassigned
+    ? `${unassigned} need${unassigned === 1 ? "s" : ""} a tech`
+    : "all assigned";
   const subtitle = data.job
     ? `Who should take ${data.job.number}?`
-    : `${formatDateKey(data.date, "en-US", { weekday: "long", month: "short", day: "numeric" })} · ${
-        unassigned
-          ? `${unassigned} need${unassigned === 1 ? "s" : ""} a tech`
-          : "all assigned"
-      }`;
+    : `${formatDateKey(data.date, "en-US", { weekday: "long", month: "short", day: "numeric" })} · ${needs}`;
 
   return (
     <PageTransition>
@@ -126,8 +135,18 @@ export default async function DispatchPage({
         defaultTech={defaultTech}
         initialSelected={selected}
         query={{ date: data.date, job: data.job?.id ?? null }}
+        todayKey={data.todayKey}
         names={names}
         phoneTrailing={phoneTrailing}
+        chips={chips}
+        footers={footers}
+        fsSubtitle={
+          data.job
+            ? `Who should take ${data.job.number}?`
+            : unassigned
+              ? `${unassigned} job${unassigned === 1 ? " needs" : "s need"} a tech`
+              : "Every job has a tech"
+        }
         map={{
           routes,
           job,

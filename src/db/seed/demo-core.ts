@@ -1,5 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
+import { OSM_TILE_ATTRIBUTION, OSM_TILE_URL } from "@/adapters/maps";
 import type { DB } from "@/db";
 import { company, users } from "@/db/schema";
 import { hashPassword } from "@/lib/auth/password";
@@ -27,6 +28,8 @@ export async function seedDemo(db: DB, ctx: DemoSeedCtx): Promise<void> {
       trade_preset: "generic",
     },
     reviews: { google_url: prof.googleReviewUrl },
+    // Every demo business shows streets: the free OpenStreetMap preset (Settings → Map).
+    map: { tile_url: OSM_TILE_URL, tile_attribution: OSM_TILE_ATTRIBUTION },
     // Trade profiles carry a brand accent; the default demo keeps the system blue.
     ...(accent ? { branding: { accent_color: accent } } : {}),
   };

@@ -5,53 +5,55 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { AssignJobButton } from "@/features/jobs/components/AssignJobButton";
-import { formatTime } from "@/lib/time";
 import { Avatar } from "@/ui/components/Avatar";
 import { Button } from "@/ui/components/Button";
 import { Chip, ChipRow } from "@/ui/components/Chip";
 import { EmptyState } from "@/ui/components/EmptyState";
+import { FullscreenHub } from "@/ui/components/FullscreenHub";
 import { KeyValueList } from "@/ui/components/KeyValueList";
 import { Sheet } from "@/ui/components/Sheet";
 import { Skeleton } from "@/ui/components/Skeleton";
 import { Pill, StatusPill } from "@/ui/components/StatusPill";
 import { cx } from "@/ui/cx";
-import type { LiveMapData, LiveTech } from "../contracts";
-import {
-  classifyStaleness,
-  TECH_STATUS_LABEL,
-  type TechMapStatus,
-} from "../rules";
+import type { LiveMapData } from "../contracts";
+import { classifyStaleness, TECH_STATUS_LABEL } from "../rules";
+import { ago, STATUS_ORDER, STATUS_TONE, time } from "./live-format";
 import type { MapTech } from "./TechMap";
+import { LiveClock, WallLegend } from "./WallMode";
 
 const TechMap = dynamic(() => import("./TechMap"), {
   ssr: false,
   loading: () => <Skeleton className="size-full" rounded="card" />,
 });
 
-const STATUS_TONE: Record<TechMapStatus, "green" | "teal" | "orange" | "gray"> =
-  {
-    on_job: "green",
-    en_route: "teal",
-    idle: "orange",
-    off: "gray",
-  };
+// Route-local CSS: the wall-mode layout (legend beside the map on a wide screen,
+// a strip of cards under it on a tall one) and Leaflet's controls on the surface
+// tokens (so they turn dark with the wall's dark theme). Marker CSS is TechMap's.
+const MAP_CSS = `.lm-wall{position:absolute;inset:0;display:flex;flex-direction:column-reverse}
+.lm-map{position:relative;flex:1 1 auto;min-width:0;min-height:0;isolation:isolate}
+.lm-map .leaflet-bar{border:0;box-shadow:var(--shadow-raised)}
+.lm-map .leaflet-bar a{background:var(--card);color:var(--label);border-bottom-color:var(--sep)}
+.lm-map .leaflet-container .leaflet-control-attribution{background:color-mix(in srgb,var(--card) 82%,transparent);color:var(--label-2)}
+.lm-map .leaflet-control-attribution a{color:var(--accent-text)}
+.lm-legend{flex:none;display:flex;flex-direction:column;gap:8px;min-width:0;padding:10px 0 12px;background:var(--bar);-webkit-backdrop-filter:saturate(180%) blur(24px);backdrop-filter:saturate(180%) blur(24px);box-shadow:0 -.5px 0 var(--sep)}
+.lm-legend-h{display:none;align-items:baseline;justify-content:space-between;gap:8px;padding:0 4px;font-size:20px;line-height:25px;font-weight:700}
+.lm-cards{display:flex;gap:8px;overflow-x:auto;overscroll-behavior:contain;scroll-snap-type:x mandatory;scroll-padding:0 12px;padding:0 12px;scrollbar-width:none}
+.lm-item{flex:none;width:min(288px,82vw);scroll-snap-align:start}
+.lm-card{position:relative;display:flex;width:100%;height:100%;align-items:center;gap:12px;padding:10px 12px 10px 16px;overflow:hidden;border-radius:16px;background:var(--card);box-shadow:var(--shadow-card);text-align:left}
+.lm-card[aria-pressed=true]{box-shadow:0 0 0 2px var(--c),var(--shadow-card)}
+.lm-swatch{position:absolute;left:0;top:0;bottom:0;width:5px;background:var(--c)}
+@media (min-aspect-ratio:1/1) and (min-width:640px){
+.lm-wall{flex-direction:row}
+.lm-legend{width:clamp(280px,27vw,380px);padding:16px 12px;overflow-y:auto;overscroll-behavior:contain;box-shadow:.5px 0 0 var(--sep)}
+.lm-legend-h{display:flex}
+.lm-cards{flex-direction:column;overflow:visible;scroll-snap-type:none;padding:0}
+.lm-item{width:auto}
+}`;
 
-const PULSE_CSS = `@keyframes b7-pulse{0%{transform:scale(.9);opacity:.9}70%{transform:scale(1.35);opacity:0}100%{opacity:0}}
-.tech-pulse{animation:b7-pulse 2.2s var(--ease-spring,ease-out) infinite}
-@media (prefers-reduced-motion:reduce){.tech-pulse{animation:none;opacity:.5}}`;
-
-function ago(iso: string, now: number): string {
-  const min = Math.max(0, Math.round((now - new Date(iso).getTime()) / 60_000));
-  if (min < 1) return "just now";
-  if (min < 60) return `${min} min ago`;
-  const h = Math.floor(min / 60);
-  return h < 24 ? `${h} h ago` : `${Math.floor(h / 24)} d ago`;
-}
-
-const time = (iso: string | null, tz: string) =>
-  iso ? formatTime(iso, tz) : null;
-
-/** /map: live tech positions, today's job pins, side list (desktop) / list under the map (mobile). */
+/** /map: live tech positions, today's job pins, side list (desktop) / list under
+ * the map (mobile). The map has a wall mode for an office TV or a tablet (dark,
+ * full screen, legend and clock): the header's "Wall mode" button or the map's
+ * corner Expand. */
 export function LiveMap({ data }: { data: LiveMapData }) {
   const router = useRouter();
   // The server's "now" until mount, so "Last seen 3 min ago" and the stale filter
@@ -62,8 +64,12 @@ export function LiveMap({ data }: { data: LiveMapData }) {
     kind: "tech" | "job";
     id: string;
   } | null>(null);
+  const [wall, setWall] = useState(false);
+  // Re-frames the map at its new size on entering and after leaving wall mode.
+  const [fitKey, setFitKey] = useState(0);
 
-  // Refresh positions every 60 s while the tab is visible (server re-renders the data).
+  // Refresh positions every 60 s while the tab is visible (server re-renders the
+  // data). Wall mode keeps the same refresh: the map stays mounted.
   useEffect(() => {
     const tick = () => {
       if (document.visibilityState !== "visible") return;
@@ -109,15 +115,12 @@ export function LiveMap({ data }: { data: LiveMapData }) {
         data.hideAfterMinutes,
       ) === "hidden",
   ).length;
-  const order: Record<TechMapStatus, number> = {
-    en_route: 0,
-    on_job: 1,
-    idle: 2,
-    off: 3,
-  };
   const sorted = [...techs].sort(
-    (a, b) => order[a.status] - order[b.status] || a.name.localeCompare(b.name),
+    (a, b) =>
+      STATUS_ORDER[a.status] - STATUS_ORDER[b.status] ||
+      a.name.localeCompare(b.name),
   );
+  const onShift = techs.filter((t) => t.clockedIn).length;
   const job =
     selected?.kind === "job"
       ? data.jobs.find((j) => j.id === selected.id)
@@ -126,26 +129,146 @@ export function LiveMap({ data }: { data: LiveMapData }) {
     (j) =>
       j.techIds.length === 0 && !["completed", "closed"].includes(j.status),
   );
+  const staleChip = (
+    <Chip
+      selected={showStale}
+      onClick={() => setShowStale((v) => !v)}
+      count={hiddenCount || undefined}
+    >
+      Show stale
+    </Chip>
+  );
 
   return (
     // Phone: the map is full-bleed and sticky; the list below is a bottom
     // sheet that slides up over it as the page scrolls (no JS, no drag code).
     // Desktop: map on the left, the list as a side panel.
     <div className="flex flex-col md:grid md:h-[calc(100dvh-140px)] md:grid-cols-[minmax(0,1fr)_360px] md:gap-4">
-      <style href="b7-map-pulse" precedence="default">
-        {PULSE_CSS}
+      <style href="b7-map" precedence="default">
+        {MAP_CSS}
       </style>
       <div className="sticky top-[var(--sticky-top,calc(env(safe-area-inset-top)+44px))] -mx-[var(--gutter)] h-[56dvh] overflow-hidden md:relative md:top-0 md:mx-0 md:h-full md:rounded-card md:shadow-card">
-        <TechMap
-          techs={techs}
-          jobs={data.jobs}
-          selected={selected}
-          onSelect={setSelected}
-          tileUrl={data.tileUrl}
-          attribution={data.attribution}
-          canSetup={data.canSetup}
+        {/* Wall mode (DESIGN.md M19): every size, dark, browser full screen. */}
+        <FullscreenHub
+          historyKey="wall"
+          title="Live map"
+          subtitle={`${onShift} of ${techs.length} techs on shift · ${data.jobs.length} jobs today`}
+          breakpoint="all"
+          theme="dark"
+          browserFullscreen
+          expandLabel="Full screen map"
+          closeLabel="Exit wall mode"
           className="size-full"
-        />
+          onOpenChange={(o) => {
+            setWall(o);
+            if (o) setFitKey((k) => k + 1);
+          }}
+          onExit={() => setFitKey((k) => k + 1)}
+          controls={
+            <>
+              {wall && <LiveClock tz={data.timeZone} />}
+              {staleChip}
+            </>
+          }
+        >
+          <div className="lm-wall">
+            {wall && (
+              <WallLegend
+                techs={sorted}
+                now={now}
+                selected={selected?.kind === "tech" ? selected.id : null}
+                onPick={(id) => setSelected({ kind: "tech", id })}
+              />
+            )}
+            <div className="lm-map">
+              <TechMap
+                techs={techs}
+                jobs={data.jobs}
+                selected={selected}
+                onSelect={setSelected}
+                tileUrl={data.tileUrl}
+                attribution={data.attribution}
+                canSetup={data.canSetup}
+                wall={wall}
+                fitKey={fitKey}
+                className="size-full"
+              />
+            </div>
+          </div>
+          {/* In the hub's subtree: over wall mode it takes the dark surface. */}
+          <Sheet
+            open={!!job}
+            onOpenChange={(o) => !o && setSelected(null)}
+            title={job ? `${job.number}` : ""}
+            detents={["medium", "large"]}
+            desktop="panel"
+          >
+            {job && (
+              <div className="flex flex-col gap-4 pb-4 pt-1">
+                <div className="flex flex-col gap-1">
+                  <p className="text-headline">{job.title}</p>
+                  <p className="text-subhead text-label-2">
+                    {job.customerName}
+                  </p>
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    <StatusPill kind="job" status={job.status} size="sm" />
+                  </div>
+                </div>
+                <KeyValueList
+                  card
+                  items={[
+                    { label: "Address", value: job.address },
+                    {
+                      label: "Window",
+                      value:
+                        [
+                          time(job.windowStart, data.timeZone),
+                          time(job.windowEnd, data.timeZone),
+                        ]
+                          .filter(Boolean)
+                          .join(" – ") || "Not scheduled",
+                    },
+                    {
+                      label: "Tech",
+                      value: job.techNames.join(", ") || "Unassigned",
+                    },
+                    ...(job.etaAt
+                      ? [
+                          {
+                            label: "ETA",
+                            value: time(job.etaAt, data.timeZone) ?? "",
+                          },
+                        ]
+                      : []),
+                  ]}
+                />
+                <div className="flex flex-wrap gap-2">
+                  {data.canAssign &&
+                    !["completed", "closed"].includes(job.status) && (
+                      <AssignJobButton
+                        jobId={job.id}
+                        label={job.techIds.length ? "Reassign" : "Assign"}
+                      />
+                    )}
+                  <Button href={`/jobs/${job.id}`} variant="secondary">
+                    Open job
+                  </Button>
+                  {job.lat != null && job.lng != null && (
+                    <Button
+                      href={`https://maps.apple.com/?daddr=${job.lat},${job.lng}`}
+                      variant="plain"
+                      icon={<Navigation size={16} aria-hidden />}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Directions
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+          </Sheet>
+        </FullscreenHub>
       </div>
       <aside
         aria-label="Technicians and jobs"
@@ -158,17 +281,11 @@ export function LiveMap({ data }: { data: LiveMapData }) {
         <div className="flex items-baseline justify-between gap-3 px-1">
           <h2 className="text-title3">Technicians</h2>
           <span className="num text-subhead text-label-2">
-            {techs.filter((t) => t.clockedIn).length} of {techs.length} on shift
+            {onShift} of {techs.length} on shift
           </span>
         </div>
         <ChipRow label="Map filters">
-          <Chip
-            selected={showStale}
-            onClick={() => setShowStale((v) => !v)}
-            count={hiddenCount || undefined}
-          >
-            Show stale
-          </Chip>
+          {staleChip}
           <Chip href="/schedule" icon={<Clock size={14} aria-hidden />}>
             Schedule
           </Chip>
@@ -239,77 +356,6 @@ export function LiveMap({ data }: { data: LiveMapData }) {
           min; older than {data.hideAfterMinutes} min are hidden.
         </p>
       </aside>
-
-      <Sheet
-        open={!!job}
-        onOpenChange={(o) => !o && setSelected(null)}
-        title={job ? `${job.number}` : ""}
-        detents={["medium", "large"]}
-        desktop="panel"
-      >
-        {job && (
-          <div className="flex flex-col gap-4 pb-4 pt-1">
-            <div className="flex flex-col gap-1">
-              <p className="text-headline">{job.title}</p>
-              <p className="text-subhead text-label-2">{job.customerName}</p>
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                <StatusPill kind="job" status={job.status} size="sm" />
-              </div>
-            </div>
-            <KeyValueList
-              card
-              items={[
-                { label: "Address", value: job.address },
-                {
-                  label: "Window",
-                  value:
-                    [
-                      time(job.windowStart, data.timeZone),
-                      time(job.windowEnd, data.timeZone),
-                    ]
-                      .filter(Boolean)
-                      .join(" – ") || "Not scheduled",
-                },
-                {
-                  label: "Tech",
-                  value: job.techNames.join(", ") || "Unassigned",
-                },
-                ...(job.etaAt
-                  ? [
-                      {
-                        label: "ETA",
-                        value: time(job.etaAt, data.timeZone) ?? "",
-                      },
-                    ]
-                  : []),
-              ]}
-            />
-            <div className="flex flex-wrap gap-2">
-              {data.canAssign &&
-                !["completed", "closed"].includes(job.status) && (
-                  <AssignJobButton
-                    jobId={job.id}
-                    label={job.techIds.length ? "Reassign" : "Assign"}
-                  />
-                )}
-              <Button href={`/jobs/${job.id}`} variant="secondary">
-                Open job
-              </Button>
-              {job.lat != null && job.lng != null && (
-                <Button
-                  href={`https://maps.apple.com/?daddr=${job.lat},${job.lng}`}
-                  variant="plain"
-                  icon={<Navigation size={16} aria-hidden />}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Directions
-                </Button>
-              )}
-            </div>
-          </div>
-        )}
-      </Sheet>
     </div>
   );
 }
@@ -322,7 +368,7 @@ function TechRow({
   onPick,
   onJob,
 }: {
-  t: MapTech & LiveTech;
+  t: MapTech;
   now: number;
   tz: string;
   active: boolean;

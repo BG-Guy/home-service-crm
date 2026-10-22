@@ -31,6 +31,7 @@ import {
   saveEstimateLine,
 } from "../actions";
 import { optionTotals } from "../logic";
+import { PresentEstimateButton } from "./PresentEstimateButton";
 
 const loadSheets = () => import("./EstimateBuilderSheets");
 const EstimateBuilderSheets = dynamic(loadSheets, { ssr: false });
@@ -295,6 +296,13 @@ export function EstimateBuilder({
           >
             Sign here
           </Button>
+        ) : null}
+        {open && perms.send ? (
+          <PresentEstimateButton
+            estimateId={e.id}
+            size={hidePrimary ? "md" : "lg"}
+            disabled={!anyLines}
+          />
         ) : null}
         <IconButton
           label="More actions"

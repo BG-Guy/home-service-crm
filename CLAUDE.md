@@ -170,8 +170,13 @@ SubmitButton, Sheet, ActionSheet, Alert (useConfirm), ConfirmTyped, ContextMenu,
 SwipeActions, AddMenu, MenuPopover, NavBar (LargeTitleHeader/BackButton), TabBar, Sidebar, AppShell
 (Page/SplitView/DetailLayout), BottomBar (BarSummary), Toast, Banner, EmptyState, Skeleton, Spinner, OfflineBanner,
 SlotPlaceholder, FeatureGate, charts (Sparkline/BarChart/LineChart/DonutChart/ProgressRing),
-StatCard, Timeline (+ TripTimeline), SuccessCheck, MessageBubble, PhotoGrid, PhotoCompare, SignaturePad, CameraButton,
-MapView, InstallPrompt, lazy (Lazy* wrappers). Gallery: `/dev/ui` and `/dev/ui/shell` (dev only).
+StatCard, Timeline (+ TripTimeline), SuccessCheck, MessageBubble, PhotoGrid (`groups`, `layout="strip"`; tap opens
+PhotoViewer, the lazy full-screen swipe viewer; helpers in `photos.ts`), PhotoCompare, SignaturePad, SignatureField
+(tap → SignatureCapture, full-screen landscape signing, lazy), CameraButton,
+MapView, FullscreenHub (M19 full-screen hub for phone/tablet and wall mode: top layer, `?fs=` history, nested
+hubs stack; usage blocks in DESIGN.md "Fullscreen hub (M19)"; reuse it, never hand-roll a full-screen view),
+FullscreenButton, PeriodStepper, InstallPrompt, lazy (Lazy* wrappers). Gallery: `/dev/ui` and `/dev/ui/shell`
+(dev only). Maps share `src/features/map/route-draw.ts` (route lines and arrows) and `src/lib/declutter.ts` (marker overlap).
 
 **Use existing components before creating new ones.** Status labels and tones: `src/ui/status.ts`. Icons by name: `src/ui/icons.ts`.
 

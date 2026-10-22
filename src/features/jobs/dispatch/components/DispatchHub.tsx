@@ -26,8 +26,11 @@ import {
   BAR_TRAILING,
   BackChevron,
 } from "@/ui/components/bar-parts";
+import { FullscreenHub } from "@/ui/components/FullscreenHub";
 import { IconButton } from "@/ui/components/IconButton";
+import { PeriodStepper } from "@/ui/components/PeriodStepper";
 import { cx } from "@/ui/cx";
+import { type TechChipItem, TechChips } from "../../components/TechChips";
 import { type HubQuery, hubHref } from "../href";
 
 // Assign hub shell (/dispatch, client). The server renders the list and one
@@ -37,7 +40,10 @@ import { type HubQuery, hubHref } from "../href";
 // list and the tech view are two screens (M1 push, M3 avatar morph). Tablet:
 // list | map over panel. Desktop: list | map | panel (container queries on the
 // hub width, since the sidebar takes 256 px). Leaflet loads lazily, only once
-// the map is on screen.
+// the map is on screen. Below 1200 px the map opens full screen (FullscreenHub
+// "routes"): the day and the tech chips in its top bar, and on `?job=` the one
+// "Assign <name>" in its footer; there a pick replaces the history entry, so back
+// leaves full screen in one step and keeps the pick.
 
 const RouteMap = dynamic(() => import("@/features/map/components/RouteMap"), {
   ssr: false,
@@ -56,7 +62,7 @@ const HUB_CSS = `.hub{container-type:inline-size}
 @container (min-width:640px){.hub-grid{grid-template-columns:minmax(0,300px) minmax(0,1fr);align-items:start}.hub-list{grid-row:span 2}.hub-map{grid-column:2;grid-row:1;margin:0;height:380px;border-radius:var(--radius-card);box-shadow:var(--shadow-card)}.hub-panel{grid-column:2}}
 @container (min-width:1040px){.hub-grid{grid-template-columns:300px minmax(0,1fr) minmax(0,360px);gap:20px}.hub-list{grid-row:auto}.hub-map{position:sticky;top:calc(env(safe-area-inset-top) + 60px);height:calc(100dvh - env(safe-area-inset-top) - 148px);min-height:440px}.hub-panel{grid-column:3;grid-row:1}}
 .hub-date:has(:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
-@media (max-width:767.98px){.hub-head[data-sel],.hub[data-sel] .hub-list,.hub:not([data-sel]) .hub-map,.hub:not([data-sel]) .hub-panel,.hub-wide{display:none}}`;
+@media (max-width:767.98px){.hub-head[data-sel],.hub[data-sel] .hub-list,.hub:not([data-sel]):not([data-fs]) .hub-map,.hub:not([data-sel]) .hub-panel,.hub-wide{display:none}}`;
 
 interface Ctx {
   selected: string | null;
@@ -82,9 +88,13 @@ export function DispatchHub({
   defaultTech,
   initialSelected,
   query,
+  todayKey,
   names,
   phoneTrailing,
   map,
+  chips,
+  footers,
+  fsSubtitle,
 }: {
   /** LargeTitleHeader (hidden on the phone tech view). */
   header: ReactNode;
@@ -95,17 +105,29 @@ export function DispatchHub({
   defaultTech: string | null;
   initialSelected: string | null;
   query: HubQuery;
+  todayKey: string;
   names: Record<string, string>;
   /** Phone tech view nav-bar trailing (call button) per tech. */
   phoneTrailing: Record<string, ReactNode>;
   map: Omit<RouteMapProps, "selected" | "onSelect" | "proposal"> & {
     proposals: Record<string, RouteMapProps["proposal"]>;
   };
+  /** Full-screen top bar: one chip per tech. */
+  chips: readonly TechChipItem[];
+  /** Full-screen footer per tech on `?job=`: the job and "Assign <name>". */
+  footers: Record<string, ReactNode>;
+  /** Full-screen top bar subtitle ("Who should take J-1042?"). */
+  fsSubtitle: string;
 }) {
+  const router = useRouter();
   const [selected, setSelected] = useState<string | null>(initialSelected);
   const [phone, setPhone] = useState(false);
   const [mapOn, setMapOn] = useState(false);
+  const [fs, setFs] = useState(false);
   const pushed = useRef(0);
+  // The top history entry is the full screen's (pushed on open, rewritten by picks
+  // inside it): its pop is not one of our pushed picks.
+  const fsSlot = useRef(false);
   const valid = (id: string | null) => (id && id in panels ? id : null);
 
   useEffect(() => {
@@ -117,12 +139,13 @@ export function DispatchHub({
   }, []);
   // Leaflet only once the map is visible (never on the phone list).
   useEffect(() => {
-    if (!phone || selected) setMapOn(true);
-  }, [phone, selected]);
+    if (!phone || selected || fs) setMapOn(true);
+  }, [phone, selected, fs]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: panels are stable per render
   useEffect(() => {
     const onPop = () => {
-      pushed.current = Math.max(0, pushed.current - 1);
+      if (fsSlot.current) fsSlot.current = false;
+      else pushed.current = Math.max(0, pushed.current - 1);
       setSelected(valid(new URLSearchParams(location.search).get("tech")));
     };
     window.addEventListener("popstate", onPop);
@@ -132,6 +155,19 @@ export function DispatchHub({
   useEffect(() => setSelected(initialSelected), [initialSelected]);
 
   const select = (id: string | null) => {
+    if (fs) {
+      // Full screen: replace the entry and keep ?fs=, so back closes it at once
+      // (FullscreenHub carries the pick over to the page underneath).
+      startTransition(() => {
+        addTransitionType("hub-select");
+        setSelected(id);
+      });
+      const url = new URL(hubHref(query, id), location.origin);
+      const key = new URLSearchParams(location.search).get("fs");
+      if (key) url.searchParams.set("fs", key);
+      history.replaceState(null, "", url.pathname + url.search);
+      return;
+    }
     const isPhone = window.matchMedia(PHONE).matches;
     if (id === null && pushed.current > 0) {
       startTransition(() => {
@@ -159,6 +195,24 @@ export function DispatchHub({
   const panel = (effective && panels[effective]) || emptyPanel;
   const showList = !(phone && selected);
   const proposal = effective ? (map.proposals[effective] ?? null) : null;
+  // Full screen: another day replaces the entry without ?fs= (DESIGN.md M19).
+  const day = (d: string) =>
+    router.replace(hubHref(query, selected, d), { scroll: false });
+  const rel =
+    query.date === todayKey
+      ? "Today"
+      : query.date === addDaysToKey(todayKey, 1)
+        ? "Tomorrow"
+        : query.date === addDaysToKey(todayKey, -1)
+          ? "Yesterday"
+          : null;
+  const dayText = rel
+    ? `${rel} · ${formatDateKey(query.date, "en-US", { month: "short", day: "numeric" })}`
+    : formatDateKey(query.date, "en-US", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+      });
 
   return (
     <HubCtx value={{ selected, current: effective, select, query }}>
@@ -195,31 +249,71 @@ export function DispatchHub({
         {HUB_CSS}
       </style>
       <Page wide className="pt-2">
-        <div className="hub" data-sel={selected ? "" : undefined}>
+        <div
+          className="hub"
+          data-sel={selected ? "" : undefined}
+          data-fs={fs ? "" : undefined}
+        >
           <div className="hub-grid">
             {showList && (
               <ViewTransition enter={POP_IN} exit={PUSH_OUT} default="none">
                 <div className="hub-col hub-list">{list}</div>
               </ViewTransition>
             )}
+            {/* Keyed list ↔ tech view only (never per tech), so picking another
+                tech never remounts the map or an open full screen. */}
             <ViewTransition
-              key={phone ? (selected ?? "list") : "wide"}
+              key={phone ? (selected ? "tech" : "list") : "wide"}
               enter={PUSH_IN}
               exit={POP_OUT}
               default="none"
             >
               <div className="hub-map">
-                {mapOn ? (
-                  <RouteMap
-                    {...map}
-                    selected={effective}
-                    proposal={proposal}
-                    onSelect={(id) => select(id)}
-                    className="size-full"
-                  />
-                ) : (
-                  <div aria-hidden className="shimmer size-full" />
-                )}
+                <FullscreenHub
+                  historyKey="routes"
+                  title="Routes"
+                  subtitle={fsSubtitle}
+                  className="size-full"
+                  expandLabel="Full screen map"
+                  onOpenChange={(o) => {
+                    setFs(o);
+                    if (o) fsSlot.current = true;
+                  }}
+                  controls={
+                    <>
+                      <PeriodStepper
+                        prevLabel="Previous day"
+                        nextLabel="Next day"
+                        onPrev={() => day(addDaysToKey(query.date, -1))}
+                        onNext={() => day(addDaysToKey(query.date, 1))}
+                      >
+                        {dayText}
+                      </PeriodStepper>
+                      <TechChips
+                        bare
+                        items={chips}
+                        value={effective}
+                        onChange={(id) => id && select(id)}
+                        label="Show a technician's route"
+                      />
+                    </>
+                  }
+                  footer={
+                    query.job && effective ? footers[effective] : undefined
+                  }
+                >
+                  {mapOn ? (
+                    <RouteMap
+                      {...map}
+                      selected={effective}
+                      proposal={proposal}
+                      onSelect={(id) => select(id)}
+                      className="size-full"
+                    />
+                  ) : (
+                    <div aria-hidden className="shimmer size-full" />
+                  )}
+                </FullscreenHub>
               </div>
               <div className="hub-col hub-panel">
                 <ViewTransition

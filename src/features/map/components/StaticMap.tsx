@@ -1,4 +1,5 @@
 import { getMapConfig } from "@/adapters/maps";
+import { getSettings } from "@/lib/settings";
 
 // Zero-JS static map for the public tracking page (SPEC M19 "small static map"):
 // a 5×3 composite of raster tiles centered on the tech, with a pulsing dot and the
@@ -15,7 +16,7 @@ function px(lat: number, lng: number, z: number) {
   };
 }
 
-export function StaticMap({
+export async function StaticMap({
   center,
   dest,
   zoom = 14,
@@ -31,7 +32,7 @@ export function StaticMap({
   height?: number;
   label: string;
 }) {
-  const { tileUrl } = getMapConfig();
+  const { tileUrl } = getMapConfig((await getSettings()).map);
   if (!tileUrl) return null;
   const c = px(center.lat, center.lng, zoom);
   const tx = Math.floor(c.x / TILE);

@@ -27,6 +27,7 @@ import { BarSummary, BottomBar } from "@/ui/components/BottomBar";
 import { ListRow, ListSection } from "@/ui/components/List";
 import { MoneyText } from "@/ui/components/MoneyText";
 import { NavBar } from "@/ui/components/NavBar";
+import { PhotoGrid } from "@/ui/components/PhotoGrid";
 import { StatusPill } from "@/ui/components/StatusPill";
 import { Morph } from "@/ui/motion/Morph";
 import { PageTransition } from "@/ui/motion/PageTransition";
@@ -311,17 +312,17 @@ export default async function EstimatesIdPage({
                 footer="Problem photos show on the estimate the customer sees."
               >
                 {doc.problemPhotos.length > 0 ? (
-                  <div className="grid grid-cols-4 gap-1.5 p-3">
-                    {doc.problemPhotos.map((p) => (
-                      // biome-ignore lint/performance/noImgElement: signed storage URL
-                      <img
-                        key={p.id}
-                        src={p.thumbUrl}
-                        alt={p.caption ?? "Problem photo"}
-                        className="aspect-square w-full rounded-md object-cover"
-                        loading="lazy"
-                      />
-                    ))}
+                  <div className="p-3">
+                    <PhotoGrid
+                      columns={4}
+                      photos={doc.problemPhotos.map((p) => ({
+                        id: p.id,
+                        url: p.url,
+                        thumbUrl: p.thumbUrl,
+                        caption: p.caption,
+                        alt: p.caption ?? "Problem photo",
+                      }))}
+                    />
                   </div>
                 ) : null}
                 {open && canCreate ? (

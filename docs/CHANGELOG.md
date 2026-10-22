@@ -2,6 +2,227 @@
 
 ## Unreleased
 
+### Maps and boards on the full-screen hub (2026-10-22, R1)
+Owner goal: "the user can see the hub on his full screen on smaller devices", reusing the kit.
+- **Live map wall mode** (`/map`): "Wall mode" in the header (tablet and up, kit
+  `FullscreenButton`) and the map's corner Expand (every size) open one `FullscreenHub`
+  (`historyKey="wall"`, dark, browser full screen). Inside: the map, a legend of techs
+  (`WallMode.tsx`: color, avatar with the status ring, status, last ping, the current job; a
+  column on wide screens, a card strip under the map on tall ones), a live clock and Show
+  stale in the top bar. The 60 s refresh keeps running; Esc, back and Close leave it. The
+  job sheet sits in the hub's subtree (dark over the wall).
+- **Live map markers** (`TechMap`): zero-size anchors drawn by CSS; tech avatars always above
+  job pins; job pins declutter like the schedule map's boxes (number box only where it
+  covers nothing, else a dot that expands on zoom; a pin under its tech's avatar hides). In
+  wall mode each tech's first name sits on a tag on the first free side, and from 1200 px
+  markers are larger. QA: 0 overlaps on phone, tablet and desktop. The map follows its box
+  (ResizeObserver → `invalidateSize`).
+- **Assign hub map** (`/dispatch`): full screen below 1200 px (`historyKey="routes"`): the day
+  (kit `PeriodStepper`) and the tech chips in the top bar; a chip or a tech's pin picks the
+  tech in place; with `?job=` the footer (`HubFsFooter`) shows the job, the fit and the one
+  "Assign <name>" (the panel's `HubAssignButton`, same `scheduleJob`). The map no longer
+  remounts when the phone picks another tech.
+- **Schedule board** (`/schedule` day, 3 days, week): `ScheduleBoard` (replaces
+  `DesktopBoard`) full screen on touch (`historyKey="board"`, rotate tip on phones): the
+  corner Expand on the in-page board (1024–1199 px), or a header button where the page shows
+  the list. Inside, arrows (`ParamPeriodStepper`) and the Day / 3 days / Week switch; the
+  board scrolls both ways under sticky tech and day headers; week columns sized from the
+  width (all 7 days on a landscape tablet, ~4 upright, ~4 on a landscape phone; empty days
+  at half width); compact cards (two-line title, the tech as an avatar chip inside the
+  card). The header row now wraps from 1024 px (it overflowed beside the sidebar).
+- **Shared pieces**: `src/lib/declutter.ts` (from the schedule map: box vs dot, plus rect
+  obstacles and `placeLabels`; tests/lib/declutter.test.ts), `src/features/map/route-draw.ts`
+  (cased route lines, direction chevrons, focus / fade; the schedule map and the Assign hub's
+  RouteMap draw routes the same way), `jobs/components/TechChips` (the schedule map and the
+  Assign hub), kit `PeriodStepper` and `FullscreenButton`, `ParamPeriodStepper`.
+  `ParamControls` drop `?fs=` (a new view or day inside full screen).
+- **FullscreenHub** (kit): `theme="dark"` applies only while open and darkens Leaflet tiles;
+  toasts stay above an open hub (the toast host is a `data-fs-top` popover raised after it);
+  Back / Esc / Close keep a pick made inside (the `?job=` / `?tech=` written while open is
+  carried over to the page's entry); closing never leaves the page on a stale `?fs=`;
+  nested hubs (a photo or the signature pad inside present mode): a hub stack (Esc and the
+  end of browser full screen go to the top hub), page-wide state kept until the last hub
+  closes, child-combinator CSS, `[data-chrome]` inside a hub stays visible, the rotate tip
+  sits above the footer, `.fs-slot` in `@layer components`; `openFullscreen(key)`.
+- Route JS (gz): `/map` 18.7 → 23.8 KB, `/dispatch` 10.7 → 15.7 KB, `/schedule` 8.8 →
+  15.0 KB (FullscreenHub 4.4 KB of each); Leaflet stays lazy; global CSS +33 B.
+
+### Photos, signatures and present mode on the full-screen hub (2026-10-22, R2)
+Owner spec: "just display the photos, and make it possible to view them full screen" (no
+before/after slider), full-screen landscape signing, and presenting an estimate on a tablet
+by reusing the customer's own page.
+- **`PhotoViewer`** (kit, new): `FullscreenHub` (no trigger, minimal chrome, dark) around a
+  CSS scroll-snap carousel, so swiping and momentum are the browser's. It grows from the
+  tapped thumbnail and shrinks back into the thumbnail of the photo on screen (scrolled into
+  view first). Counter "3 / 12", caption (tag, time, who took it, caption text), prev/next
+  and ← / → from 768 px, Esc / back / close. Only the photo on screen and its neighbours load
+  (the cached thumbnail shows until the full photo is in); double-tap zooms 2× and pans with
+  native scrolling. `actions` adds buttons for the photo on screen. Lazy chunk.
+- **`PhotoGrid`** (kit): tapping a thumbnail opens the viewer at that photo; one viewer swipes
+  through the whole grid. New `groups` (sections by tag, `JOB_PHOTO_GROUPS`), `layout="strip"`,
+  `actions`, `historyKey`; `Photo` gains `by` and `flagged`. The old `<dialog>` lightbox is
+  gone (its `.lightbox` CSS too). Pure helpers in `src/ui/components/photos.ts` (`groupPhotos`,
+  `photoAlt`, `containSize`; tests/ui/photos.test.ts).
+- **Job photos panel** (S23): photos grouped Before / During / After / Problem / Other (empty
+  groups hidden); the before/after compare slider and the filter are gone from the panel
+  (`PhotoCompare` itself and the print/evidence pages are untouched). Tap → viewer; its Info
+  button opens the details sheet over it (star for the invoice, re-tag, caption, GPS, flags,
+  evidence lock, remove), without the duplicate photo.
+- **Portal and estimate photos**: `/i` (portal and receipt photos), `/j` (S27), `/e` "What we
+  found" (a strip) and the staff estimate's problem photos open the viewer. The viewer is a
+  lazy chunk, so these pages only carry the grid.
+- **`SignatureCapture`** (kit, new): `FullscreenHub` (no trigger, title + signer line, Clear /
+  Done footer, `lockScroll="strict"`, `orientationHint="landscape"`) around a `SignaturePad`
+  that fills the screen. The rotate tip shows only until the first stroke. Done trims the PNG to
+  the ink, shows "Signature added" (SuccessCheck) in the hub, then shrinks back into the field. Inside a sheet, Esc cancels signing instead of
+  closing the sheet. No browser full screen (it would lift the page over the sheet).
+- **`SignatureField`** (kit, new): the "Tap to sign" box that shows the signature once there is
+  one; it loads `SignatureCapture` on demand. `SignaturePad` gains `height="fill"`,
+  `clearButton`, `toBlob/toDataURL({ trim })` and `resize()`; strokes survive a resize (drawn
+  scaled to fit, re-based when the signer draws again; `signature-math.ts`, tested).
+- **Every signature** goes through S15 `SignatureSheet`, which now uses `SignatureField`: the
+  tech's job sign-off, checklist signatures, estimate "Sign here", change orders, the public
+  `/e` approval, the tool agreement and the pay agreement. Upload (outbox or public presign),
+  hashing, the consumer's action and the evidence lock are unchanged.
+- **Present mode**: "Present to customer" on the staff estimate page (`estimates.send`) mints or
+  reuses a short-lived link (`mintEstimatePresentLink` → `mintOrReusePublicToken`, purpose
+  `estimate.present`, audited `estimate.presented`) and opens `/e/<token>?present=1`. With a
+  staff session that may present it, the customer's own page (unchanged, nothing hidden; costs
+  and internal notes never reach `/e`) is wrapped in a full-screen hub: a "Tap to start" screen
+  with one primary (the page and its Approve bar stay hidden until then; the tap asks for browser
+  full screen on Android and iPad), a slim top row with a discreet "Exit presentation" (back to
+  the staff page) and a "Full screen" button when the browser left it; the page scrolls below
+  the row, so nothing renders under it. Back pauses it (Resume / Exit); Esc doesn't end it, but
+  closes a photo opened inside it. The customer picks an option, signs full screen and
+  approves through the same public action, which records the signature `in_person` and puts
+  `present_mode` + `presented_by` in the approval's audit row.
+
+### Schedule map view (2026-10-22)
+Owner spec: a Map view on the Schedule page, one day of routes, with street tiles that are
+free to turn on.
+- **Calendar | Map** switch beside Day / 3 days / Week (`ParamSegmented push`, so back
+  returns to the other view). `/schedule?view=map&date=YYYY-MM-DD&tech=<id>&job=<id>`: the
+  map always shows one day with the day stepper (soft navigation; the map stays mounted).
+  Picking a job or isolating a tech is client state mirrored with `history.pushState` (no
+  server round trip; back / forward restore it through `useSearchParams`).
+- **Layout by the view's own width** (container queries): desktop ≥ 1060 px = techs (day
+  stepper, tech rows with color swatch, avatar in the tech color, "3 jobs · 8a–4p · 36.3 mi",
+  Unassigned and No location groups) | map with the timeline strip under the map and the tech
+  column | day summary or job details. Tablet: collapsible tech panel, details in a right
+  drawer (opening a job folds the panel away and brings it back on close). Phone: map on top
+  (45 dvh), tech chips as the filter, the timeline, the day's stops grouped by tech; details
+  in the kit's bottom sheet with Open job under the window.
+- **Map** (`MapCanvas`, Leaflet in a lazy chunk): one polyline per tech in the board's tech
+  color (`techColor`), home base → stops in window order, a chevron at every leg's midpoint,
+  the focused route thicker, the rest at 25% while a tech is isolated. Job markers are window
+  boxes ("1 · 8–10" / "Dana W."); done = muted with a check, live (on the way, arrived, in
+  progress) = pulsing ring (at most two), late (window passed, nobody arrived) = red outline
+  and a "Late" tag, unassigned = gray dashed box with no number. Below zoom 10, or where a
+  box would overlap another box, cover a dot or home pin, or be cut by the map edge, it folds
+  to a numbered dot (`declutter.ts`, measured box sizes); hover or the timeline expands one.
+  Selecting pans gently so the stop sits in the visible part of the map (beside the tablet
+  drawer, above the phone sheet); clicking the empty map clears it; bounds fit the day, or
+  the isolated tech.
+- **Timeline strip** (`DayTimeline`): one row per tech (avatar and color), an Unassigned row,
+  bars over the arrival windows with the same status styles, a red now-line. The axis runs
+  from the earliest to the latest window ± 1 h. A bar shows "1 · 10–12" only when it fits (a
+  container query per bar), else the stop number; hover or focus shows the full label and
+  the customer. Hover and click sync with the map both ways.
+- **Details**: status, service and title, the arrival window large, the customer with call
+  (customers `CallButton`) and text (`/messages/<customer>`), the address with directions,
+  notes, the tech and "Stop 2 of 4", then **Open job** (the one primary), Reassign (the Assign
+  hub for the job) and Reschedule (the S9 assign sheet). ← / → step through the route; Esc
+  closes the details, then the isolation.
+- **Data**: `loadScheduleMap` (`jobs/schedule-map/queries.ts`) reuses the Assign hub's day
+  loaders, now shared from `jobs/dispatch/queries.ts` (`loadDayJobs`, `loadActiveTechRows`,
+  `loadAssignees`, `dayRangeUtc`). One query for the day: techs (plus any other assignee),
+  jobs except cancelled with window, status, assignees (primary first), coordinates, customer
+  name and phone, service type, trimmed notes, home bases and route miles (haversine). Same
+  permission as the board (`schedule.view_all`); the contact window masks house numbers,
+  coordinates, directions and the phone for viewers without `customers.contact_view`.
+- **Street map, free**: Settings → Map (now "Map", shown with or without the live-map flag)
+  has a one-click **OpenStreetMap (free)** switch (`saveMapTiles`, `map.tile_url` /
+  `map.tile_attribution`). `getMapConfig(settings.map)` feeds every map (schedule map, Assign
+  hub, live map, tracking page): `NEXT_PUBLIC_TILE_URL` wins, then the saved preset, then OSM
+  in development only. **New installs stay off in production** (OSM's tile policy doesn't
+  allow defaulting a distributed app onto its servers), with "Set it up" now pointing to
+  `/settings/map`. The demo seeds turn it on for every profile; `scripts/enable-osm-tiles.ts`
+  turns it on in an existing database (`PGLITE_DIR=… npx tsx --conditions=react-server
+  scripts/enable-osm-tiles.ts`, `--off` to undo; stop the app first on PGlite). Integrations
+  shows the source. No CSP change needed: only `frame-ancestors` is set, and the service
+  worker ignores cross-origin requests.
+- Kit: `Avatar color` (a CSS color instead of the seed's tone).
+- Tests: `tests/jobs/schedule-map.test.ts` (route order, miles, no-location stops, unassigned,
+  stop index, phase, labels, axis, lanes, declutter) and `tests/jobs/schedule-map-db.test.ts`
+  (the day query, the permission, masking for a tech who can open the schedule).
+- **Full screen (M19)** on phones and tablets: the map and the techs timeline each have an
+  Expand button. New kit component `FullscreenHub` (`src/ui/components/FullscreenHub.tsx`):
+  the region moves to the top layer without remounting (Leaflet keeps its map), grows from its
+  rect (FLIP, 320 ms spring), pushes `?fs=<key>` so back, Esc or Close leave it with no history
+  left behind, makes the app inert, focuses Close, and on touch devices also asks for browser
+  full screen. The map in full screen: day arrows and tech chips in the top bar, a collapsible
+  timeline strip at the bottom, the job in the kit Sheet (bottom sheet on phones, drawer on
+  tablets) with the stop panned into the visible part. The timeline in full screen: a Fit
+  day / Zoom switch, two-line cards whose labels stay pinned beside the name column, rows that
+  hug their cards, now at 30% from the left, and a one-time "Rotate for a wider view" tip in
+  portrait. The API covers the next uses (wall mode, Assign hub, signature, present mode,
+  photos, week board): DESIGN.md "Fullscreen hub (M19)". The timeline hover label now stays
+  inside the strip (shifted in from either edge, flipped under the bar near the top).
+- An empty day says "Nothing booked this day" over the map, which fits the techs' home bases.
+- Size: `/schedule` route JS 8.6 → 8.7 KB gz (the map view is its own chunk); map view only:
+  view 10.2 KB + details 4.0 KB (preloaded when idle) + canvas 5.5 KB with Leaflet (41.5 KB,
+  CSS 2.6 KB). Global CSS +18 B (one width utility; the rest is route-local); shell
+  unchanged (139.4 KB).
+
+### Call-to-booking flow (2026-10-21)
+Owner spec: Leads → "+" turns a phone call into a booked job in three steps, "1 Caller · 2
+Schedule · 3 Done" (`BookingSteps`), each a pushed route (M1 slide, CSS only).
+- **Step 1, Caller** (`/leads/new`, `features/leads/components/booking/CallerForm.tsx`): phone
+  first, with a returning-caller lookup while typing (`lookupCaller` → the customers
+  `findDuplicates` exact phone match, plus job count and primary address). Tapping "Use" fills
+  name and address; the lead links to that customer through the intake's phone match. Then the
+  service address (street, unit, city, state, ZIP; the state comes from the company, the city and
+  ZIP placeholders too), service type chips, notes, the source (default "Phone call"), an
+  optional quoted price, and the verbal SMS consent box. Email and custom fields sit under "More
+  details" (a lazy chunk; it opens on its own when a custom field is required). Sticky bar:
+  **Save & schedule** (primary) and **Save lead only**.
+- **`createLeadAndCustomer`** (`leads/actions.ts`): one `action()`, one transaction. It runs the
+  same manual intake as `createLead` (consent recording, spam score, dedupe, round robin),
+  then the convert path's `ensureLeadCustomer` (customer + property). "Check" or spam leads get
+  no customer. Save & schedule also needs `leads.convert` and a street + ZIP. With `leadId`
+  (Back from step 2) it edits that lead in place (name, service, price, notes, source, address
+  → `ensureProperty`) instead of creating a second one. Back, via the nav bar or the browser,
+  returns to `/leads/new?leadId=…` with the saved values.
+- **Step 2, Schedule** (`/leads/new/schedule?leadId=`, `ScheduleFlow.tsx`): the new
+  `Calendar` (60 days; phone: vertical months under a sticky weekday header; ≥ 768 px: two
+  months with prev/next). Days show `best` (accent dot + "Best", the top 3), `open` (green
+  dot), `limited` (amber ring), `full` (struck through, not selectable); past days are
+  disabled and today is ringed. A day's 2-hour arrival windows (business hours split in two-hour
+  steps, `availability/windows.ts`) load on tap (`fetchDayWindows`, prefetched on hover). They
+  show in a lazy sheet on phone and tablet and in a sticky side panel at ≥ 1200 px. Each window
+  is a large button with its state and the suggested tech ("Ben · adds 3 mi"). The best tech is
+  preselected; "Change tech" lists the rest with their reasons in the Assign hub's look.
+  **Book job** calls the existing `createJobAction` (date, window start, window length,
+  primary assignee, lead id). That marks the lead booked (`markLeadConverted`), carries the
+  quoted price to the draft invoice and emits `job.scheduled`.
+- **Step 3, Done** (`/leads/new/done?jobId=`): `SuccessCheck`, "Booked for Thu, Oct 22 ·
+  10–12 with Ben", and **Open job** / New call / View customer. The confirmation is the
+  built-in `booking_confirm` automation (`job.scheduled` → template `job.booked`) through
+  `enqueueMessage`, so consent, quiet hours and caps apply. The page shows the real
+  `scheduled_messages` row: queued (outbox or quiet hours), sent, "Not sent: no SMS consent",
+  opted out, failed (`leads/booking-labels.ts`). It waits up to 3 s for the row to exist,
+  then polls a few times.
+- **Availability contract** (`src/features/jobs/availability/`): `types.ts`
+  (`DayAvailability`, `WindowSlot`, `TechSuggestion`), `index.ts` `getAvailability` /
+  `getDayAvailability` (server). It is MOCK for now (`mock.ts`): deterministic per date and
+  address, weekends mostly limited or full, real tech names and colors. `// TODO(algo)` marks the
+  swap point. Tests: `tests/jobs/availability-mock.test.ts`.
+- Intake fix: a manually logged call is no longer merged by the dedupe hash into a lead that
+  is already booked, lost or spam (a returning customer calling again within the dedupe window
+  can now be booked).
+- Route JS: `/leads/new` 10.2 KB gz (was 11.0), `/leads/new/schedule` 12.0 KB, `/leads/new/done`
+  0.6 KB; shell unchanged (139.4 KB).
+
 ### Assign hub (2026-10-21)
 Owner request: "a new assign to tech hub … tech list, a date, … a map, their jobs, their route,
 the tech details … recommend which tech to assign to, based on their route … responsive."

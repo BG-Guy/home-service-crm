@@ -15,6 +15,8 @@ Previous measurement (2026-10-15 integration) in brackets.
 | `public/sw.js` | ~3 KB | 1.4 KB gz | ok |
 | `/map` (excluded from the route budget) | — | 22.7 KB + Leaflet ~43 KB in a lazy `ssr:false` chunk | ok |
 | `/dispatch` Assign hub (Leaflet excluded, as `/map`) | ≤ 30 KB gz | 10.7 KB route JS + `RouteMap` / Leaflet in a lazy `ssr:false` chunk loaded only once the map is on screen (never on the phone list); layout CSS is route-local, global CSS +0 | ok |
+| Full-screen hubs, R1 (2026-10-22: wall mode, Assign hub map, schedule board; Leaflet excluded) | ≤ 30 KB gz per route | `/map` 18.7 → 23.8 KB, `/dispatch` 10.7 → 15.7 KB, `/schedule` 8.8 → 15.0 KB (measured against `.next-smap`). Most of each is `FullscreenHub` (4.4 KB gz with its CSS: nested hubs, history carry-over, toast top layer); the wall legend 1.2 KB; `TechMap`'s marker CSS and declutter ride in its lazy Leaflet chunk; `BoardGrid` stays lazy (phones load it only when the board opens). Global CSS +33 B (toast host popover reset) | ok. Open: load FullscreenHub's enter/exit logic on first open (~3 KB less per route) |
+| `/schedule` Map view (2026-10-22; Leaflet excluded) | route growth ≤ 8 KB gz | Route JS 8.6 → 8.8 KB. The map view is its own chunk (`LazyScheduleMap`), loaded only on `?view=map`: view 13.3 KB (layout, panels, timeline, route-local CSS, `FullscreenHub` ≈ 3.8 KB) + 3.3 KB shared kit pieces, job details 4.0 KB (preloaded when idle), canvas 5.5 KB + Leaflet 41.5 KB + Leaflet CSS 2.6 KB (`ssr:false`). Global CSS +18 B; shell unchanged | ok (calendar views pay +0.2 KB) |
 
 **Design refresh v2 (2026-10-19, F2):** 149.6 → 139.2 KB gz (framework 129.2 + root layout 3.9 +
 `(app)` layout 6.1), measured on `.next` (HEAD) vs `.next-f2` with the same script (framework root

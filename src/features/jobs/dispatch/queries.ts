@@ -49,39 +49,59 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function colorFor(id: string, own: string | null): string {
+/** A tech's route color: their calendar color, else a stable palette pick. */
+export function colorFor(id: string, own: string | null): string {
   if (own && /^#[0-9a-f]{6}$/i.test(own)) return own;
   let h = 0;
   for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0;
   return PALETTE[h % PALETTE.length] as string;
 }
 
-const startExpr = sql<Date | null>`coalesce(${jobs.windowStart}, ${jobs.scheduledStart})`;
+/** A job's arrival start: the window, else the scheduled start. */
+export const startExpr = sql<Date | null>`coalesce(${jobs.windowStart}, ${jobs.scheduledStart})`;
 
 const jobCols = {
   j: jobs,
   customerName: customers.displayName,
+  customerType: customers.type,
+  customerPhone: customers.phone,
+  customerAnonymizedAt: customers.anonymizedAt,
+  smsStatus: customers.smsStatus,
+  doNotText: customers.doNotText,
+  doNotContact: customers.doNotContact,
   street: properties.street,
   unit: properties.unit,
   city: properties.city,
+  state: properties.state,
+  zip: properties.zip,
   lat: properties.lat,
   lng: properties.lng,
   serviceName: serviceTypes.name,
   serviceMinutes: serviceTypes.defaultDurationMin,
 };
-type JobRow = {
+/** A job with its customer, property and service type (hub and schedule map). */
+export type JobRow = {
   j: typeof jobs.$inferSelect;
   customerName: string;
+  customerType: string;
+  customerPhone: string | null;
+  customerAnonymizedAt: Date | null;
+  smsStatus: string;
+  doNotText: boolean;
+  doNotContact: boolean;
   street: string;
   unit: string | null;
   city: string | null;
+  state: string | null;
+  zip: string | null;
   lat: number | null;
   lng: number | null;
   serviceName: string | null;
   serviceMinutes: number | null;
 };
 
-function loadJobs(where: ReturnType<typeof and>, limit: number) {
+/** Jobs with their customer, property and service type, in arrival order. */
+export function loadJobs(where: ReturnType<typeof and>, limit: number) {
   return db
     .select(jobCols)
     .from(jobs)
@@ -91,6 +111,75 @@ function loadJobs(where: ReturnType<typeof and>, limit: number) {
     .where(where)
     .orderBy(asc(startExpr), asc(jobs.createdAt))
     .limit(limit) as Promise<JobRow[]>;
+}
+
+/** One company-zone day as a UTC range [from, to). */
+export function dayRangeUtc(date: string, tz: string) {
+  return {
+    from: zonedTimeToUtc(parseDateKey(date), tz),
+    to: zonedTimeToUtc(parseDateKey(addDaysToKey(date, 1)), tz),
+  };
+}
+
+/** The day's jobs (every status but cancelled), arrival order. */
+export function loadDayJobs(date: string, tz: string, limit = 400) {
+  const { from, to } = dayRangeUtc(date, tz);
+  const ts = (d: Date) => sql`${d.toISOString()}::timestamptz`;
+  return loadJobs(
+    and(
+      ne(jobs.status, "cancelled"),
+      sql`${startExpr} >= ${ts(from)}`,
+      sql`${startExpr} < ${ts(to)}`,
+    ),
+    limit,
+  );
+}
+
+/** Active technicians (base role tech), by name, with their route facts. */
+export function loadActiveTechRows() {
+  return db
+    .select({
+      id: users.id,
+      name: users.name,
+      color: users.color,
+      phone: users.phone,
+      skills: users.skills,
+      homeBase: users.homeBase,
+      hireDate: users.hireDate,
+      experienceYears: users.experienceYears,
+      birthDate: users.birthDate,
+    })
+    .from(users)
+    .leftJoin(roles, eq(roles.key, users.role))
+    .where(
+      and(
+        eq(users.status, "active"),
+        or(eq(roles.baseRole, "tech"), eq(users.role, "tech")),
+      ),
+    )
+    .orderBy(asc(users.name));
+}
+
+/** Assignees per job id, primary first. */
+export async function loadAssignees(
+  jobIds: readonly string[],
+): Promise<Map<string, string[]>> {
+  const byJob = new Map<string, string[]>();
+  if (!jobIds.length) return byJob;
+  const rows = await db
+    .select({
+      jobId: jobAssignments.jobId,
+      userId: jobAssignments.userId,
+      role: jobAssignments.role,
+    })
+    .from(jobAssignments)
+    .where(inArray(jobAssignments.jobId, [...new Set(jobIds)]));
+  rows.sort(
+    (a, b) => Number(a.role !== "primary") - Number(b.role !== "primary"),
+  );
+  for (const a of rows)
+    byJob.set(a.jobId, [...(byJob.get(a.jobId) ?? []), a.userId]);
+  return byJob;
 }
 
 /** Load the Assign hub for a day (`?date=`), a selected job (`?job=`). */
@@ -124,43 +213,12 @@ export async function loadDispatchHub(params: {
   const date = jobStart ? dateKey(jobStart, tz) : asked;
   const movedToJobDay = !!jobStart && !!params.date && params.date !== date;
 
-  const from = zonedTimeToUtc(parseDateKey(date), tz);
-  const to = zonedTimeToUtc(parseDateKey(addDaysToKey(date, 1)), tz);
-  const ts = (d: Date) => sql`${d.toISOString()}::timestamptz`;
-
-  const techRows = await db
-    .select({
-      id: users.id,
-      name: users.name,
-      color: users.color,
-      phone: users.phone,
-      skills: users.skills,
-      homeBase: users.homeBase,
-      hireDate: users.hireDate,
-      experienceYears: users.experienceYears,
-      birthDate: users.birthDate,
-    })
-    .from(users)
-    .leftJoin(roles, eq(roles.key, users.role))
-    .where(
-      and(
-        eq(users.status, "active"),
-        or(eq(roles.baseRole, "tech"), eq(users.role, "tech")),
-      ),
-    )
-    .orderBy(asc(users.name));
+  const techRows = await loadActiveTechRows();
   const techIds = techRows.map((t) => t.id);
 
   const [dayRows, queueRows, clocks, briefs, skillRows, vehicles] =
     await Promise.all([
-      loadJobs(
-        and(
-          ne(jobs.status, "cancelled"),
-          sql`${startExpr} >= ${ts(from)}`,
-          sql`${startExpr} < ${ts(to)}`,
-        ),
-        400,
-      ),
+      loadDayJobs(date, tz),
       loadJobs(
         and(
           eq(jobs.status, "unscheduled"),
@@ -182,18 +240,7 @@ export async function loadDispatchHub(params: {
     ...new Set([...dayRows, ...queueRows].map((r) => r.j.id)),
     ...(jobRow ? [jobRow.j.id] : []),
   ];
-  const assigns = ids.length
-    ? await db
-        .select({
-          jobId: jobAssignments.jobId,
-          userId: jobAssignments.userId,
-        })
-        .from(jobAssignments)
-        .where(inArray(jobAssignments.jobId, ids))
-    : [];
-  const byJob = new Map<string, string[]>();
-  for (const a of assigns)
-    byJob.set(a.jobId, [...(byJob.get(a.jobId) ?? []), a.userId]);
+  const byJob = await loadAssignees(ids);
   const skillName = new Map(skillRows.map((s) => [s.id, s.name]));
 
   const reveal = (r: JobRow) =>
@@ -364,7 +411,7 @@ export async function loadDispatchHub(params: {
     );
   }
 
-  const map = getMapConfig();
+  const map = getMapConfig(settings.map);
   return {
     date,
     todayKey,

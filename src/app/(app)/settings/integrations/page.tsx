@@ -12,6 +12,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { aiProviderName } from "@/adapters/ai";
 import { emailDriverName } from "@/adapters/email";
+import { tileSource } from "@/adapters/maps";
 import { smsDriverName } from "@/adapters/messaging";
 import { paymentsDriverName } from "@/adapters/payments";
 import { vapidPublicKey } from "@/adapters/push";
@@ -26,6 +27,7 @@ import { SettingsScreen } from "@/features/settings/components/SettingsScreen";
 import { requireUser } from "@/lib/auth/current";
 import { appUrl } from "@/lib/env";
 import { listSecretStatus } from "@/lib/secrets";
+import { getSettings } from "@/lib/settings";
 import { ListRow, ListSection } from "@/ui/components/List";
 import { Pill } from "@/ui/components/StatusPill";
 import type { Tone } from "@/ui/tone";
@@ -110,7 +112,8 @@ export default async function SettingsIntegrationsPage() {
   const storage = storageDriverName();
   const vapid = vapidPublicKey();
   const geocoder = process.env.GEOCODER || "census";
-  const tiles = !!process.env.NEXT_PUBLIC_TILE_URL;
+  // Street map: the env wins, then Settings → Map (OpenStreetMap preset).
+  const tiles = tileSource((await getSettings()).map);
   const turnstile = (by.get("TURNSTILE_SECRET")?.source ?? "none") !== "none";
 
   return (
@@ -243,9 +246,19 @@ export default async function SettingsIntegrationsPage() {
             icon={<MapPinned size={17} aria-hidden />}
             tone="teal"
             title="Map tiles"
-            driver={tiles ? "Custom" : "OSM (dev only)"}
-            active={tiles}
-            env="NEXT_PUBLIC_TILE_URL"
+            driver={
+              tiles === "env"
+                ? "Custom"
+                : tiles === "osm"
+                  ? "OpenStreetMap (free)"
+                  : tiles === "custom"
+                    ? "Saved"
+                    : tiles === "dev"
+                      ? "OSM (dev only)"
+                      : "Off"
+            }
+            active={tiles === "env" || tiles === "osm" || tiles === "custom"}
+            env="NEXT_PUBLIC_TILE_URL or Settings → Map"
           />
         </ListSection>
 

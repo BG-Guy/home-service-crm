@@ -5,7 +5,8 @@ import { Button } from "@/ui/components/Button";
 import { ListGroup, ListSection } from "@/ui/components/List";
 import { Stepper } from "@/ui/components/Stepper";
 import { toast } from "@/ui/components/Toast";
-import { saveMapSettings } from "../actions";
+import { ToggleRow } from "@/ui/components/Toggle";
+import { saveMapSettings, saveMapTiles } from "../actions";
 
 export interface MapSettingsValues {
   keep_breadcrumbs_days: number;
@@ -133,5 +134,52 @@ export function MapSettingsForm({ initial }: { initial: MapSettingsValues }) {
         Save changes
       </Button>
     </div>
+  );
+}
+
+const TILE_FOOTER: Record<"env" | "osm" | "custom" | "dev" | "off", string> = {
+  env: "Set by the server (NEXT_PUBLIC_TILE_URL), which always wins.",
+  osm: "Roads and street names on every map, from OpenStreetMap's free tile servers. Their attribution always shows. Fine for a small team; for heavy use, set a paid tile provider in NEXT_PUBLIC_TILE_URL.",
+  custom: "A custom street map is saved.",
+  dev: "Off. In development, maps still use OpenStreetMap so you can test.",
+  off: "Off: maps show your jobs and routes without streets. One tap turns on OpenStreetMap's free street map.",
+};
+
+/** /settings/map "Street map": the one-click OpenStreetMap preset (saves at once). */
+export function StreetMapSettings({
+  source,
+}: {
+  source: "env" | "osm" | "custom" | "dev" | "off";
+}) {
+  const [on, setOn] = useState(source === "osm" || source === "custom");
+  const [pending, start] = useTransition();
+  return (
+    <ListSection header="Street map" footer={TILE_FOOTER[source]}>
+      <ToggleRow
+        title="OpenStreetMap (free)"
+        subtitle={
+          source === "env"
+            ? "Using your server's tile provider"
+            : "Schedule map, Assign hub, live map and tracking page"
+        }
+        checked={source === "env" ? true : on}
+        disabled={source === "env" || pending}
+        onChange={(e) => {
+          const next = e.currentTarget.checked;
+          setOn(next);
+          start(async () => {
+            const r = await saveMapTiles({ preset: next ? "osm" : "off" });
+            if (!r.ok) {
+              setOn(!next);
+              toast({ title: r.error, tone: "error" });
+            } else
+              toast({
+                title: next ? "Street map on" : "Street map off",
+                tone: "success",
+              });
+          });
+        }}
+      />
+    </ListSection>
   );
 }

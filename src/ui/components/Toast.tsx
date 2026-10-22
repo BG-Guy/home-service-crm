@@ -5,6 +5,7 @@ import {
   type CSSProperties,
   type ReactNode,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
@@ -261,6 +262,11 @@ function ToastView({
  * deck that expands on hover/focus, announced via a polite live region. All motion
  * is CSS (`.toast*` in globals.css). Mount once (see `AppProviders`), then call
  * `toast(...)` anywhere on the client.
+ *
+ * The host is a `popover="manual"` marked `data-fs-top`: normally a plain fixed
+ * layer (z-index `--z-toast`); while a FullscreenHub is open it joins the top
+ * layer above the hub (the hub raises it), and each new toast raises it again
+ * over anything opened since (a sheet inside the hub).
  */
 export function Toaster() {
   const list = useSyncExternalStore(
@@ -272,34 +278,50 @@ export function Toaster() {
   const live = list.filter((t) => !t.leaving);
   const latest = live[0];
   const open = expanded && live.length > 1;
+  const host = useRef<HTMLElement>(null);
+  const front = useRef<string | undefined>(undefined);
+
+  useLayoutEffect(() => {
+    const el = host.current;
+    const id = latest?.id;
+    if (el && id && id !== front.current)
+      try {
+        if (el.matches(":popover-open")) {
+          el.hidePopover();
+          el.showPopover();
+        }
+      } catch {}
+    front.current = id;
+  });
 
   return (
-    <>
+    <section
+      ref={host}
+      popover="manual"
+      data-fs-top=""
+      aria-label="Notifications"
+      className="toast-region"
+      data-expanded={open || undefined}
+      data-empty={list.length === 0 || undefined}
+      onPointerEnter={() => setExpanded(true)}
+      onPointerLeave={() => setExpanded(false)}
+      onFocusCapture={() => setExpanded(true)}
+      onBlurCapture={() => setExpanded(false)}
+    >
       <div aria-live="polite" aria-atomic className="sr-only">
         {latest
           ? `${latest.title}${latest.message ? `. ${latest.message}` : ""}`
           : ""}
       </div>
-      <section
-        aria-label="Notifications"
-        className="toast-region"
-        data-expanded={open || undefined}
-        data-empty={list.length === 0 || undefined}
-        onPointerEnter={() => setExpanded(true)}
-        onPointerLeave={() => setExpanded(false)}
-        onFocusCapture={() => setExpanded(true)}
-        onBlurCapture={() => setExpanded(false)}
-      >
-        {list.map((t, i) => (
-          <ToastView
-            key={t.id}
-            t={t}
-            index={i}
-            front={i === 0 || open}
-            multiline={i === 0 && !open}
-          />
-        ))}
-      </section>
-    </>
+      {list.map((t, i) => (
+        <ToastView
+          key={t.id}
+          t={t}
+          index={i}
+          front={i === 0 || open}
+          multiline={i === 0 && !open}
+        />
+      ))}
+    </section>
   );
 }

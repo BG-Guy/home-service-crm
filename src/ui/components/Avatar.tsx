@@ -30,6 +30,8 @@ const STATUS_TONE: Record<AvatarStatus, Tone> = {
  * @param status small presence dot.
  * @param ring presence ring in a tone, drawn outside with a 2 px gap (clocked in, live).
  * @param presence shorthand for a green ring (clocked in / on shift).
+ * @param color a CSS color for the initials gradient instead of the seed's tone
+ *   (e.g. a tech's route color on the schedule map).
  */
 export function Avatar({
   name,
@@ -39,6 +41,7 @@ export function Avatar({
   status,
   ring,
   presence,
+  color,
   className,
 }: {
   name: string;
@@ -48,13 +51,14 @@ export function Avatar({
   status?: AvatarStatus;
   ring?: Tone;
   presence?: boolean;
+  color?: string;
   className?: string;
 }) {
   const tone = toneFor(seed ?? name);
   const font = Math.round(size * 0.38);
   const dot = Math.max(8, Math.round(size * 0.26));
   const ringTone = ring ?? (presence ? "green" : undefined);
-  const c = TONE_VAR[tone];
+  const c = color ?? TONE_VAR[tone];
   return (
     <span
       className={cx("relative inline-flex shrink-0", className)}

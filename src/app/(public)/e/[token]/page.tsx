@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { ChevronDown } from "lucide-react";
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import { db } from "@/db";
 import { depositRequests } from "@/db/schema";
 import {
@@ -17,17 +18,20 @@ import {
   EstimateApproval,
   type PortalLine,
 } from "@/features/portal/components/EstimateApproval";
+import { LazyPresentMode } from "@/features/portal/components/LazyPresentMode";
 import {
   PortalExpired,
   PortalFooter,
 } from "@/features/portal/components/PortalChrome";
 import { PrintButton } from "@/features/portal/components/PrintButton";
+import { presentingUser } from "@/features/portal/present";
 import { openPortalToken, portalActor } from "@/features/portal/token";
 import { getLatestSignature } from "@/features/signatures/api";
 import { formatMoney } from "@/lib/money";
 import { getCurrentPolicy } from "@/lib/policies";
 import { formatDate, formatDateTime } from "@/lib/time";
 import { Button } from "@/ui/components/Button";
+import { PhotoGrid } from "@/ui/components/PhotoGrid";
 import { SuccessCheck } from "@/ui/components/SuccessCheck";
 
 export const metadata: Metadata = {
@@ -65,12 +69,17 @@ const toPortalLine = (l: LineRowLike): PortalLine => ({
 // /e/[token] (SPEC M07, M23): view the options, pick one + add-ons, agree to sign
 // electronically, type a name, draw a signature, then pay the deposit (B4 /p/).
 // Every hit is logged (portal_access_log); the first view flips sent → viewed.
+// `?present=1` with a staff session that may present it: the same page, full
+// screen on the staff tablet (present mode, `PresentMode`); the approval is
+// then recorded as signed in person.
 export default async function ETokenPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ token: string }>;
+  searchParams: Promise<{ present?: string }>;
 }) {
-  const { token } = await params;
+  const [{ token }, sp] = await Promise.all([params, searchParams]);
   const tok = await openPortalToken("estimate", token, "/e/[token]");
   if (!tok) return <PortalExpired what="estimate link" />;
   if (tok.entityType === "change_order")
@@ -87,6 +96,23 @@ export default async function ETokenPage({
   const tz = doc.timezone;
   const first =
     doc.customer.firstName ?? doc.customer.displayName.split(" ")[0];
+  const presenter = sp.present === "1" ? await presentingUser(e.id) : null;
+  // Present mode wraps every state of the page (it stays mounted when the
+  // approval refreshes it into "Approved").
+  const present = (node: ReactNode) =>
+    presenter ? (
+      <LazyPresentMode
+        exitHref={`/estimates/${e.id}`}
+        company={doc.company.name}
+        heading={`Estimate ${e.number}`}
+        customer={first}
+        stage={e.status}
+      >
+        {node}
+      </LazyPresentMode>
+    ) : (
+      node
+    );
 
   if (e.status === "approved") {
     const [dep] = await db
@@ -103,7 +129,7 @@ export default async function ETokenPage({
       )
       .orderBy(desc(depositRequests.createdAt))
       .limit(1);
-    return (
+    return present(
       <div className="space-y-5 pt-2">
         <section className="card flex flex-col items-center px-6 py-9 text-center print:hidden">
           <SuccessCheck size={64} label="Approved" />
@@ -131,7 +157,7 @@ export default async function ETokenPage({
         </section>
         <EstimateDocument doc={doc} />
         <PortalFooter />
-      </div>
+      </div>,
     );
   }
 
@@ -176,7 +202,7 @@ export default async function ETokenPage({
       ) : null}
     </>
   );
-  return (
+  return present(
     <div className="space-y-5 pt-2">
       <section className="px-1 pt-2">
         <p className="num text-subhead font-semibold text-label-2">
@@ -211,24 +237,16 @@ export default async function ETokenPage({
       {doc.problemPhotos.length > 0 ? (
         <section aria-label="What we found" className="space-y-2">
           <h2 className="px-1 text-title3">What we found</h2>
-          <div className="no-scrollbar -mx-[var(--gutter)] flex snap-x gap-2 overflow-x-auto px-[var(--gutter)]">
-            {doc.problemPhotos.map((p) => (
-              <figure key={p.id} className="w-56 shrink-0 snap-start">
-                {/* biome-ignore lint/performance/noImgElement: signed storage URL */}
-                <img
-                  src={p.url}
-                  alt={p.caption ?? "Photo of the problem"}
-                  className="aspect-[4/3] w-full rounded-tile object-cover"
-                  loading="lazy"
-                />
-                {p.caption ? (
-                  <figcaption className="mt-1 text-footnote text-label-2">
-                    {p.caption}
-                  </figcaption>
-                ) : null}
-              </figure>
-            ))}
-          </div>
+          <PhotoGrid
+            layout="strip"
+            photos={doc.problemPhotos.map((p) => ({
+              id: p.id,
+              url: p.url,
+              thumbUrl: p.thumbUrl,
+              caption: p.caption,
+              alt: p.caption ?? "Photo of the problem",
+            }))}
+          />
         </section>
       ) : null}
 
@@ -256,6 +274,7 @@ export default async function ETokenPage({
           consentText={doc.consentText}
           signerNameDefault={doc.customer.displayName}
           coolingOff={doc.coolingOff}
+          present={!!presenter}
         >
           {terms}
           <PortalFooter />
@@ -268,7 +287,7 @@ export default async function ETokenPage({
       )}
 
       {approvable ? null : <PortalFooter />}
-    </div>
+    </div>,
   );
 }
 

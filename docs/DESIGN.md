@@ -183,6 +183,7 @@ Every named motion has a reduced-motion version (opacity ≤ 150 ms, no transfor
 | M16 | Hover lift (pointer devices only) | Card `translateY(-1px)` plus `--shadow-raised`, 160 ms. |
 | M17 | Large title collapse | Existing scroll-driven reveal; keep it. |
 | M18 | Field error | Shake ±4 px three times, 240 ms; the error text fades in. |
+| M19 | Fullscreen hub | The region grows from its on-screen rect to the viewport (FLIP on `transform`, 320 ms `--ease-spring`) and shrinks back on close. Reduced motion: a 150 ms fade. |
 
 ### How the motions are wired
 
@@ -305,6 +306,23 @@ Every named motion has a reduced-motion version (opacity ≤ 150 ms, no transfor
     bottom edge, safe-area aware. Server Component, no JS.
   - While one is on screen the root sets `--bottombar-h` (84 px; 0 in the desktop rail) so fixed
     overlays (sync capsule, FAB, desktop toasts) lift above it.
+- **Calendar** (`Calendar.tsx`, client; Airbnb-style availability picker):
+  ```tsx
+  <Calendar from={today} to={addDays(today, 59)} today={today} selected={day} onSelect={setDay}
+    getDay={(k) => ({ status: "best" | "open" | "limited" | "full", hint: "4 windows open" })}
+    onPreview={prefetchDay} />
+  <CalendarLegend />
+  ```
+  - Phone (< 768): every month in the range scrolls vertically under a sticky weekday header
+    (`.cal-weekdays`, pinned under the nav bar). ≥ 768: two months side by side, prev/next.
+  - Day cell: 44 px circle (40 on desktop). `best` = accent dot + "Best" (10/700 accent ink),
+    `open` = green dot, `limited` = amber ring (a ring, so it never reads as an orange brand
+    accent), `full` = `--label-3` struck through. Past days and days outside the range are
+    `--label-3`. Today has a 1.5 px `--label` ring; selected is the filled `--label` circle
+    with `--bg` text (Airbnb). No accent fill, so the page's one primary stays the only one.
+  - A11y: `role="grid"` per month, each day a button with `role="gridcell"`, `aria-selected`,
+    `aria-disabled` (still focusable). Roving tabindex: arrows, Home/End (week), PageUp/PageDown
+    (month); focus crosses months and turns the desktop page.
 - **DetailLayout** (`AppShell.tsx`):
   ```tsx
   import { DetailLayout, Page } from "@/ui/components/AppShell";
@@ -339,6 +357,220 @@ Every named motion has a reduced-motion version (opacity ≤ 150 ms, no transfor
 - **Tabs inside a page:** a sticky segmented or underline tab row with a sliding indicator (M14).
 - **Empty, loading and error:** EmptyState, a Skeleton that mirrors the layout, and a Banner with
   a retry button.
+- **Route map markers** (schedule map, `jobs/schedule-map/components/marker-css.ts`):
+  - A stop is a **window box** in the tech's color: a card-colored box with a 2 px ring in the
+    tech color and a tail to the point. Line 1 is "1 · 8–10" (stop number, compact window, 12/700
+    tabular), line 2 the customer's short name ("Dana W.", 11/500 `--label-2`).
+  - States: done = muted fill, `--label-2` text and a check; live (on the way, arrived, in
+    progress) = the M12 ring pulse around the box or dot, at most two on screen; late (window
+    passed, nobody arrived) = a `--sys-red` ring plus a small red "Late" tag (a tech color may
+    itself be red); unassigned = a dashed gray box with no number. Selected = a thicker ring
+    and a soft halo in the tech color; hover = a lighter halo.
+  - **Declutter:** below zoom 10, or where a box would overlap another box, cover another dot
+    or a home pin, or be cut by the map edge, the box folds to a numbered dot (22 px, the tech
+    color, white 2 px ring). Hover, the timeline, or selection expands one box.
+  - Routes: a 3.5 px line in the tech color over a 7 px `--card` casing, a chevron at every
+    leg's midpoint; the focused route 6 px; others 25% while a tech is isolated. Drawn by
+    the shared `map/route-draw.ts`, so the Assign hub's RouteMap matches. Home bases
+    are small rounded squares with a house glyph. Colors come from `techColor` (the board's),
+    painted with `style.stroke` so `var(--sys-*)` works on SVG.
+  - Selecting a stop pans (never zooms) so it sits in the visible part of the map: beside a
+    drawer, above a bottom sheet.
+- **Timeline strip** (per-tech Gantt, `DayTimeline`): a card with a sticky label column (dot,
+  avatar in the tech color, first name) and one track per tech; hour gridlines from the
+  earliest to the latest window ± 1 h; each job a 22 px rounded bar over its window (18% tint
+  of the tech color, 1.5 px ring) with the marker's status styles; overlapping windows stack
+  in lanes; a 2 px `--sys-red` now-line with a dot on top. A bar shows "1 · 10–12" only when
+  the label fits (a container query per bar, never a cut window), else the stop number; hover
+  or focus shows a dark pop with the full label and customer. Fits the column on desktop;
+  scrolls sideways (56 px per hour) on tablet and phone.
+
+- **Timeline strip, full screen** (`size="lg"`): avatar + first name in a 100 px column in
+  portrait (full names at 176 px in landscape); a Fit day / Zoom switch in the top bar (Zoom
+  ≈ 4½ hours in view); opens with now 30% from the left. Rows hug their cards (72–88 px a
+  lane) and sit together at the top. A bar is a two-line card ("1 · 10–12" / "Jacob W.", at
+  most 72 px tall); while any part of a bar is visible its label is pinned beside the name
+  column, clipped to the bar (`overflow: clip`) with a short fade, never outside its card.
+- **Fullscreen hub (M19)** (`src/ui/components/FullscreenHub.tsx`, kit): full-screen mode for a
+  hub region on phones and tablets (and on desktop with `breakpoint="all"`).
+  - **How it works:** the region's subtree stays mounted. The hub element moves to the top layer
+    (`popover="manual"`), so no transformed or contained ancestor (`.smap`'s
+    `container-type`, the `.shell-stage` card stack) can trap it, and Leaflet keeps its
+    instance. Opening pushes `?fs=<historyKey>`: back, Esc, the Close button and leaving
+    browser full screen all close it, and closing pops that entry (forward reopens it). While
+    open: `role="dialog"`, `aria-modal`, the rest of the app `inert` (sheets, being
+    `<dialog>`s, stay usable and stack above), focus on Close (back to the trigger after),
+    page scroll locked, `html[data-fullscreen]` hides the tab and nav bars. On touch devices
+    it also asks for browser full screen and re-shows itself on top when the root joins the
+    top layer. Toasts stay above it: the toast host is a `popover` marked `data-fs-top`,
+    which the hub raises into the top layer after itself (and leaves out of the inert);
+    each new toast raises it again over a sheet opened since. Closing keeps what changed
+    inside: URL params written with `replaceState` while `?fs=` was kept (a `?job=` or
+    `?tech=` pick) are carried over to the page's entry when the full-screen entry pops,
+    by Back, Esc or Close (not when the app dropped `?fs=` on purpose, nor after a jump
+    further back). Closing pops only an entry this document pushed (or, per the Navigation
+    API, the page's own entry right under it); a `?fs=` that came with the page is
+    stripped in place, so closing never leaves the page, and a controlled hub that is closed
+    at mount drops a stale `?fs=` itself.
+  - **Nested hubs** (a photo or the signature pad inside present mode): a module-level
+    stack; only the top hub answers Esc and the browser leaving full screen. The page-wide
+    state (`html[data-fullscreen]`, the raised toast host, browser full screen) stays until
+    the last hub closes; a hub leaves browser full screen only if it is in it. Hub rules use
+    `>` (bar, footer, close, tip, corner), so an outer hub's state never leaks into an inner
+    one, and `[data-chrome]` inside an open hub (a BottomBar) stays visible.
+  - **Look:** a glass Expand button (Maximize2, `hit-44`) in the region's corner below
+    1200 px; a slim glass top bar with the title, an optional subtitle, a `controls` slot
+    (wraps under the title below 700 px) and Close (Minimize2); an optional `footer` bar;
+    `chrome="minimal"` keeps only a floating close button; `theme="dark"` forces a dark
+    surface while open (it redefines the surface and label tokens on the hub and inverts
+    Leaflet tiles inside it; the in-page region keeps the app theme); `orientationHint=
+    "landscape"` shows a one-time "Rotate for a wider view" pill on phones held upright,
+    16 px above the footer (dismissal kept in localStorage under `fs-hint:<historyKey>`).
+  - **API:** `title`, `label?`, `subtitle?`, `controls?`, `footer?`, `chrome="bar"|"minimal"`,
+    `breakpoint="touch"|"all"`, `trigger="corner"|"none"|(open) => node`, `corner`,
+    `open`/`defaultOpen`/`onOpenChange` (controlled or not), `historyKey`, `orientationHint`,
+    `lockScroll={true|false|"strict"}` ("strict" also stops overscroll and pull-to-refresh),
+    `browserFullscreen` (default: touch devices), `theme`, `onEnter`, `onExit`, `onResize`,
+    `className` (the in-page slot), `bodyClassName`, `expandLabel`, `closeLabel`.
+    `openFullscreen(historyKey)` opens a mounted hub from anywhere (call it from a tap);
+    the kit `FullscreenButton hub="<historyKey>"` is that button for server pages (a
+    Button with children, else an IconButton named by `label`).
+  - **Bar parts** (reuse them in `controls`): the kit `PeriodStepper` (‹ label ›, 36 px
+    plain circles, the label announced) for a day or a week, `ParamPeriodStepper` /
+    `ParamSegmented` (`jobs/components/ParamControls`) when the period or view is a search
+    param (they drop `?fs=`), and `jobs/components/TechChips bare` (color dot, first name,
+    job count; `all` adds "All") for technicians.
+  - **Rules:** code that rewrites the URL while it's open keeps `?fs=` (use `replaceState`,
+    so back still closes it in one step, and the change survives the close), or drops it on
+    purpose (a new day or view: `router.replace` without it; closing then pops nothing).
+    A hub whose open state comes from a URL param clears that param in
+    `onOpenChange(false)`, or the carry-over keeps it. A Leaflet map inside keeps its size
+    with a ResizeObserver (or `onResize`) → `map.invalidateSize()`. Import it only where
+    it's used (~4.3 KB gz with its CSS), never in the shell. `.fs-slot{position:relative}`
+    sits in `@layer components`, so Tailwind position utilities in `className` win. CSS
+    hooks: `.fs-slot`, `.fs-hub[data-fs]`, `.fs-body`, `.fs-bar`, `.fs-ctl`, `.fs-foot`,
+    `.fs-open`.
+  - **In use:** the schedule map (`historyKey="map"`: day arrows and tech chips in the
+    controls, a collapsible timeline strip at the bottom, the job in the kit Sheet with the
+    stop kept in view), the techs timeline (`historyKey="timeline"`, `corner="top-left"`,
+    `orientationHint="landscape"`, the Fit day / Zoom switch in the controls), the live
+    map's wall mode, the Assign hub map and the schedule board (blocks 1, 2 and 6 below).
+  - **The next six uses** (apply as written):
+    1. Operations live map, wall mode (an office TV or a tablet). **Shipped** in `LiveMap`:
+       the header's "Wall mode" (`FullscreenButton hub="wall"`, tablet and up) or the map's
+       corner Expand (every size):
+       ```tsx
+       <FullscreenHub title="Live map" subtitle="3 of 3 techs on shift · 9 jobs today"
+         historyKey="wall" breakpoint="all" theme="dark" browserFullscreen
+         className="size-full" closeLabel="Exit wall mode"
+         onOpenChange={(o) => { setWall(o); if (o) refit(); }} onExit={refit}
+         controls={<><LiveClock tz={tz} /><Chip …>Show stale</Chip></>}>
+         <div className="lm-wall">
+           {wall && <WallLegend techs={sorted} now={now} selected={…} onPick={…} />}
+           <div className="lm-map"><TechMap … wall={wall} fitKey={fitKey} /></div>
+         </div>
+         <Sheet …>{/* the job; in the hub's subtree, so dark over the wall */}</Sheet>
+       </FullscreenHub>
+       ```
+       The legend is a column beside the map on a wide screen and a strip of cards under it
+       on a tall one: color, avatar with the status ring, status, last ping, the current
+       job; nothing needs a hover. TechMap: avatars always above job pins; in wall mode each
+       tech's first name on a tag on the first free side (else hidden) and, from 1200 px,
+       bigger markers; job pins declutter like the schedule map's boxes (the shared
+       `src/lib/declutter.ts`: a pin's number box only where it covers no other pin, avatar
+       or tag and isn't cut by the edge, else a dot that expands on zoom; a pin under its
+       tech's avatar hides). The 60 s refresh keeps running. Tiles darken with the theme.
+    2. Assign hub map. **Shipped** in `DispatchHub` (inside `.hub-map`):
+       ```tsx
+       <FullscreenHub historyKey="routes" title="Routes" subtitle="Who should take J-1042?"
+         className="size-full" expandLabel="Full screen map" onOpenChange={…}
+         controls={<><PeriodStepper …>Today · Oct 22</PeriodStepper>
+                     <TechChips bare items={chips} value={effective} onChange={select} /></>}
+         footer={job ? footers[effective] : undefined}>   {/* HubFsFooter: job · fit · Assign <name> */}
+         <RouteMap … />
+       </FullscreenHub>
+       ```
+       A pick inside (a chip or a tech's pin) replaces the entry with `?fs=` kept; a new day
+       `router.replace`s without it. The footer's "Assign <name>" is the panel's
+       `HubAssignButton` (`scheduleJob`); its toast shows above the hub. Routes draw like
+       the schedule map's (`map/route-draw.ts`: cased line, direction chevrons, focus and
+       fade) plus the dashed recommended detour and numbered stops.
+    3. Signature capture (opened by code, landscape, nothing scrolls). **Shipped** as the kit
+       pair `SignatureField` (the in-page "Tap to sign" box, which shows the signature once
+       there is one) + `SignatureCapture` (lazy; it grows out of the box and shrinks back):
+       ```tsx
+       <SignatureField value={sig} onChange={setSig} title="Approve E-1042" subtitle={name} />
+       // SignatureCapture, mounted over the box on the first tap:
+       <FullscreenHub open={open} onOpenChange={setOpen} trigger="none" title={title}
+         subtitle={subtitle} historyKey="sign" orientationHint="landscape" lockScroll="strict"
+         browserFullscreen={false} onResize={() => pad.current?.resize()}
+         footer={<><Button variant="secondary" onClick={() => pad.current?.clear()}>Clear</Button>
+                   <Button onClick={done}>Done</Button></>}>
+         <SignaturePad ref={pad} height="fill" clearButton={false} className="sigcap-pad" />
+       </FullscreenHub>
+       ```
+       Done → `toBlob({ trim: true })` (PNG cropped to the ink) → "Signature added"
+       (SuccessCheck, inline) → close. Every open starts clean; the rotate tip shows only
+       until the first stroke (`SignaturePad onStart`); strokes survive a rotation. Inside a Sheet, Esc cancels signing (not the sheet). No
+       browser full screen: the page root would rise over the sheet it sits in. Used by every
+       signature (S15 `SignatureSheet`).
+    4. Estimate present mode on a tablet (customer-facing). **Shipped** as the customer's own
+       `/e/<token>?present=1` page (no copy): the staff page's "Present to customer"
+       (`PresentEstimateButton` → `presentEstimate`, `mintOrReusePublicToken` purpose
+       `estimate.present`) opens it, and with a staff session that may present it
+       (`presentingUser`) the page is wrapped in `LazyPresentMode`:
+       ```tsx
+       <FullscreenHub title={`Estimate ${number}`} label="Estimate presentation"
+         historyKey="present" chrome="minimal" trigger="none" open={open}
+         onOpenChange={(o) => o ? resume() : presentationCloses(…) && setOpen(false)}
+         browserFullscreen={false} className="present-slot">
+         <div className="present-top">Exit presentation · company · Full screen</div>
+         <div className="present-scroll"><div className="present-col">{page}</div></div>
+         {!started && <button className="present-start">…Tap to start…</button>}
+       </FullscreenHub>
+       ```
+       A slim 52 px top row ("Exit presentation" pill → confirm → staff page; the company;
+       "Full screen" when the browser left it) has its own space: the page scrolls below it,
+       so nothing renders under the controls. Until "Tap to start" (the handover tap, which
+       also asks for browser full screen) the page and its Approve bar stay hidden: one
+       primary. Back pauses (Resume / Exit bar); Esc, the hub's own close (hidden) and
+       leaving browser full screen keep presenting; Esc closes a photo opened inside it.
+       Approval goes through the public action with `present: true`: signature channel
+       `in_person`, `present_mode` + `presented_by` in the audit row.
+    5. Job photo viewer (swipe between photos, no before/after slider). **Shipped** as the kit
+       `PhotoViewer`, mounted by `PhotoGrid` on the first tap (lazy chunk):
+       ```tsx
+       <PhotoGrid photos={photos} groups={JOB_PHOTO_GROUPS}
+         actions={(p) => <IconButton label="Photo details" …><Info /></IconButton>} />
+       // inside PhotoGrid:
+       <PhotoViewer photos={flat} index={index} onIndexChange={setIndex}
+         anchor={(i) => grid.current?.querySelector(`[data-pi="${i}"]`)} />
+       // = <FullscreenHub open trigger="none" chrome="minimal" theme="dark" historyKey="photo"
+       //     label="Photo viewer"> + a scroll-snap carousel, counter, caption, prev/next
+       ```
+       It grows from the tapped thumbnail and shrinks into the thumbnail of the photo on
+       screen (its box is `position: fixed` over it, corrected for transformed ancestors).
+       The cached thumbnail shows until the full photo loads; neighbours preload; double-tap
+       zooms 2× with native panning. Used on the job photos panel (grouped), `/i`, `/j`, `/e`
+       ("What we found" strip), the staff estimate, tools and vehicles.
+    6. Schedule calendar board (day, 3 days, week). **Shipped** as `ScheduleBoard`: the
+       in-page board from 1024 px with the corner Expand (to 1199 px); below 1024 px the page
+       keeps its list and the header's `FullscreenButton hub="board"` opens the board:
+       ```tsx
+       <FullscreenHub historyKey="board" title="Schedule" subtitle="17 jobs · 3 unscheduled"
+         orientationHint="landscape" trigger={desktop ? "corner" : "none"}
+         controls={<div className="flex flex-wrap …">
+           <ParamPeriodStepper value={date} step={7}>Oct 19 – 25</ParamPeriodStepper>
+           <ParamSegmented param="view" className="w-52" segments={DAY_3DAYS_WEEK} /></div>}>
+         {(desktop || fs) && <BoardGrid data={data} colorBy={colorBy} fill={fs} />}
+       </FullscreenHub>
+       ```
+       `fill`: the board scrolls both ways inside its card under sticky tech / day headers
+       and the time column; 3 days / week columns are the board's width over the days to
+       show (about 7 on a landscape tablet, 4 upright, 3.75 on a landscape phone; days
+       without jobs at half width); compact cards (two-line title, small customer line, an
+       avatar-and-name chip inside); the queues rail from 1280 px. Tapping a job opens it;
+       back returns to the full-screen board.
 
 ## 7. Screen briefs (for the redesign pass)
 

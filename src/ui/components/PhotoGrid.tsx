@@ -1,231 +1,198 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Star, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Star, TriangleAlert } from "lucide-react";
+import { type ReactNode, useMemo, useRef, useState } from "react";
 import { cx } from "../cx";
 import { humanize } from "../status";
-import { lockScroll } from "./dialog-utils";
+import { dropStaleFullscreenParam } from "./fullscreen-url";
+import { groupPhotos, type Photo, type PhotoGroupSpec } from "./photos";
+import { preloadable } from "./preloadable";
 
-export interface Photo {
-  id: string;
-  /** 320 px thumbnail URL (signed). */
-  thumbUrl: string;
-  /** 1600 px URL for the viewer. */
-  url: string;
-  tag?: string | null;
-  caption?: string | null;
-  /** Display string, e.g. "Oct 14, 3:45 PM". */
-  takenAt?: string | null;
-  starred?: boolean;
-  alt?: string;
-}
+export type { Photo, PhotoGroupSpec } from "./photos";
+
+// The full-screen viewer (FullscreenHub + carousel) is its own chunk: it loads
+// when a thumbnail is hovered, touched or focused, so a page with photos ships
+// only this grid.
+const PhotoViewer = preloadable(() =>
+  import("./PhotoViewer").then((m) => m.PhotoViewer),
+);
+const warm = () => void PhotoViewer.preload().catch(() => {});
+
+const GRID: Record<2 | 3 | 4, string> = {
+  2: "grid-cols-2 md:grid-cols-3 lg:grid-cols-4",
+  3: "grid-cols-3 md:grid-cols-4 lg:grid-cols-5",
+  4: "grid-cols-4 md:grid-cols-5 lg:grid-cols-6",
+};
 
 /**
- * Photo thumbnails with tag chips and a full-screen viewer (SPEC §12.6).
- * The viewer is a native `<dialog>` with a scroll-snap carousel (native swipe
- * physics), arrow keys, Esc, and a caption bar.
+ * Photo thumbnails (SPEC §12.6). Tapping one opens `PhotoViewer` full screen
+ * at that photo (it grows from the thumbnail); one viewer swipes through every
+ * photo of the grid. `groups` splits the grid into sections by tag (Before /
+ * After / …, see `JOB_PHOTO_GROUPS`), `layout="strip"` makes one horizontally
+ * scrolling row of larger tiles, `actions` adds buttons to the viewer.
+ *
+ * ```tsx
+ * <PhotoGrid photos={photos} columns={3} />
+ * <PhotoGrid photos={photos} groups={JOB_PHOTO_GROUPS}
+ *   actions={(p) => <IconButton label="Info" onClick={() => show(p.id)}>…</IconButton>} />
+ * ```
  */
 export function PhotoGrid({
   photos,
   columns = 3,
+  layout = "grid",
   tagLabel = humanize,
-  showTags = true,
+  showTags,
+  groups,
+  actions,
+  historyKey,
   className,
 }: {
   photos: readonly Photo[];
   /** Columns on phones (tablet/desktop add more automatically). */
   columns?: 2 | 3 | 4;
+  /** `strip`: one scrolling row of 4:3 tiles with their captions. */
+  layout?: "grid" | "strip";
   tagLabel?: (tag: string) => string;
+  /** Tag chips on the thumbnails (default: on, off when `groups` names them). */
   showTags?: boolean;
+  /** Sections by tag, in this order (empty ones are hidden). */
+  groups?: readonly PhotoGroupSpec[];
+  /** Buttons for the photo on screen in the viewer (e.g. Info). */
+  actions?: (photo: Photo, index: number) => ReactNode;
+  /** `?fs=` value while the viewer is open (default "photo"). */
+  historyKey?: string;
   className?: string;
 }) {
-  const [open, setOpen] = useState<number | null>(null);
-  return (
-    <>
-      <ul
+  const root = useRef<HTMLDivElement>(null);
+  const [index, setIndex] = useState<number | null>(null);
+  // Mounted on the first tap, then kept (its close animation, back/forward).
+  const [armed, setArmed] = useState(false);
+  const sections = useMemo(
+    () =>
+      groups
+        ? groupPhotos(photos, groups)
+        : [{ key: "all", label: "", photos: [...photos], start: 0 }],
+    [photos, groups],
+  );
+  const flat = useMemo(() => sections.flatMap((s) => s.photos), [sections]);
+  const n = flat.length;
+  const chips = showTags ?? !groups;
+  const strip = layout === "strip";
+
+  const tile = (p: Photo, i: number) => (
+    <li key={p.id} className={strip ? "w-56 shrink-0 snap-start" : undefined}>
+      <button
+        type="button"
+        data-pi={i}
+        aria-haspopup="dialog"
+        aria-label={[
+          `Open photo ${i + 1} of ${n}`,
+          p.tag ? tagLabel(p.tag) : null,
+          p.takenAt,
+          p.starred ? "starred" : null,
+          p.flagged ? "flagged" : null,
+        ]
+          .filter(Boolean)
+          .join(", ")}
+        onClick={() => {
+          if (index == null) dropStaleFullscreenParam(historyKey ?? "photo");
+          setArmed(true);
+          setIndex(i);
+        }}
         className={cx(
-          "grid gap-1.5",
-          columns === 2 && "grid-cols-2 md:grid-cols-3 lg:grid-cols-4",
-          columns === 3 && "grid-cols-3 md:grid-cols-4 lg:grid-cols-5",
-          columns === 4 && "grid-cols-4 md:grid-cols-5 lg:grid-cols-6",
-          className,
+          "pressable relative block w-full overflow-hidden bg-fill-2 outline-offset-2",
+          strip ? "aspect-[4/3] rounded-tile" : "aspect-square rounded-xl",
         )}
       >
-        {photos.map((p, i) => (
-          <li key={p.id}>
-            <button
-              type="button"
-              onClick={() => setOpen(i)}
-              className="pressable relative block aspect-square w-full overflow-hidden rounded-xl bg-fill-2 outline-offset-2"
-              aria-label={`Open photo ${i + 1} of ${photos.length}${p.tag ? `, ${tagLabel(p.tag)}` : ""}`}
-            >
-              {/* biome-ignore lint/performance/noImgElement: pre-sized signed thumbnails */}
-              <img
-                src={p.thumbUrl}
-                alt={p.alt ?? p.caption ?? ""}
-                loading="lazy"
-                decoding="async"
-                className="size-full object-cover"
-              />
-              {showTags && p.tag && (
-                <span className="absolute bottom-1.5 left-1.5 rounded-pill bg-black/55 px-2 py-0.5 text-[11px] font-semibold text-white">
-                  {tagLabel(p.tag)}
-                </span>
-              )}
-              {p.starred && (
-                <Star
-                  aria-label="Starred"
-                  size={16}
-                  className="absolute right-1 top-1 drop-shadow"
-                  fill="var(--sys-yellow)"
-                  stroke="#0006"
-                />
-              )}
-            </button>
-          </li>
-        ))}
-      </ul>
-      {open != null && (
-        <PhotoViewer
-          photos={photos}
-          index={open}
-          onClose={() => setOpen(null)}
-          tagLabel={tagLabel}
+        {/* biome-ignore lint/performance/noImgElement: pre-sized signed thumbnails */}
+        <img
+          src={strip ? p.url : p.thumbUrl}
+          alt={p.alt ?? p.caption ?? ""}
+          loading="lazy"
+          decoding="async"
+          className="size-full object-cover"
         />
-      )}
-    </>
+        {chips && p.tag ? (
+          <span className="absolute bottom-1.5 left-1.5 rounded-pill bg-black/55 px-2 py-0.5 text-[11px] font-semibold text-white">
+            {tagLabel(p.tag)}
+          </span>
+        ) : null}
+        {p.starred || p.flagged ? (
+          <span className="absolute right-1 top-1 flex gap-0.5 drop-shadow">
+            {p.flagged ? (
+              <TriangleAlert
+                aria-hidden
+                size={16}
+                fill="var(--sys-orange)"
+                stroke="#fff"
+              />
+            ) : null}
+            {p.starred ? (
+              <Star
+                aria-hidden
+                size={16}
+                fill="var(--sys-yellow)"
+                stroke="#0006"
+              />
+            ) : null}
+          </span>
+        ) : null}
+      </button>
+      {strip && p.caption ? (
+        <p className="mt-1 text-footnote text-label-2">{p.caption}</p>
+      ) : null}
+    </li>
   );
-}
 
-/** Full-screen photo viewer (also usable on its own). */
-export function PhotoViewer({
-  photos,
-  index,
-  onClose,
-  tagLabel = humanize,
-}: {
-  photos: readonly Photo[];
-  index: number;
-  onClose: () => void;
-  tagLabel?: (tag: string) => string;
-}) {
-  const dialog = useRef<HTMLDialogElement>(null);
-  const track = useRef<HTMLDivElement>(null);
-  const [current, setCurrent] = useState(index);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: open once at the initial index
-  useEffect(() => {
-    const d = dialog.current;
-    const t = track.current;
-    if (!d || !t) return;
-    d.showModal();
-    t.scrollLeft = index * t.clientWidth;
-    t.focus({ preventScroll: true });
-    const unlock = lockScroll();
-    return () => {
-      unlock();
-      if (d.open) d.close();
-    };
-  }, []);
-
-  const go = (i: number) => {
-    const t = track.current;
-    if (!t) return;
-    const n = Math.max(0, Math.min(photos.length - 1, i));
-    t.scrollTo({ left: n * t.clientWidth, behavior: "smooth" });
-  };
-  const p = photos[current];
+  const list = (items: readonly Photo[], start: number) => (
+    <ul
+      className={
+        strip
+          ? "no-scrollbar -mx-[var(--gutter)] flex snap-x scroll-px-[var(--gutter)] gap-2 overflow-x-auto px-[var(--gutter)]"
+          : cx("grid gap-1.5", GRID[columns])
+      }
+    >
+      {items.map((p, k) => tile(p, start + k))}
+    </ul>
+  );
 
   return (
-    <dialog
-      ref={dialog}
-      className="lightbox"
-      aria-label="Photo viewer"
-      onClose={onClose}
+    <div
+      ref={root}
+      className={cx(groups && "flex flex-col gap-4", className)}
+      onPointerOver={warm}
+      onPointerDown={warm}
+      onFocusCapture={warm}
     >
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: focusable carousel track handles arrow keys */}
-      <div
-        ref={track}
-        tabIndex={-1}
-        className="lightbox-track outline-none"
-        onScroll={(e) => {
-          const t = e.currentTarget;
-          setCurrent(Math.round(t.scrollLeft / Math.max(1, t.clientWidth)));
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "ArrowRight") go(current + 1);
-          else if (e.key === "ArrowLeft") go(current - 1);
-        }}
-      >
-        {photos.map((ph) => (
-          <figure
-            key={ph.id}
-            className="m-0 flex h-full items-center justify-center"
-          >
-            {/* biome-ignore lint/performance/noImgElement: signed full-size URL */}
-            <img
-              src={ph.url}
-              alt={ph.alt ?? ph.caption ?? ""}
-              loading="lazy"
-              decoding="async"
-              className="max-h-full max-w-full select-none object-contain"
-              draggable={false}
-            />
-          </figure>
-        ))}
-      </div>
-      <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between bg-gradient-to-b from-black/60 to-transparent px-2 pb-6 pt-[calc(env(safe-area-inset-top)+4px)]">
-        <button
-          type="button"
-          onClick={() => dialog.current?.close()}
-          aria-label="Close"
-          className="pointer-events-auto flex size-11 items-center justify-center rounded-full text-white active:bg-white/15"
-        >
-          <X aria-hidden size={24} />
-        </button>
-        <span
-          className="num text-subhead font-medium text-white/90"
-          aria-live="polite"
-        >
-          {current + 1} of {photos.length}
-        </span>
-        <span className="size-11" />
-      </div>
-      {photos.length > 1 && (
-        <>
-          <button
-            type="button"
-            aria-label="Previous photo"
-            disabled={current === 0}
-            onClick={() => go(current - 1)}
-            className="absolute left-2 top-1/2 hidden size-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white disabled:opacity-0 md:flex"
-          >
-            <ChevronLeft aria-hidden size={24} />
-          </button>
-          <button
-            type="button"
-            aria-label="Next photo"
-            disabled={current === photos.length - 1}
-            onClick={() => go(current + 1)}
-            className="absolute right-2 top-1/2 hidden size-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white disabled:opacity-0 md:flex"
-          >
-            <ChevronRight aria-hidden size={24} />
-          </button>
-        </>
-      )}
-      {p && (p.caption || p.tag || p.takenAt) && (
-        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-4 pb-[calc(env(safe-area-inset-bottom)+16px)] pt-10 text-white">
-          <div className="flex items-center gap-2 text-footnote text-white/80">
-            {p.tag && (
-              <span className="rounded-pill bg-white/20 px-2 py-px font-semibold text-white">
-                {tagLabel(p.tag)}
-              </span>
-            )}
-            {p.takenAt && <span>{p.takenAt}</span>}
-          </div>
-          {p.caption && <p className="mt-1 text-subhead">{p.caption}</p>}
-        </div>
-      )}
-    </dialog>
+      {groups
+        ? sections.map((s) => (
+            <section
+              key={s.key}
+              aria-label={`${s.label} photos`}
+              className="flex flex-col gap-2"
+            >
+              <h3 className="flex items-baseline gap-2 px-1 text-subhead font-semibold">
+                {s.label}
+                <span className="num text-footnote font-normal text-label-2">
+                  {s.photos.length}
+                </span>
+              </h3>
+              {list(s.photos, s.start)}
+            </section>
+          ))
+        : list(flat, 0)}
+      {armed ? (
+        <PhotoViewer
+          photos={flat}
+          index={index}
+          onIndexChange={setIndex}
+          anchor={(i) => root.current?.querySelector(`[data-pi="${i}"]`)}
+          tagLabel={tagLabel}
+          actions={actions}
+          historyKey={historyKey}
+        />
+      ) : null}
+    </div>
   );
 }

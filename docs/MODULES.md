@@ -49,7 +49,12 @@ spam. Outside a job's contact window techs see masked phone, email and street
 (`src/lib/mask.ts`), and calls are blocked.
 Leads land in an inbox sorted by response-time urgency with a live SLA timer.
 `/settings/lead-sources` generates paste-ready snippets with the real key and has a test
-console. Lead custom-field values live in `leads.custom`. Data exports everything as a
+console. Lead custom-field values live in `leads.custom`. The "+" on Leads is the
+call-to-booking flow: `/leads/new` (caller; `createLeadAndCustomer` creates lead, customer and
+property in one action) → `/leads/new/schedule` (availability calendar, 2-hour arrival windows,
+suggested tech; books through `createJobAction`) → `/leads/new/done` (confirmation status from
+the `booking_confirm` automation). Availability comes from `jobs/availability`
+(`getAvailability`, a deterministic mock until the real engine lands). Data exports everything as a
 zip, imports CSV customers, price book and past jobs with a dry run, backs up nightly, and
 restores with `npm run restore`.
 
@@ -59,6 +64,7 @@ writes a geostamped status history and emits the specific event plus
 `job.status_changed`. The modules also cover:
 - the schedule board (tech columns with desktop drag-and-drop; 3-day and week views; queues; conflict and travel hints) and the S9 assign sheet
 - the Assign hub `/dispatch` (`jobs/dispatch/`): every tech's day on a route map, the tech's profile and day, and a ranked "who should take it" for `?job=` from the pure `recommend.ts` (extra route miles + load, clock and skill penalties; never age). Assigning reuses `scheduleJob`
+- the schedule's Map view `/schedule?view=map` (`jobs/schedule-map/`): one day of routes in the board's tech colors with direction chevrons, window boxes that fold to numbered dots, a per-tech timeline strip and the job's details (call, text, directions, Open job, Reassign → the hub, Reschedule → the assign sheet). Built on the hub's day loaders; same permission and contact window as the board; Leaflet in a lazy chunk
 - `/jobs/[id]`: tabs for the office; a single scroll with a sticky action bar for techs, which enforces photos, signature, checklist and risk controls (admin override with a reason)
 - the tech's My Day and Finish my day
 - tasks and the time clock
@@ -114,7 +120,7 @@ Cash custody nets 1099 cash or tracks W-2 hand-ins. `/approvals` collects every 
 **Fleet & field (B7).** Covers vehicles, tools and the live map.
 - **Vehicles:** logs, configurable approvals feeding `/approvals`, reminders, documents, trips, VIN and recalls, optional Gemini assist. With AI off, an odometer reading with a photo auto-approves unless it looks off (`odometer.ai_optional` defaults on); `vehicles/api#odometerApprovalHint` gives other screens the matching copy.
 - **Tools** (flag `tools`, default off): register, kits, custody with QR labels, audits, incidents with gated deductions, maintenance, theft report.
-- **Map:** consent-gated location pings, a live Leaflet map (lazy, `/map` only), and customer tracking at `/t/[token]`.
+- **Map:** consent-gated location pings, a live Leaflet map (lazy, `/map` only), and customer tracking at `/t/[token]`. Settings → Map holds the street map for every map: a one-click "OpenStreetMap (free)" preset (`map.tile_url` / `map.tile_attribution`; `NEXT_PUBLIC_TILE_URL` still wins; off in production until chosen). The page shows without the live map flag; its ping and breadcrumb settings only with it.
 
 **Team, settings, insights (B8).**
 - **Team:** invites through `enqueueMessage`, role changes, deactivation (last-admin protected; revokes sessions and push devices).

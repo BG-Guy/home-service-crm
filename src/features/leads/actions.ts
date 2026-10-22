@@ -1,16 +1,22 @@
 "use server";
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { z } from "zod";
-import type { Tx } from "@/db";
+import { db, type Tx } from "@/db";
 import {
   apiKeys,
+  jobs,
   leadEvents,
   leadSources,
   leads,
+  properties,
   sourceSpend,
 } from "@/db/schema";
-import { findOrCreateCustomer, logCall } from "@/features/customers/api";
+import {
+  ensureProperty,
+  findOrCreateCustomer,
+  logCall,
+} from "@/features/customers/api";
 import { enqueueMessage } from "@/features/messaging/api";
 import { validateCustomValues } from "@/features/settings/api";
 import { createTask } from "@/features/tasks/api";
@@ -18,12 +24,22 @@ import { action, zf } from "@/lib/action";
 import { writeActivity } from "@/lib/activity";
 import { requireUser } from "@/lib/auth/current";
 import { appUrl } from "@/lib/env";
-import { ConflictError, NotFoundError, ValidationError } from "@/lib/errors";
+import {
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+  ValidationError,
+} from "@/lib/errors";
 import { emit } from "@/lib/events";
 import { getSettings, updateSettings } from "@/lib/settings";
 import type { Actor } from "@/lib/types";
 import { markLeadResponded } from "./api";
-import type { IssuedSecrets, LeadPreviewResult, LeadStatus } from "./contracts";
+import type {
+  CallerMatch,
+  IssuedSecrets,
+  LeadPreviewResult,
+  LeadStatus,
+} from "./contracts";
 import { previewLead, processLead, recordLeadConsent } from "./intake/process";
 import {
   hashKey,
@@ -210,6 +226,84 @@ const manualLeadSchema = z.object({
   clientId: z.string().uuid().optional(),
 });
 
+type ManualIntake = Omit<z.infer<typeof manualLeadSchema>, "clientId"> & {
+  street?: string;
+  unit?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+};
+
+/** The manual-entry intake (createLead, createLeadAndCustomer): same pipeline as a web form. */
+async function runManualIntake(
+  tx: Tx,
+  input: ManualIntake,
+  actor: Actor,
+): Promise<{ leadId: string; merged: boolean }> {
+  if (!input.name && !input.phone && !input.email)
+    throw new ValidationError({ name: ["Enter a name, phone or email."] });
+  const [src] = await tx
+    .select()
+    .from(leadSources)
+    .where(eq(leadSources.id, input.sourceId))
+    .limit(1);
+  if (!src) throw new ValidationError({ sourceId: ["Choose a source."] });
+  let service = input.service ?? null;
+  if (input.serviceTypeId && !service) {
+    const { getServiceType } = await import("@/features/settings/api");
+    service = (await getServiceType(input.serviceTypeId))?.name ?? null;
+  }
+  let custom: Record<string, unknown> = {};
+  if (input.custom && Object.keys(input.custom).length) {
+    const v = await validateCustomValues("lead", input.custom);
+    if (!v.ok) throw new ValidationError(v.fieldErrors);
+    custom = v.values;
+  }
+  const outcome = await processLead(
+    {
+      auth: { kind: "manual", source: src, actor },
+      channel: "manual",
+      raw: {
+        name: input.name,
+        phone: input.phone,
+        email: input.email,
+        address: input.address,
+        street: input.street,
+        unit: input.unit,
+        city: input.city,
+        state: input.state,
+        zip: input.zip,
+        service,
+        price:
+          input.priceCents != null
+            ? (input.priceCents / 100).toFixed(2)
+            : input.price,
+        preferred_date: input.preferredDate,
+        preferred_window: input.preferredWindow,
+        notes: input.notes,
+        sms_consent: input.smsConsent,
+        ...(Object.keys(custom).length ? { custom } : {}),
+      },
+      ip: actor.ip ?? null,
+      userAgent: actor.userAgent ?? null,
+      origin: null,
+      referer: null,
+    },
+    undefined,
+    { tx },
+  );
+  if (outcome.status === "invalid") throw new ValidationError(outcome.errors);
+  if (outcome.status === "created" || outcome.status === "merged") {
+    if (input.serviceTypeId)
+      await tx
+        .update(leads)
+        .set({ serviceTypeId: input.serviceTypeId })
+        .where(eq(leads.id, outcome.leadId));
+    return { leadId: outcome.leadId, merged: outcome.status === "merged" };
+  }
+  throw new ConflictError("lead_rejected", "Couldn't save this lead.");
+}
+
 /** Manual lead entry (phone call, walk-in). Runs the same intake pipeline. */
 export const createLead = action({
   name: "leads.create",
@@ -218,66 +312,195 @@ export const createLead = action({
   input: manualLeadSchema,
   audit: "lead.created_manual",
   async run({ input, tx, actor }) {
-    if (!input.name && !input.phone && !input.email)
-      throw new ValidationError({ name: ["Enter a name, phone or email."] });
-    const [src] = await tx
-      .select()
-      .from(leadSources)
-      .where(eq(leadSources.id, input.sourceId))
-      .limit(1);
-    if (!src) throw new ValidationError({ sourceId: ["Choose a source."] });
-    let service = input.service ?? null;
-    if (input.serviceTypeId && !service) {
-      const { getServiceType } = await import("@/features/settings/api");
-      service = (await getServiceType(input.serviceTypeId))?.name ?? null;
-    }
-    let custom: Record<string, unknown> = {};
-    if (input.custom && Object.keys(input.custom).length) {
-      const v = await validateCustomValues("lead", input.custom);
-      if (!v.ok) throw new ValidationError(v.fieldErrors);
-      custom = v.values;
-    }
-    const outcome = await processLead(
-      {
-        auth: { kind: "manual", source: src, actor },
-        channel: "manual",
-        raw: {
-          name: input.name,
-          phone: input.phone,
-          email: input.email,
-          address: input.address,
-          service,
-          price:
-            input.priceCents != null
-              ? (input.priceCents / 100).toFixed(2)
-              : input.price,
-          preferred_date: input.preferredDate,
-          preferred_window: input.preferredWindow,
-          notes: input.notes,
-          sms_consent: input.smsConsent,
-          ...(Object.keys(custom).length ? { custom } : {}),
-        },
-        ip: actor.ip ?? null,
-        userAgent: actor.userAgent ?? null,
-        origin: null,
-        referer: null,
-      },
-      undefined,
-      { tx },
-    );
-    if (outcome.status === "invalid") throw new ValidationError(outcome.errors);
-    if (outcome.status === "created" || outcome.status === "merged") {
-      if (input.serviceTypeId)
-        await tx
-          .update(leads)
-          .set({ serviceTypeId: input.serviceTypeId })
-          .where(eq(leads.id, outcome.leadId));
-      return { leadId: outcome.leadId, merged: outcome.status === "merged" };
-    }
-    throw new ConflictError("lead_rejected", "Couldn't save this lead.");
+    return runManualIntake(tx, input, actor);
   },
   revalidate: ({ data }) => LEADS_PATHS(data.leadId),
 });
+
+const callerSchema = manualLeadSchema.omit({ address: true }).extend({
+  street: optText(200),
+  unit: optText(40),
+  city: optText(80),
+  state: optText(40),
+  zip: optText(12),
+  /** "schedule" = Save & schedule (needs leads.convert and a full address). */
+  intent: z.enum(["schedule", "lead"]).default("lead"),
+  /** Back from step 2: re-save the lead this flow already created (no second lead). */
+  leadId: optUuid,
+});
+
+/** Back from step 2 → step 1 → save again: edit the saved lead in place. */
+async function resaveCallerLead(
+  tx: Tx,
+  input: z.infer<typeof callerSchema> & { leadId: string },
+  actor: Actor,
+): Promise<{ leadId: string; merged: boolean }> {
+  const l = await loadLead(tx, input.leadId);
+  if (l.status === "booked")
+    throw new ConflictError("booked", "This lead is already booked.");
+  let serviceText = input.service ?? null;
+  if (input.serviceTypeId && !serviceText) {
+    const { getServiceType } = await import("@/features/settings/api");
+    serviceText = (await getServiceType(input.serviceTypeId))?.name ?? null;
+  }
+  const address =
+    input.street && input.zip
+      ? {
+          street: input.street,
+          ...(input.unit ? { unit: input.unit } : {}),
+          city: input.city ?? "",
+          state: (input.state ?? "").toUpperCase().slice(0, 2),
+          zip: input.zip,
+        }
+      : l.address;
+  await tx
+    .update(leads)
+    .set({
+      name: input.name ?? l.name,
+      serviceTypeId: input.serviceTypeId ?? null,
+      serviceText,
+      quotedPriceCents: input.priceCents ?? null,
+      notes: input.notes ?? null,
+      leadSourceId: input.sourceId,
+      address,
+      updatedAt: new Date(),
+    })
+    .where(eq(leads.id, l.id));
+  if (l.customerId && address?.street && address.zip) {
+    const p = await ensureProperty(
+      tx,
+      l.customerId,
+      {
+        street: address.street,
+        unit: address.unit ?? null,
+        city: address.city ?? "",
+        state: address.state ?? "",
+        zip: address.zip,
+      },
+      actor,
+    );
+    await tx
+      .update(leads)
+      .set({ propertyId: p.propertyId })
+      .where(eq(leads.id, l.id));
+  }
+  await writeActivity(tx, {
+    entity: { type: "lead", id: l.id },
+    customerId: l.customerId,
+    kind: "lead.updated",
+    summary: "Lead details edited",
+    actorUserId: actor.userId,
+  });
+  return { leadId: l.id, merged: false };
+}
+
+/**
+ * Call-to-booking step 1 (/leads/new): the lead AND its customer + property in one
+ * transaction. The lead runs the manual intake (consent, spam score, dedupe and
+ * the returning-customer match by phone), then the same `ensureLeadCustomer` as
+ * Convert. A lead the intake kept as spam or flagged for review gets no customer.
+ */
+export const createLeadAndCustomer = action({
+  name: "leads.create_with_customer",
+  perm: "leads.create",
+  feature: "leads",
+  input: callerSchema,
+  audit: "lead.created_manual",
+  async run({ input, tx, user, actor }) {
+    const schedule = input.intent === "schedule";
+    if (schedule && !user.perms.has("leads.convert"))
+      throw new ForbiddenError(undefined, "leads.convert");
+    if (schedule && (!input.street || !input.zip))
+      throw new ValidationError({
+        ...(input.street ? {} : { street: ["Enter the street to schedule."] }),
+        ...(input.zip ? {} : { zip: ["Enter the ZIP to schedule."] }),
+      });
+    if (input.leadId && !user.perms.has("leads.edit"))
+      throw new ForbiddenError(undefined, "leads.edit");
+    const r = input.leadId
+      ? await resaveCallerLead(tx, { ...input, leadId: input.leadId }, actor)
+      : await runManualIntake(tx, input, actor);
+    const l = await loadLead(tx, r.leadId);
+    if (l.status === "booked")
+      throw new ConflictError(
+        "booked",
+        "This caller already has a booked job.",
+      );
+    let c = { customerId: l.customerId, propertyId: l.propertyId };
+    // "Check" leads (soft spam score over the review line) wait for a person.
+    const flagged =
+      !l.customerId &&
+      l.spamScore >= (await getSettings()).leads.spam_review_threshold;
+    if (l.status !== "spam" && !flagged)
+      c = await ensureLeadCustomer(tx, l, actor);
+    if (schedule && (!c.customerId || !c.propertyId))
+      throw new ConflictError(
+        "needs_review",
+        "Saved, but this lead needs a review before it can be scheduled.",
+      );
+    return { ...r, customerId: c.customerId, propertyId: c.propertyId };
+  },
+  revalidate: ({ data }) => LEADS_PATHS(data.leadId),
+});
+
+/** Returning-caller lookup while the phone is typed (step 1). Exact phone match only. */
+export async function lookupCaller(phone: string): Promise<CallerMatch[]> {
+  const user = await requireUser("leads.create");
+  if (!user.perms.has("customers.view")) return [];
+  const { normalizePhone } = await import("@/lib/phone");
+  const e164 = normalizePhone(String(phone ?? "").slice(0, 40));
+  if (!e164) return [];
+  const { findDuplicates } = await import("@/features/customers/queries");
+  const dups = (await findDuplicates({ phoneE164: e164 })).slice(0, 3);
+  if (dups.length === 0) return [];
+  const ids = dups.map((d) => d.id);
+  const reveal = user.perms.has("customers.contact_view");
+  const [counts, props] = await Promise.all([
+    db
+      .select({ id: jobs.customerId, n: sql<number>`count(*)::int` })
+      .from(jobs)
+      .where(and(inArray(jobs.customerId, ids), ne(jobs.status, "cancelled")))
+      .groupBy(jobs.customerId),
+    reveal
+      ? db
+          .select({
+            id: properties.id,
+            customerId: properties.customerId,
+            street: properties.street,
+            unit: properties.unit,
+            city: properties.city,
+            state: properties.state,
+            zip: properties.zip,
+          })
+          .from(properties)
+          .where(
+            and(
+              inArray(properties.customerId, ids),
+              isNull(properties.deletedAt),
+            ),
+          )
+          .orderBy(desc(properties.isPrimary), asc(properties.createdAt))
+      : Promise.resolve([]),
+  ]);
+  return dups.map((d) => {
+    const p = props.find((x) => x.customerId === d.id);
+    return {
+      customerId: d.id,
+      name: d.displayName,
+      jobs: counts.find((x) => x.id === d.id)?.n ?? 0,
+      address: p
+        ? {
+            propertyId: p.id,
+            street: p.street,
+            unit: p.unit,
+            city: p.city ?? "",
+            state: p.state ?? "",
+            zip: p.zip,
+          }
+        : null,
+    };
+  });
+}
 
 // ------------------------------------------------------------------ inbox actions
 

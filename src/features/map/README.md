@@ -24,9 +24,15 @@ acknowledged the monitoring notice; nothing is tracked off shift.
   zero-JS static tile map while en route. After arrival the link stays valid but shows
   only "<name> has arrived" (then "Your visit is complete"), never a position; an
   expired/revoked token shows "This link has expired". Phases: `trackingPhase()`.
-- `/settings/map` — ping interval, grey/hide thresholds, breadcrumb retention.
+- `/settings/map` ("Map") — the street map for every map (one-click "OpenStreetMap (free)",
+  `saveMapTiles`), then ping interval, grey/hide thresholds and breadcrumb retention (those
+  only while the `map` flag is on; the page itself has no flag gate).
 
 ## Extension points
-- Tiles: `NEXT_PUBLIC_TILE_URL` (+ `NEXT_PUBLIC_TILE_ATTRIBUTION`); OSM tiles are dev-only.
+- Tiles: `getMapConfig(settings.map)` (`src/adapters/maps`). `NEXT_PUBLIC_TILE_URL` (+
+  `NEXT_PUBLIC_TILE_ATTRIBUTION`) wins, then the saved `map.tile_url` / `map.tile_attribution`
+  (the OSM preset; https templates only, attribution escaped), then OSM in development only.
+  Production with neither draws maps without streets plus a "Set it up" link to `/settings/map`.
+  Existing databases: `scripts/enable-osm-tiles.ts` turns the preset on (`--off` reverses).
 - Pure rules (`rules.ts`, tested in `tests/map/rules.test.ts`): staleness, status ring,
   haversine, rough ETA, fix sanity — reuse for "nearest tech" later.

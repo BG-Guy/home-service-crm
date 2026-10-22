@@ -25,6 +25,7 @@ import { processEventsSoon } from "@/lib/events";
 import { mintPublicToken, type PortalAction } from "@/lib/tokens";
 import type { ActionResult } from "@/lib/types";
 import { mintEstimateLink, mintInvoicePortalLink, mintPayLink } from "./links";
+import { presentingUser } from "./present";
 import {
   assertPortalRate,
   logPortal,
@@ -86,18 +87,30 @@ async function tokenFor(
   return row;
 }
 
-/** /e/: the customer picks an option (+ add-ons), consents and signs. */
+/**
+ * /e/: the customer picks an option (+ add-ons), consents and signs. `present`
+ * (present mode on a staff tablet): when a staff user who may present this
+ * estimate is signed in on the device, the signature is recorded as given in
+ * person, and the audit row names the presenting user.
+ */
 export async function approveEstimatePublic(
-  raw: z.input<typeof Sign> & { optionId: string; addonIds: string[] },
+  raw: z.input<typeof Sign> & {
+    optionId: string;
+    addonIds: string[];
+    present?: boolean;
+  },
 ): Promise<ActionResult<{ signatureId: string; depositId: string | null }>> {
   try {
     const input = Sign.extend({
       optionId: uuid,
       addonIds: z.array(uuid).max(50),
+      present: z.boolean().optional(),
     }).parse(raw);
     await assertPortalRate();
     const tok = await tokenFor(input.token, "estimate");
     const actor = await portalActor(tok);
+    const presenter = input.present ? await presentingUser(tok.entityId) : null;
+    const channel = presenter ? "in_person" : "remote_link";
     const res = await db.transaction(async (tx) => {
       const r = await approveEstimateTx(
         tx,
@@ -108,7 +121,7 @@ export async function approveEstimatePublic(
           sign: {
             signerName: input.signerName,
             signatureMediaId: input.signatureMediaId,
-            channel: "remote_link",
+            channel,
             esignConsent: true,
             geo: input.geo ?? null,
             deviceTs: deviceDate(input.deviceTs),
@@ -127,7 +140,14 @@ export async function approveEstimatePublic(
           option_id: input.optionId,
           addon_ids: input.addonIds,
           signature_id: r.signatureId,
-          channel: "remote_link",
+          channel,
+          ...(presenter
+            ? {
+                present_mode: true,
+                presented_by: presenter.id,
+                presented_by_name: presenter.name,
+              }
+            : {}),
         },
         full: true,
       });

@@ -185,7 +185,7 @@ export const getLiveMap = cache(async (): Promise<LiveMapData> => {
       etaMinutes: eta,
     };
   });
-  const map = getMapConfig();
+  const map = getMapConfig(settings.map);
   return {
     generatedAt: new Date().toISOString(),
     techs: out,

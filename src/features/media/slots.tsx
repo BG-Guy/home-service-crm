@@ -27,7 +27,7 @@ import { getGalleryPhotos, stampContext } from "./queries";
 // Server UI slots produced by B4 (BUILD_PLAN §5.1). Each checks its own permission,
 // row scope and feature flag and returns null when the viewer may not see it.
 
-/** S23 — Photo grid by tag, viewer, captions, star, compare (lazy), soft delete. */
+/** S23 — Photos grouped by tag, full-screen viewer (lazy), details: star, re-tag, caption, soft delete. */
 export async function JobPhotosPanel({
   jobId,
   canCapture,
@@ -133,27 +133,18 @@ export async function InvoicePhotoGrid({
   if (variant === "receipt")
     return (
       <section aria-label="Job photos" className="break-inside-avoid">
-        <ul className="grid grid-cols-4 gap-1.5">
-          {photos.slice(0, 4).map((p) => (
-            <li
-              key={p.id}
-              className="relative aspect-square overflow-hidden rounded-[8px] bg-fill-2"
-            >
-              {/* biome-ignore lint/performance/noImgElement: signed thumbnails */}
-              <img
-                src={p.thumbUrl}
-                alt={p.tag ? `${TAG_LABEL[p.tag]} photo` : "Job photo"}
-                className="size-full object-cover"
-                loading="lazy"
-              />
-              {p.tag && (
-                <span className="absolute top-1 left-1 rounded-pill bg-black/55 px-1.5 text-[10px] font-semibold text-white">
-                  {TAG_LABEL[p.tag]}
-                </span>
-              )}
-            </li>
-          ))}
-        </ul>
+        <PhotoGrid
+          columns={4}
+          photos={photos.slice(0, 4).map((p) => ({
+            id: p.id,
+            url: p.url,
+            thumbUrl: p.thumbUrl,
+            tag: p.tag,
+            caption: p.caption,
+            takenAt: at(p),
+            alt: p.tag ? `${TAG_LABEL[p.tag]} photo` : "Job photo",
+          }))}
+        />
       </section>
     );
 

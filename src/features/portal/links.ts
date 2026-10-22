@@ -60,6 +60,29 @@ export async function mintEstimateLink(
   return r.url;
 }
 
+/** How long a present-mode link lives (reused per half: 12–24 h left). */
+export const PRESENT_TTL_MS = DAY;
+
+/**
+ * The customer's own /e/ page for present mode on a staff tablet (the caller adds
+ * `?present=1`). Reused across taps (mintOrReusePublicToken, purpose
+ * "estimate.present"), short-lived, separate from the link the customer was sent.
+ */
+export async function mintEstimatePresentLink(
+  tx: Tx,
+  est: { id: string; customerId: string; jobId: string | null },
+): Promise<string> {
+  const r = await mintOrReusePublicToken(tx, {
+    kind: "estimate",
+    entity: { type: "estimate", id: est.id },
+    customerId: est.customerId,
+    jobId: est.jobId,
+    purpose: "estimate.present",
+    ttlMs: PRESENT_TTL_MS,
+  });
+  return r.url;
+}
+
 export async function mintInvoicePortalLink(
   tx: Tx,
   inv: { id: string; customerId: string; jobId: string | null },

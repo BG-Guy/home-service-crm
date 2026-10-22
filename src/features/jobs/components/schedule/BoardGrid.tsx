@@ -25,6 +25,9 @@ import { techColor } from "./colors";
 // grid; 3-day / week = day columns. Native HTML5 drag-and-drop (no library):
 // drop on a tech column at a time to assign + schedule, on a day column to move
 // the day. Unscheduled / on-hold cards in the rail drag onto the board too.
+// `fill` (full screen, ScheduleBoard): the board takes the whole hub and scrolls
+// both ways inside its card, under sticky tech / day headers and the time column;
+// the queues rail shows from 1024 px.
 
 const AssignSheet = dynamic(() => import("../AssignSheet"), { ssr: false });
 
@@ -88,9 +91,12 @@ type Drag = { jobId: string; fromTech: string | null };
 export default function BoardGrid({
   data,
   colorBy,
+  fill = false,
 }: {
   data: BoardData;
   colorBy: ColorBy;
+  /** Full screen: fill the hub and scroll inside (sticky headers stick). */
+  fill?: boolean;
 }) {
   const [jobs, setJobs] = useState(data.jobs);
   const [queue, setQueue] = useState(data.unscheduled);
@@ -116,6 +122,12 @@ export default function BoardGrid({
   const techMap = useMemo(
     () => new Map(data.techs.map((t) => [t.id, t])),
     [data.techs],
+  );
+  // The board and its rail; in full screen the hub's body is their box.
+  const shell = cx("flex gap-4", fill && "h-full p-3 md:p-4");
+  const scroller = cx(
+    "card min-w-0 flex-1 overflow-x-auto p-0",
+    fill && "h-full overflow-y-auto overscroll-contain",
   );
   const startMin = data.startHour * 60;
   const endMin = data.endHour * 60;
@@ -264,7 +276,8 @@ export default function BoardGrid({
   });
 
   // -------------------------------------------------------------- pieces
-  const card = (j: BoardJob, compact = false) => {
+  /** A job card. `withTechs`: who's on it, as avatar chips inside the card. */
+  const card = (j: BoardJob, compact = false, withTechs = false) => {
     const color = jobColor(j, techMap, colorBy);
     // The left edge is always the lead tech's color (who's on it at a glance);
     // the soft fill follows "color by".
@@ -279,7 +292,8 @@ export default function BoardGrid({
         href={`/jobs/${j.id}`}
         title={[j.number, j.title, j.customerName, ...j.warnings].join(" · ")}
         className={cx(
-          "group flex h-full min-h-0 flex-col overflow-hidden rounded-[12px] border-l-[4px] bg-[color-mix(in_srgb,var(--c)_13%,var(--card))] py-1.5 pr-2 pl-2.5 text-left transition-[transform,box-shadow] duration-200 ease-[var(--ease-spring)] hover:-translate-y-px hover:shadow-[var(--shadow-raised)]",
+          "group flex h-full min-h-0 flex-col overflow-hidden rounded-[12px] border-l-[4px] bg-[color-mix(in_srgb,var(--c)_13%,var(--card))] text-left transition-[transform,box-shadow] duration-200 ease-[var(--ease-spring)] hover:-translate-y-px hover:shadow-[var(--shadow-raised)]",
+          fill ? "py-1 pr-1.5 pl-2" : "py-1.5 pr-2 pl-2.5",
           drag?.jobId === j.id && "opacity-40",
           pendingStart && "animate-pulse",
         )}
@@ -311,10 +325,47 @@ export default function BoardGrid({
             />
           )}
         </span>
-        <span className="truncate text-footnote font-semibold">{j.title}</span>
+        {/* Full screen (narrow columns): the title takes two lines. */}
+        <span
+          className={cx(
+            "text-footnote font-semibold",
+            fill ? "line-clamp-2 break-words" : "truncate",
+          )}
+        >
+          {j.title}
+        </span>
         {!compact && (
-          <span className="truncate text-caption text-label-2">
+          <span
+            className={cx(
+              "truncate text-label-2",
+              fill ? "text-[11px] leading-[14px]" : "text-caption",
+            )}
+          >
             {j.customerName} · {j.addressShort}
+          </span>
+        )}
+        {withTechs && j.techIds.length > 0 && (
+          <span className="mt-1 flex min-w-0 flex-wrap gap-1">
+            {j.techIds.slice(0, 2).map((t) => {
+              const tech = techMap.get(t);
+              const name = tech?.name ?? "";
+              return (
+                <span
+                  key={t}
+                  className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-full bg-[color-mix(in_srgb,var(--card)_72%,transparent)] py-px pr-1.5 pl-px text-[11px] font-medium leading-4"
+                >
+                  <span aria-hidden className="flex">
+                    <Avatar
+                      name={name}
+                      seed={t}
+                      color={techColor(tech, t)}
+                      size={16}
+                    />
+                  </span>
+                  <span className="truncate">{name.split(" ")[0]}</span>
+                </span>
+              );
+            })}
           </span>
         )}
       </Link>
@@ -329,7 +380,11 @@ export default function BoardGrid({
 
   const rail = (
     <aside
-      className="flex w-[260px] shrink-0 flex-col gap-4"
+      className={cx(
+        "w-[260px] shrink-0 flex-col gap-4",
+        // Full screen: the days get the width; the queues show from 1280 px.
+        fill ? "hidden h-full overflow-y-auto xl:flex" : "flex",
+      )}
       aria-label="Queues"
     >
       {[
@@ -396,12 +451,12 @@ export default function BoardGrid({
   // -------------------------------------------------------------- day view
   if (data.view === "day") {
     return (
-      <div className="flex gap-4">
-        <div className="card min-w-0 flex-1 overflow-x-auto p-0">
+      <div className={shell}>
+        <div className={scroller}>
           {/* Tech columns share the width (≥ 180 px each) instead of a fixed 180 px (QA T4-29). */}
           <div className="flex w-full min-w-max">
             <div className="sticky left-0 z-10 w-14 shrink-0 bg-card">
-              <div className="h-12 border-b border-[var(--sep)]" />
+              <div className="sticky top-0 z-[1] h-12 border-b border-[var(--sep)] bg-card" />
               <div className="relative" style={{ height }}>
                 {nowMin != null && (
                   <span
@@ -465,7 +520,7 @@ export default function BoardGrid({
                   key={id}
                   className="min-w-[180px] flex-1 basis-0 border-l border-[var(--sep)]"
                 >
-                  <div className="sticky top-0 flex h-12 items-center gap-2 border-b border-[var(--sep)] bg-card px-2">
+                  <div className="sticky top-0 z-[5] flex h-12 items-center gap-2 border-b border-[var(--sep)] bg-card px-2">
                     {tech ? (
                       <>
                         <Avatar
@@ -584,14 +639,32 @@ export default function BoardGrid({
   }
 
   // -------------------------------------------------------------- 3-day / week
+  // Full screen: columns sized from the board's width (ScheduleBoard's
+  // `.sb-grid`: about 7 days in view on a landscape tablet, 4 upright, 3.75 on a
+  // landscape phone), days without jobs at half width, the rest scrolls sideways.
+  const busy = new Set(jobs.map((j) => j.dayKey));
+  const units = data.days.reduce((n, d) => n + (busy.has(d) ? 1 : 0.5), 0);
   return (
-    <div className="flex gap-4">
-      <div className="card min-w-0 flex-1 overflow-x-auto p-0">
+    <div className={shell}>
+      <div className={cx(scroller, fill && "sb-cols")}>
         <div
-          className="grid min-w-max"
-          style={{
-            gridTemplateColumns: `repeat(${data.days.length}, minmax(150px, 1fr))`,
-          }}
+          className={cx("grid", fill ? "sb-grid min-h-full" : "min-w-max")}
+          style={
+            fill
+              ? {
+                  gridTemplateColumns: data.days
+                    .map((d) =>
+                      busy.has(d)
+                        ? "minmax(var(--col),1fr)"
+                        : "minmax(calc(var(--col) * .5),.5fr)",
+                    )
+                    .join(" "),
+                  minWidth: `calc(var(--col) * ${units})`,
+                }
+              : {
+                  gridTemplateColumns: `repeat(${data.days.length}, minmax(150px, 1fr))`,
+                }
+          }
         >
           {data.days.map((day) => {
             const dayJobs = jobs
@@ -601,20 +674,23 @@ export default function BoardGrid({
             return (
               <div
                 key={day}
-                className="flex min-h-[60vh] flex-col border-l border-[var(--sep)] first:border-l-0"
+                className="flex min-h-[60vh] min-w-0 flex-col border-l border-[var(--sep)] first:border-l-0"
               >
                 <div
                   className={cx(
-                    "sticky top-0 flex h-12 flex-col justify-center border-b border-[var(--sep)] bg-card px-2",
+                    "sticky top-0 z-[5] flex h-12 min-w-0 flex-col justify-center border-b border-[var(--sep)] bg-card px-2",
                     isToday && "text-accent",
                   )}
                 >
-                  <span className="text-subhead font-semibold">
-                    {formatDateKey(day, "en-US", {
-                      weekday: "short",
-                      month: "short",
-                      day: "numeric",
-                    })}
+                  <span className="truncate text-subhead font-semibold">
+                    {/* Full screen: "Wed 21" (the month is in the top bar). */}
+                    {fill
+                      ? `${formatDateKey(day, "en-US", { weekday: "short" })} ${Number(day.slice(8))}`
+                      : formatDateKey(day, "en-US", {
+                          weekday: "short",
+                          month: "short",
+                          day: "numeric",
+                        })}
                   </span>
                   <span className="text-caption text-label-2">
                     {dayJobs.length} job{dayJobs.length === 1 ? "" : "s"}
@@ -643,27 +719,7 @@ export default function BoardGrid({
                       {...dragProps(j, j.primaryTechId)}
                       className="cursor-grab active:cursor-grabbing"
                     >
-                      <div className="flex flex-col">
-                        {card(j)}
-                        {j.techIds.length > 0 && (
-                          <span className="mt-0.5 flex items-center gap-1 px-1 text-caption text-label-2">
-                            {j.techIds.slice(0, 2).map((t) => (
-                              <span
-                                key={t}
-                                className="inline-flex items-center gap-0.5"
-                              >
-                                <span
-                                  className="size-1.5 rounded-full"
-                                  style={{
-                                    background: techColor(techMap.get(t), t),
-                                  }}
-                                />
-                                {techMap.get(t)?.name.split(" ")[0]}
-                              </span>
-                            ))}
-                          </span>
-                        )}
-                      </div>
+                      {card(j, false, true)}
                     </div>
                   ))}
                 </section>

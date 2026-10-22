@@ -60,6 +60,7 @@ export function EstimateApproval({
   consentText,
   signerNameDefault,
   coolingOff,
+  present,
   children,
 }: {
   token: string;
@@ -71,6 +72,8 @@ export function EstimateApproval({
   consentText: string;
   signerNameDefault: string;
   coolingOff: boolean;
+  /** Present mode (staff tablet): the approval records an in-person signature. */
+  present?: boolean;
   /** Page content after the options (warranty, terms, footer); the booking bar follows it. */
   children?: ReactNode;
 }) {
@@ -373,6 +376,7 @@ export function EstimateApproval({
               token,
               optionId: pick.id,
               addonIds: addons[pick.id] ?? [],
+              present,
             });
             return r.ok
               ? { ok: true, data: { signatureId: r.data?.signatureId ?? "" } }

@@ -337,6 +337,98 @@ function AssigningCard({ data, job }: { data: HubData; job: HubJob }) {
 
 /* ------------------------------------------------------------------ tech panel */
 
+/**
+ * The one assign action for a tech on `?job=` (through HubAssignButton and the
+ * existing `scheduleJob`), the job's time for them, and why there is no action
+ * when there isn't. Shared by the panel and the full-screen footer.
+ */
+function assignFor(
+  t: HubTech,
+  data: HubData,
+  rec: Recommendation | undefined,
+  block: boolean,
+) {
+  const job = data.job;
+  if (!job) return null;
+  const assigned = job.assigneeIds.includes(t.id);
+  const replacing = data.techs
+    .filter((x) => job.assigneeIds.includes(x.id) && x.id !== t.id)
+    .map((x) => x.name);
+  const suggested =
+    !job.start && rec?.suggestedStart != null
+      ? new Intl.DateTimeFormat("en-GB", {
+          timeZone: data.tz,
+          hour: "2-digit",
+          minute: "2-digit",
+          hourCycle: "h23",
+        }).format(rec.suggestedStart)
+      : null;
+  const canAct =
+    !assigned && (!!job.start || (data.canReschedule && !!suggested));
+  const action = canAct ? (
+    <HubAssignButton
+      jobId={job.id}
+      jobNumber={job.number}
+      techId={t.id}
+      techName={t.name}
+      date={data.date}
+      start={job.start ? null : suggested}
+      minutes={job.minutes}
+      replacing={replacing}
+      block={block}
+    />
+  ) : null;
+  const whenText = job.start
+    ? windowText(job, data.tz)
+    : rec?.suggestedStart != null
+      ? `Suggested ${formatTime(rec.suggestedStart, data.tz)}`
+      : "No free slot";
+  const note = assigned
+    ? `${t.name.split(" ")[0]} is already on this job.`
+    : action
+      ? null
+      : job.start
+        ? "You can't assign this job."
+        : "No free slot that day. Pick another day or open the job to set a time.";
+  return { job, assigned, action, whenText, note };
+}
+
+/**
+ * Full-screen Assign hub footer (`?job=`): the job and its time for this tech,
+ * the fit, and the one primary "Assign <name>" (or why not).
+ */
+export function HubFsFooter({
+  t,
+  data,
+  rec,
+}: {
+  t: HubTech;
+  data: HubData;
+  rec: Recommendation | undefined;
+}) {
+  const a = assignFor(t, data, rec, false);
+  if (!a) return null;
+  return (
+    <div className="flex w-full min-w-0 items-center gap-3">
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="num truncate text-headline">{a.job.number}</span>
+          {rec && <RecChip r={rec} />}
+        </div>
+        <div className="truncate text-footnote text-label-2">
+          {a.action || a.assigned ? a.whenText : a.note}
+        </div>
+      </div>
+      {a.action ??
+        (a.assigned && (
+          <span className="shrink-0 text-subhead text-label-2">
+            Already on it
+          </span>
+        ))}
+    </div>
+  );
+}
+
 export function TechPanel({
   t,
   data,
@@ -348,44 +440,10 @@ export function TechPanel({
 }) {
   const st = STATE[t.state];
   const job = data.job;
-  const assigned = job ? job.assigneeIds.includes(t.id) : false;
-  const replacing = job
-    ? data.techs
-        .filter((x) => job.assigneeIds.includes(x.id) && x.id !== t.id)
-        .map((x) => x.name)
-    : [];
-  const suggested =
-    job && !job.start && rec?.suggestedStart != null
-      ? new Intl.DateTimeFormat("en-GB", {
-          timeZone: data.tz,
-          hour: "2-digit",
-          minute: "2-digit",
-          hourCycle: "h23",
-        }).format(rec.suggestedStart)
-      : null;
-  const canAct =
-    !!job && !assigned && (!!job.start || (data.canReschedule && !!suggested));
-  const action =
-    job && canAct ? (
-      <HubAssignButton
-        jobId={job.id}
-        jobNumber={job.number}
-        techId={t.id}
-        techName={t.name}
-        date={data.date}
-        start={job.start ? null : suggested}
-        minutes={job.minutes}
-        replacing={replacing}
-        block
-      />
-    ) : null;
-  const whenText = job
-    ? job.start
-      ? windowText(job, data.tz)
-      : rec?.suggestedStart != null
-        ? `Suggested ${formatTime(rec.suggestedStart, data.tz)}`
-        : "No free slot"
-    : "";
+  const a = assignFor(t, data, rec, true);
+  const assigned = a?.assigned ?? false;
+  const action = a?.action ?? null;
+  const whenText = a?.whenText ?? "";
 
   // The day as a trip timeline, with the job being assigned dropped into its slot.
   const steps: TripStep[] = t.jobs.map((s) => ({

@@ -398,7 +398,15 @@ export async function processLead(
         .select({ id: leads.id })
         .from(leads)
         .where(
-          and(eq(leads.dedupeHash, dedupeHash), gte(leads.createdAt, since)),
+          and(
+            eq(leads.dedupeHash, dedupeHash),
+            gte(leads.createdAt, since),
+            // A person logging a call is never a double submit of a lead that
+            // was already booked, lost or marked spam: that is a new request.
+            input.auth.kind === "manual"
+              ? inArray(leads.status, [...OPEN_STATUSES])
+              : undefined,
+          ),
         )
         .orderBy(desc(leads.createdAt))
         .limit(1);

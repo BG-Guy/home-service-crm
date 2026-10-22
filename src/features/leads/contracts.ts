@@ -93,3 +93,20 @@ export interface LeadPreviewResult {
   spamReasons: string[];
   extraKeys: string[];
 }
+
+/** A returning caller found by phone (call-to-booking step 1). */
+export interface CallerMatch {
+  customerId: string;
+  name: string;
+  /** Jobs on file (cancelled excluded). */
+  jobs: number;
+  /** Their primary (else first) service address; null without contact_view. */
+  address: {
+    propertyId: string;
+    street: string;
+    unit: string | null;
+    city: string;
+    state: string;
+    zip: string;
+  } | null;
+}

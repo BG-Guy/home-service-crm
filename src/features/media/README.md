@@ -1,6 +1,6 @@
 # Photos & evidence media (M11) — owner B4
 
-Hashed, geostamped job photos with before/after tagging, a gallery with compare, and
+Hashed, geostamped job photos with before/after tagging, a grouped gallery with a full-screen viewer, and
 photo embedding on invoices, receipts and the customer portal.
 
 - **Capture (S24 `CameraCaptureButton`)** wraps the UI-kit `CameraButton`: compress
@@ -11,10 +11,12 @@ photo embedding on invoices, receipts and the customer portal.
   photos always work). Originals are kept for `settings.media.keep_originals_tags`.
 - **Flags**: `possibly_from_library` and `no_geo` at upload (F), `far_from_site` by the
   `photo.uploaded` handler (`settings.media.far_from_site_m`, GPS accuracy credited).
-- **Gallery (S23 `JobPhotosPanel`)**: filter by tag, detail sheet (time, uploader, GPS,
-  flags, lock state), star for the invoice, re-tag/caption, soft delete (`photos.delete`,
-  reason, audited; blocked for evidence: issued invoice, signature, dispute), before/after
-  compare slider (lazy `PhotoCompare`).
+- **Gallery (S23 `JobPhotosPanel`)**: the kit `PhotoGrid` grouped by tag (`JOB_PHOTO_GROUPS`:
+  Before / During / After / Problem / Other); a tap opens the full-screen `PhotoViewer` (swipe
+  through every photo, lazy chunk). Its Info button opens the details sheet over it (time,
+  uploader, GPS, flags, lock state), star for the invoice, re-tag/caption, soft delete
+  (`photos.delete`, reason, audited; blocked for evidence: issued invoice, signature, dispute).
+  No before/after slider in the panel (the kit `PhotoCompare` stays for other uses).
 - **Embedding (`selectInvoicePhotos`)**: flags → company default
   (`invoices.photos_on_invoice/receipt`) → service type → invoice `show_photos` +
   ordered `photo_media_ids` → starred → latest 2 before + 2 after. Invoice ≤ 8 (2-up,

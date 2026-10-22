@@ -21,7 +21,10 @@ import {
 import { assertJobAccess } from "@/features/jobs/api";
 import { getLeadPrefill } from "@/features/leads/api";
 import { enqueueMessage } from "@/features/messaging/api";
-import { mintEstimateLink } from "@/features/portal/links";
+import {
+  mintEstimateLink,
+  mintEstimatePresentLink,
+} from "@/features/portal/links";
 import { action, zf } from "@/lib/action";
 import {
   ConflictError,
@@ -520,6 +523,27 @@ const deviceDate = (s: string) => {
   const d = new Date(s);
   return Number.isNaN(d.getTime()) ? null : d;
 };
+
+/**
+ * "Present to customer": the customer's own /e/ page on this device, full screen
+ * (present mode). Mints or reuses a short-lived link; nothing is sent.
+ */
+export const presentEstimate = action({
+  perm: "estimates.send",
+  feature: F,
+  input: z.object({ estimateId: uuid }),
+  audit: "estimate.presented",
+  async run({ input, user, tx }) {
+    await assertEstimateAccess(user, input.estimateId, "read");
+    const e = await openEstimateOrThrow(tx, input.estimateId);
+    const loaded = await loadEstimate(e.id, tx);
+    if (!loaded || loaded.options.every((o) => o.lines.length === 0))
+      throw new ValidationError({ lines: ["Add at least one item first."] });
+    const url = await mintEstimatePresentLink(tx, e);
+    return { estimateId: e.id, href: `${new URL(url).pathname}?present=1` };
+  },
+  auditEntity: ({ input }) => ({ type: "estimate", id: input.estimateId }),
+});
 
 /** "Sign on this device": the customer signs on the tech's phone (S15, in person). */
 export const signEstimateInPerson = action({

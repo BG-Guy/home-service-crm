@@ -954,6 +954,10 @@
     z-index: var(--z-sticky);
     background: var(--bg);
   }
+  /* Calendar (phone): weekday header pinned under the nav bar. */
+  .cal-weekdays {
+    top: var(--sticky-top, calc(env(safe-area-inset-top) + 44px));
+  }
 
   /* ---------- Fields: filled, focus glow, M18 error shake ---------- */
   .field-box {
@@ -2035,15 +2039,29 @@
   }
 
   /* ---------- Toasts (M7): phone island at the top, desktop card bottom right ---------- */
+  /* The host is a manual popover (shown only over a full-screen hub): undo the
+     UA popover box (display: none while closed, inset 0, margin auto, border). */
   .toast-region {
+    display: block;
     position: fixed;
     top: calc(env(safe-area-inset-top) + 8px);
+    right: auto;
+    bottom: auto;
     left: 50%;
     z-index: var(--z-toast);
     width: min(420px, calc(100% - 2 * var(--gutter)));
     height: 64px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    overflow: visible;
+    background: none;
+    color: inherit;
     translate: -50% 0;
     pointer-events: none;
+  }
+  .toast-region::backdrop {
+    display: none;
   }
   .toast-region[data-empty] {
     height: 0;
@@ -2217,51 +2235,6 @@
         transform: translateX(32px);
       }
     }
-  }
-
-  /* ---------- Photo lightbox ---------- */
-  dialog.lightbox {
-    position: fixed;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    max-width: none;
-    max-height: none;
-    margin: 0;
-    padding: 0;
-    border: 0;
-    background: #000;
-    color: #fff;
-    opacity: 0;
-    transition:
-      opacity 250ms ease,
-      overlay 250ms allow-discrete,
-      display 250ms allow-discrete;
-  }
-  dialog.lightbox[open] {
-    opacity: 1;
-  }
-  @starting-style {
-    dialog.lightbox[open] {
-      opacity: 0;
-    }
-  }
-  .lightbox-track {
-    display: flex;
-    height: 100%;
-    overflow-x: auto;
-    scroll-snap-type: x mandatory;
-    overscroll-behavior: contain;
-    scrollbar-width: none;
-  }
-  .lightbox-track::-webkit-scrollbar {
-    display: none;
-  }
-  .lightbox-track > * {
-    flex: none;
-    width: 100%;
-    scroll-snap-align: center;
-    scroll-snap-stop: always;
   }
 
   /* ---------- Before/after compare ---------- */

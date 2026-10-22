@@ -10,6 +10,10 @@ export const settingsShape = {
       ping_interval_sec: z.number().int().min(60).default(60),
       stale_minutes: z.number().int().default(15),
       hide_after_minutes: z.number().int().default(60),
+      // Street map tiles for every map (Settings → Map, "OpenStreetMap (free)").
+      // Empty = off in production; NEXT_PUBLIC_TILE_URL always wins.
+      tile_url: z.string().max(500).default(""),
+      tile_attribution: z.string().max(300).default(""),
     })
     .prefault({}),
 } as const;

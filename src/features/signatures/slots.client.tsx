@@ -2,22 +2,25 @@
 
 import { PenLine } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useId, useRef, useState } from "react";
+import { useId, useState } from "react";
 import { getPosition } from "@/client/geo";
 import { newId } from "@/lib/ids";
 import { Button } from "@/ui/components/Button";
 import { TextField } from "@/ui/components/Field";
-import { LazySignaturePad } from "@/ui/components/lazy";
 import { Sheet } from "@/ui/components/Sheet";
-import type { SignaturePadHandle } from "@/ui/components/SignaturePad";
+import {
+  type CapturedSignature,
+  SignatureField,
+} from "@/ui/components/SignatureField";
 import { toast } from "@/ui/components/Toast";
 import type { SignatureSheetProps } from "./contracts";
 import { SignatureUploadError, uploadSignature } from "./upload.client";
 
 // Client UI slot S15 (BUILD_PLAN §5.1): ESIGN consent checkbox, typed name and the
-// UI-kit SignaturePad (lazy chunk). On "Sign": PNG → upload (session outbox, or the
-// public magic-link route when `publicToken` is set) → best-effort geolocation →
-// the CONSUMER's server action with { signerName, esignConsent, signatureMediaId,
+// UI-kit SignatureField (tap → full-screen SignatureCapture, a lazy chunk; Done
+// hands back the PNG). On "Sign": PNG → upload (session outbox, or the public
+// magic-link route when `publicToken` is set) → best-effort geolocation → the
+// CONSUMER's server action with { signerName, esignConsent, signatureMediaId,
 // geo, deviceTs, clientId }. The consumer's action calls B3 captureSignature.
 
 export function SignatureSheet({
@@ -52,14 +55,16 @@ export function SignatureSheet({
   const [openState, setOpenState] = useState(false);
   const controlled = openProp !== undefined;
   const open = controlled ? openProp : openState;
+  const [sig, setSig] = useState<CapturedSignature | null>(null);
   const setOpen = (v: boolean) => {
     if (!controlled) setOpenState(v);
+    // A closed sheet (signed, cancelled or discarded) starts over next time.
+    if (!v) setSig(null);
     onOpenChange?.(v);
   };
-  const pad = useRef<SignaturePadHandle>(null);
   const [name, setName] = useState(signerNameDefault);
   const [consent, setConsent] = useState(false);
-  const [drawn, setDrawn] = useState(false);
+  const drawn = sig != null;
   const [busy, setBusy] = useState<null | string>(null);
   const [error, setError] = useState<string | null>(null);
   const consentId = useId();
@@ -70,7 +75,7 @@ export function SignatureSheet({
     setError(null);
     try {
       setBusy("Saving signature…");
-      const blob = await pad.current?.toBlob();
+      const blob = sig?.blob;
       if (!blob) throw new SignatureUploadError("Draw your signature first.");
       const geoPromise = wantGeo
         ? getPosition({ timeoutMs: 5000, maxAgeMs: 120_000 })
@@ -204,10 +209,13 @@ export function SignatureSheet({
             <p className="px-1 pb-1.5 text-footnote font-medium text-label-2">
               Signature
             </p>
-            <LazySignaturePad
-              ref={pad}
-              onChange={(empty: boolean) => setDrawn(!empty)}
+            <SignatureField
+              value={sig}
+              onChange={setSig}
+              title={title}
+              subtitle={name.trim() || undefined}
               label={`Signature for ${title}`}
+              disabled={!!busy}
             />
           </div>
           {error && (

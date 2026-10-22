@@ -28,7 +28,7 @@ transform, ES2017, fails above 3 KB gzipped; currently about 1.8 KB).
 ## Screens
 - `/leads`: SLA-sorted cards (oldest unanswered first) with the live timer (green < 5 min, amber < 15, red beyond), source, service, price, preferred date, in/out of service area, returning badge; chips Inbox / Check / Booked / Lost / Spam / Mine / Overdue / per source; swipe for Lost / Spam. Appendix A params `status= source= from= to= filter=check|breached|mine`.
 - `/leads/[id]`: Call (claim + `tel:` + outcome sheet; no answer creates a `lead_retry` task in 15 min and drafts a `lead.no_answer` text), Text, Claim / Take over, Convert (→ `/jobs/new?leadId=` or `/estimates/new?leadId=`, customer + property created first), More (qualified, lost with reason, spam, reopen), attribution, consent, notes, tags, timeline, intake log, raw payload (admins).
-- `/leads/new`: manual entry; the source is required; verbal consent box.
+- `/leads/new`: the call-to-booking flow (step 1 caller, `createLeadAndCustomer`) → `/leads/new/schedule` (calendar + windows, `createJobAction`) → `/leads/new/done`. The source is required; verbal consent box.
 - `/settings/lead-sources` (+ `[id]`): sources, inbox rules (`settings.leads`, `company.lead_response_minutes`), per-source snippets for all three levels with the real key, keys (pk shown; sk, hook URL and Google key shown once; rotation), test console (last 20 payloads + mapping result + paste box), JSON-path mapping editor, ROI and monthly spend, origins / `require_ts` / Turnstile / daily cap / cost model.
 - `/settings/api-keys`: create (shown once), revoke.
 
