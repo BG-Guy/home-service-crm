@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Estimates and invoices: cards by default, a peek, then the full page (2026-10-23)
+- `/estimates` and `/invoices` show their documents as a grid of cards, like the job cards: the
+  status and amount on top (invoices: the balance, "of $total" once part is paid), the customer,
+  the number and title, a status line (sent / viewed / due / past due in red), and four actions:
+  Call (through the app), Text, the job (its number) and Open. A Cards | List switch keeps the
+  list (remembered per page in the `estimates-layout` / `invoices-layout` cookies).
+- Open (or a tap on the card) peeks in a sheet (`?doc=<id>`, Back closes it): estimates show each
+  option's total (approved or recommended marked), the sent / viewed / expiry dates, the job, job
+  type, address, the first lines and the notes; invoices show total, paid and balance, issued and
+  due dates, the job, techs, address and the first lines. The button opens the full page.
+- Shared pieces: `DocCards`, `DocPeekSheet` (lazy) and `DocLayoutSwitch` in
+  `src/app/(app)/_components/`, the shapes in `src/lib/doc-cards.ts`; the peeks are
+  `fetchEstimatePeek` / `fetchInvoicePeek` (`peek-actions.ts`, the full pages' access checks and
+  contact masking). Budgets: both routes 14.6 KB gz, global CSS unchanged (24.88 KB gz).
+
 ### Jobs: cards by default, a peek, then the full page (2026-10-23)
 - `/jobs` shows each day's jobs as a grid of cards (like the lead boxes): one column on phones,
   two on tablets, as many as fit on desktop. A Cards | List switch (remembered in the
