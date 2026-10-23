@@ -2,9 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/current";
+import { listDemoLogins } from "@/lib/auth/demo-logins";
 import { safeNextPath } from "@/lib/auth/safe-next";
 import { findCompany, getSettings } from "@/lib/settings";
 import { AuthCard } from "../_components/AuthCard";
+import { DemoLogins } from "./DemoLogins";
 import { LoginForm } from "./LoginForm";
 
 export const metadata: Metadata = { title: "Sign in" };
@@ -19,11 +21,12 @@ export default async function LoginPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const [company, settings, user, sp] = await Promise.all([
+  const [company, settings, user, sp, demo] = await Promise.all([
     findCompany(),
     getSettings(),
     getCurrentUser(),
     searchParams,
+    listDemoLogins(),
   ]);
   // First run: nothing to sign in to yet.
   if (!company) redirect("/signup");
@@ -48,6 +51,13 @@ export default async function LoginPage({
         </>
       }
     >
+      {demo.length > 0 && (
+        <div className="mb-5">
+          <DemoLogins
+            users={demo.map((u) => ({ role: u.role, name: u.name }))}
+          />
+        </div>
+      )}
       <LoginForm next={next} />
     </AuthCard>
   );

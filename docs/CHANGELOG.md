@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Demo quick sign-in (2026-10-23)
+- The three demo businesses (`npm run demo:businesses`) show one-tap **Admin / Office / Tech**
+  buttons on the login page, so nobody types the demo password. They sign in as the first active
+  user of each role through the normal `login()` (password check, throttle and audit intact):
+  `demoLoginAction` (`features/auth/actions.ts`), `src/lib/auth/demo-logins.ts`,
+  `(auth)/login/DemoLogins.tsx`. On only when `DEMO_LOGIN_PASSWORD` is set, which only the demo
+  script does; never set it on a real deployment (docs/DEPLOY.md).
+
 ### Leads flow redesign (2026-10-22)
 Design review "Making the leads flow feel like Life360": ten proposals and twelve smaller fixes,
 each marked Build it, Later or Skip by the owner. This is everything marked Build it, with the

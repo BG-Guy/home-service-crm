@@ -79,6 +79,7 @@ start_one() {
   fi
   PGLITE_DIR="$dir/db" UPLOADS_DIR="$dir/uploads" SESSION_SECRET="$(secret)" \
     APP_URL="$url" COOKIE_INSECURE=1 DEMO_PROFILE="$t" \
+    DEMO_LOGIN_PASSWORD='TestDrive2026!' \
     nohup npx next start -p "$port" >>"$dir/server.log" 2>&1 &
   echo $! >"$dir/server.pid"
   for _ in $(seq 1 60); do

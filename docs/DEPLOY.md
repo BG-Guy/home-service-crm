@@ -29,6 +29,8 @@ Stripe (`PAYMENTS_DRIVER=stripe`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`).
 
 The session cookie is `__Host-sid` (Secure) in production, so the site must be served over
 HTTPS. `COOKIE_INSECURE=1` exists only for local production testing over plain http.
+**Never set `DEMO_LOGIN_PASSWORD`** on a real deployment: it puts one-tap Admin / Office / Tech
+sign-in buttons on the login page (only `npm run demo:businesses` sets it, for the demo businesses).
 
 ## 2. Database migrations
 

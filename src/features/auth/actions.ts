@@ -4,6 +4,11 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { action, actionFailure, formDataToObject } from "@/lib/action";
 import { getCurrentUser } from "@/lib/auth/current";
+import {
+  DEMO_ROLES,
+  demoLogin,
+  demoLoginPassword,
+} from "@/lib/auth/demo-logins";
 import type { NewSession } from "@/lib/auth/flows";
 import {
   acceptInvite,
@@ -73,6 +78,31 @@ export async function loginAction(...args: unknown[]): Promise<ActionResult> {
   }
   await startSession(s);
   redirect(safeNext((input as { next?: unknown }).next));
+}
+
+/**
+ * Demo businesses only: one-tap sign-in as the first admin / office / tech
+ * (`src/lib/auth/demo-logins.ts`). Off unless DEMO_LOGIN_PASSWORD is set; still
+ * goes through login(), so a changed password or the throttle stops it.
+ */
+export async function demoLoginAction(role: string): Promise<ActionResult> {
+  const password = demoLoginPassword();
+  const r = DEMO_ROLES.find((x) => x === role);
+  if (!password || !r)
+    return { ok: false, error: "Quick sign-in is off here." };
+  const u = await demoLogin(r);
+  if (!u) return { ok: false, error: `No active ${r} user to sign in as.` };
+  let s: NewSession;
+  try {
+    s = await login(
+      { email: u.email, password, remember: true },
+      await requestMeta(),
+    );
+  } catch (err) {
+    return actionFailure(err);
+  }
+  await startSession(s);
+  redirect("/");
 }
 
 export async function logoutAction(): Promise<void> {
