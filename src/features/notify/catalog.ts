@@ -61,6 +61,11 @@ export const NOTIFICATION_TYPES: readonly NotificationTypeDef[] = [
     group: "Leads & jobs",
   },
   {
+    key: "staff.message_received",
+    label: "New text from a customer",
+    group: "Leads & jobs",
+  },
+  {
     key: "staff.outbox_ready",
     label: "Customer texts ready",
     group: "Leads & jobs",

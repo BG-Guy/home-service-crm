@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Notifications: type icons, cards, filters, sort and a peek (2026-10-23)
+- Every notification shows its type's icon on its color (`src/features/notify/kinds.ts`: new
+  lead blue, unconfirmed job orange, estimate approved green, new text green, chargeback red…),
+  with the unread dot on the icon's corner. A test checks every catalog type has its own icon.
+- List (the default, grouped by day) or Cards (a grid, like the other lists), remembered in the
+  `notifications-layout` cookie.
+- Filter chips: All, Unread and each kind present (Leads, Jobs, Estimates, Texts, Money,
+  Approvals, Team & pay, Fleet & tools, Other) with counts; Sort: newest, oldest, unread first,
+  urgent first.
+- Tapping one peeks at it in a sheet (`?n=<id>`, Back closes it; it's marked read): its kind,
+  when, the whole message, and "Open lead / job / outbox…" to go to its page.
+- New type `staff.message_received` ("New text from a customer"): an inbound customer text
+  notifies the people who can see all messages (per their preferences), linked to the
+  conversation (`messaging.inbound_notify` on `message.received`).
+
 ### Estimates and invoices: cards by default, a peek, then the full page (2026-10-23)
 - `/estimates` and `/invoices` show their documents as a grid of cards, like the job cards: the
   status and amount on top (invoices: the balance, "of $total" once part is paid), the customer,

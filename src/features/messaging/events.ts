@@ -33,6 +33,31 @@ export const handlers: HandlerReg[] = [
     },
   },
   {
+    // A customer texted in: the office hears about it (notification center, push
+    // per each person's preferences), linked to the conversation.
+    event: "message.received",
+    name: "messaging.inbound_notify",
+    async run(e, { tx }) {
+      const p = e.payload as P;
+      const cid = str(p, "customer_id");
+      if (!cid) return;
+      const [c] = await tx
+        .select({ name: customers.displayName })
+        .from(customers)
+        .where(eq(customers.id, cid))
+        .limit(1);
+      const body = (str(p, "body") ?? "").trim();
+      await notify(tx, {
+        to: { perm: "messages.view_all" as Perm },
+        type: "staff.message_received",
+        title: `New text from ${c?.name ?? "a customer"}`,
+        body: body.length > 160 ? `${body.slice(0, 159)}…` : body || null,
+        url: `/messages/${cid}`,
+        entity: { type: "customer", id: cid },
+      });
+    },
+  },
+  {
     // One-tap review prompt for staff (never auto-applied).
     event: "message.optout_detected",
     name: "messaging.optout_review",

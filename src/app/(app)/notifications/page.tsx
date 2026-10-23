@@ -1,5 +1,10 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { NotificationsList } from "@/features/notify/components/NotificationsList";
+import {
+  NOTIFY_LAYOUT_COOKIE,
+  parseNotifyLayout,
+} from "@/features/notify/components/notify-prefs";
 import { listNotifications } from "@/features/notify/queries";
 import { PushEnableButton } from "@/features/notify/slots.client";
 import { requireUser } from "@/lib/auth/current";
@@ -14,9 +19,10 @@ export const metadata: Metadata = { title: "Notifications" };
 // Notification center (SPEC M22): grouped by day, deep links, mark all read.
 export default async function NotificationsPage() {
   await requireUser();
-  const [initial, company] = await Promise.all([
+  const [initial, company, jar] = await Promise.all([
     listNotifications({ limit: 50 }),
     getCompany(),
+    cookies(),
   ]);
   return (
     <PageTransition>
@@ -28,6 +34,9 @@ export default async function NotificationsPage() {
         <NotificationsList
           initial={initial}
           timeZone={safeTimeZone(company.timezone)}
+          initialLayout={parseNotifyLayout(
+            jar.get(NOTIFY_LAYOUT_COOKIE)?.value,
+          )}
         />
       </Page>
     </PageTransition>
