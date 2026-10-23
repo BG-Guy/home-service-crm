@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Jobs: cards by default, a peek, then the full page (2026-10-23)
+- `/jobs` shows each day's jobs as a grid of cards (like the lead boxes): one column on phones,
+  two on tablets, as many as fit on desktop. A Cards | List switch (remembered in the
+  `jobs-layout` cookie, so no flash) keeps the old list.
+- Each card (`JobBox`): the arrival window and status, the job and its number, the customer and
+  job type, the street, the techs and flags (urgent, callback, payment), and four actions: Call
+  (through the app, `CallButton`), Text (the customer's thread), Directions (Apple Maps on Apple
+  devices) and Open. Call, Text and Directions follow the contact window, like the schedule map:
+  outside it they're off (`JobListItem.canCall` / `canText` / `navHref`, tested in
+  `tests/jobs/security-db.test.ts`).
+- Open (or a tap on the card) peeks at the job (`JobPeekSheet`, a lazy chunk; `?job=<id>`, Back
+  closes it): when it arrives and whether it's confirmed, customer, address, techs, job type,
+  checklist progress, hold or callback reasons and the notes (`fetchJobPeek`, the job page's
+  access rules). **Open job** goes to the full job page.
+- `RoundAction` moved to the kit (`src/ui/components/RoundAction.tsx`; the leads path re-exports
+  it). Budgets: `/jobs` route 17.1 KB gz, global CSS 24.88 KB gz.
+
 ### Leads inbox: the map leads on desktop (2026-10-23)
 - Desktop (≥ 1024 px): one column of lead boxes on the left, the map about half the viewport
   wide on the right (never squeezing the list under 340 px) as the main view.
