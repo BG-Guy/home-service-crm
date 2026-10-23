@@ -21,6 +21,10 @@ export interface JobListItem {
   /** The property's position for route miles; null when masked or not geocoded. */
   lat?: number | null;
   lng?: number | null;
+  /** Card quick actions (the /jobs list): call through the app, text, directions. */
+  canCall?: boolean;
+  canText?: boolean;
+  navHref?: string | null;
   city: string | null;
   windowStart: string | null;
   windowEnd: string | null;

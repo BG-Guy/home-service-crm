@@ -1,8 +1,15 @@
 import { Briefcase } from "lucide-react";
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { HeaderActions } from "@/app/(app)/_components/HeaderActions";
+import { JobCards } from "@/features/jobs/components/JobCards";
 import { JobListMore } from "@/features/jobs/components/JobListMore";
 import { JobRow } from "@/features/jobs/components/JobRow";
+import { JobsLayoutSwitch } from "@/features/jobs/components/JobsLayoutSwitch";
+import {
+  JOBS_LAYOUT_COOKIE,
+  parseJobsLayout,
+} from "@/features/jobs/components/jobs-layout";
 import {
   ParamSegmented,
   ParamSelect,
@@ -132,10 +139,12 @@ export default async function JobsPage({
     view: view || undefined,
     cursor: one(sp.cursor) || null,
   };
-  const [{ items, nextCursor, tz }, techs] = await Promise.all([
+  const [{ items, nextCursor, tz }, techs, jar] = await Promise.all([
     listJobs(filters),
     all ? techRoster() : Promise.resolve([]),
+    cookies(),
   ]);
+  const layout = parseJobsLayout(jar.get(JOBS_LAYOUT_COOKIE)?.value);
   const quick =
     QUICK.find(
       (q) =>
@@ -237,6 +246,16 @@ export default async function JobsPage({
             )}
           </div>
         )}
+        {items.length > 0 && (
+          <div className="mb-1 flex items-center justify-between gap-3">
+            <span className="text-footnote text-label-2">
+              {layout === "cards"
+                ? "Open a card to peek at the job"
+                : "Tap a job to open it"}
+            </span>
+            <JobsLayoutSwitch value={layout} />
+          </div>
+        )}
         {items.length === 0 ? (
           <div className="card mt-2">
             <EmptyState
@@ -266,6 +285,14 @@ export default async function JobsPage({
               }
             />
           </div>
+        ) : layout === "cards" ? (
+          <JobCards
+            groups={groups}
+            tz={tz}
+            filters={{ ...filters, cursor: null }}
+            cursor={nextCursor}
+            headerTop="calc(var(--sticky-top,calc(env(safe-area-inset-top) + 44px)) + var(--jobs-bar))"
+          />
         ) : (
           <div className="enter-stagger flex flex-col gap-5">
             {groups.map((g, i) => (

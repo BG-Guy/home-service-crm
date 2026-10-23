@@ -380,6 +380,11 @@ describe("contact-window masking in job reads (T5-11)", () => {
     const row = list.items.find((j) => j.id === jobA);
     expect(row?.addressMasked).toBe(true);
     expect(row?.addressShort).not.toMatch(/4385/);
+    // The card's quick actions follow the contact window too.
+    expect(row?.canCall).toBe(false);
+    expect(row?.canText).toBe(false);
+    expect(row?.navHref).toBeNull();
+    expect(row?.lat).toBeNull();
 
     auth.user = admin; // customers.contact_view
     const full = await getJobDetail(jobA);

@@ -17,6 +17,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
+import { headers } from "next/headers";
 import { cache } from "react";
 import { db } from "@/db";
 import {
@@ -32,6 +33,7 @@ import {
   users,
 } from "@/db/schema";
 import { contactRevealedFor } from "@/features/customers/api";
+import { navigateHref } from "@/features/customers/normalize";
 import { requireAnyPerm, requireUser } from "@/lib/auth/current";
 import { getCompanyTimezone } from "@/lib/settings";
 import {
@@ -139,6 +141,13 @@ type ListRow = {
   city: string | null;
   lat?: number | null;
   lng?: number | null;
+  state?: string | null;
+  zip?: string | null;
+  customerPhone?: string | null;
+  customerAnonymizedAt?: Date | null;
+  doNotText?: boolean;
+  doNotContact?: boolean;
+  smsStatus?: string;
   serviceTypeName: string | null;
   sort: Date;
 };
@@ -148,12 +157,19 @@ export function toListItem(
   assignees: JobListItem["assignees"],
   /** Masks the street outside this viewer's contact window (omit for system reads). */
   viewer?: SessionUser,
+  /** The request's user agent: adds the Directions link (Apple Maps on Apple devices). */
+  userAgent?: string | null,
 ): JobListItem {
   const reveal = revealsJobAddress(
     viewer,
     r.j,
     assignees.map((a) => a.userId),
   );
+  // The card's quick actions, by the schedule map's rules: only inside the contact
+  // window, never for an anonymized customer; the call goes through the app.
+  const contact =
+    !!viewer && reveal && !r.customerAnonymizedAt && !!r.customerPhone;
+  const street = r.unit ? `${r.street} ${r.unit}` : r.street;
   return {
     id: r.j.id,
     number: r.j.number,
@@ -172,6 +188,27 @@ export function toListItem(
     addressMasked: !reveal,
     lat: reveal ? (r.lat ?? null) : null,
     lng: reveal ? (r.lng ?? null) : null,
+    canCall: contact && !!viewer?.perms.has("customers.view"),
+    canText:
+      contact &&
+      !!viewer?.perms.has("messages.send") &&
+      !r.doNotText &&
+      !r.doNotContact &&
+      r.smsStatus !== "opted_out",
+    navHref:
+      userAgent !== undefined && reveal && r.state && r.zip
+        ? navigateHref(
+            {
+              street,
+              city: r.city ?? "",
+              state: r.state,
+              zip: r.zip,
+              lat: r.lat,
+              lng: r.lng,
+            },
+            userAgent,
+          )
+        : null,
     city: r.city,
     windowStart: isoOrNull(r.j.windowStart ?? r.j.scheduledStart),
     windowEnd: isoOrNull(r.j.windowEnd ?? r.j.scheduledEnd),
@@ -191,16 +228,32 @@ export const listRowSelect = {
   city: properties.city,
   lat: properties.lat,
   lng: properties.lng,
+  state: properties.state,
+  zip: properties.zip,
+  customerPhone: customers.phone,
+  customerAnonymizedAt: customers.anonymizedAt,
+  doNotText: customers.doNotText,
+  doNotContact: customers.doNotContact,
+  smsStatus: customers.smsStatus,
   serviceTypeName: serviceTypes.name,
   sort: sortKey,
 };
+
+/** The request's user agent for map links; null outside a request (scripts, tests). */
+async function requestUserAgent(): Promise<string | null> {
+  try {
+    return (await headers()).get("user-agent");
+  } catch {
+    return null;
+  }
+}
 
 /** /jobs list with Appendix A filters and a keyset cursor. */
 export async function listJobs(
   f: JobListFilters,
 ): Promise<{ items: JobListItem[]; nextCursor: string | null; tz: string }> {
   const user = await requireAnyPerm(["jobs.view_all", "jobs.view_own"]);
-  const tz = await getCompanyTimezone();
+  const [tz, ua] = await Promise.all([getCompanyTimezone(), requestUserAgent()]);
   const conds: (SQL | undefined)[] = [jobScope(user)];
   if (f.mine) conds.push(assignedTo(user.id));
   if (f.tech && canViewAll(user)) conds.push(assignedTo(f.tech));
@@ -287,7 +340,9 @@ export async function listJobs(
   const assignees = await assigneesFor(page.map((r) => r.j.id));
   const last = page[page.length - 1];
   return {
-    items: page.map((r) => toListItem(r, assignees.get(r.j.id) ?? [], user)),
+    items: page.map((r) =>
+      toListItem(r, assignees.get(r.j.id) ?? [], user, ua),
+    ),
     nextCursor:
       rows.length > PAGE && last
         ? encodeCursor(new Date(last.sort), last.j.id)
