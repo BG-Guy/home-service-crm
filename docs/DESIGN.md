@@ -314,24 +314,6 @@ Every named motion has a reduced-motion version (opacity ≤ 150 ms, no transfor
     bottom edge, safe-area aware. Server Component, no JS.
   - While one is on screen the root sets `--bottombar-h` (84 px; 0 in the desktop rail) so fixed
     overlays (sync capsule, FAB, desktop toasts) lift above it.
-- **Calendar** (`Calendar.tsx`, client; Airbnb-style availability picker). No screen uses it since
-  the leads flow redesign (booking picks the day on a week strip, §6); it stays in the kit:
-  ```tsx
-  <Calendar from={today} to={addDays(today, 59)} today={today} selected={day} onSelect={setDay}
-    getDay={(k) => ({ status: "best" | "open" | "limited" | "full", hint: "4 windows open" })}
-    onPreview={prefetchDay} />
-  <CalendarLegend />
-  ```
-  - Phone (< 768): every month in the range scrolls vertically under a sticky weekday header
-    (`.cal-weekdays`, pinned under the nav bar). ≥ 768: two months side by side, prev/next.
-  - Day cell: 44 px circle (40 on desktop). `best` = accent dot + "Best" (10/700 accent ink),
-    `open` = green dot, `limited` = amber ring (a ring, so it never reads as an orange brand
-    accent), `full` = `--label-3` struck through. Past days and days outside the range are
-    `--label-3`. Today has a 1.5 px `--label` ring; selected is the filled `--label` circle
-    with `--bg` text (Airbnb). No accent fill, so the page's one primary stays the only one.
-  - A11y: `role="grid"` per month, each day a button with `role="gridcell"`, `aria-selected`,
-    `aria-disabled` (still focusable). Roving tabindex: arrows, Home/End (week), PageUp/PageDown
-    (month); focus crosses months and turns the desktop page.
 - **DetailLayout** (`AppShell.tsx`):
   ```tsx
   import { DetailLayout, Page } from "@/ui/components/AppShell";
@@ -447,8 +429,8 @@ Every named motion has a reduced-motion version (opacity ≤ 150 ms, no transfor
 - **Booking: week strip and arrival windows** (`src/features/leads/components/booking/`):
   - Steps Who · What · When at the top (`BookingSteps`; done steps link back).
   - **Week strip** (`WeekStrip`): one row of 54 × 76 day cards from today that a thumb swipes
-    (scroll-snap), with the Calendar's dot language (best = accent dot, open = green, limited =
-    amber ring, full = struck through). Selected = the ink fill (`--label`, `--bg` text). The
+    (scroll-snap), each with its availability dot (best = accent dot, open = green, limited =
+    amber ring so it never reads as an orange brand accent, full = struck through). Selected = the ink fill (`--label`, `--bg` text). The
     asked-for day carries a small "Asked" tag. Closed days are left out, except today and the
     asked-for day.
   - **Windows** (`WindowGrid`): the day's 2-hour windows as radio cards, 2 across on phones and 4

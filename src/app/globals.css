@@ -967,11 +967,6 @@
     z-index: var(--z-sticky);
     background: var(--bg);
   }
-  /* Calendar (phone): weekday header pinned under the nav bar. */
-  .cal-weekdays {
-    top: var(--sticky-top, calc(env(safe-area-inset-top) + 44px));
-  }
-
   /* ---------- Fields: filled, focus glow, M18 error shake ---------- */
   .field-box {
     display: flex;

@@ -10,9 +10,9 @@ import { cx } from "@/ui/cx";
 import { stripDay } from "../../booking-labels";
 
 // The When step's day picker: a week strip from today that one thumb swipes
-// (approved option "A week strip, one thumb"). Each day shows its status dot in
-// the Calendar's language: best = accent dot, open = green dot, limited = amber
-// ring, full = struck through. The selected day is the filled ink pill; the day
+// (approved option "A week strip, one thumb"). Each day shows its status dot:
+// best = accent dot, open = green dot, limited = amber ring (never orange
+// brand-like), full = struck through. The selected day is the filled ink pill; the day
 // the customer asked for carries a small "Asked" tag.
 
 const DOT: Record<DayStatus, string> = {

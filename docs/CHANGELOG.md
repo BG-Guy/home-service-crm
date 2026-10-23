@@ -102,7 +102,8 @@ options the owner chose; the skipped items are listed at the end.
 - New job (`/jobs/new`): the job type cards and chips replace the Service type select; a job
   from a lead hides Technicians and keeps the lead's job type, urgency and after-hours.
 - Removed: `ScheduleFlow`, `WindowPicker` and `WindowSheet` (the month calendar and tech
-  picker) and the availability mock. The kit `Calendar` stays, but no screen uses it now.
+  picker), the availability mock, and the kit `Calendar` with its `.cal-weekdays` rule (no
+  screen used it once booking moved to the week strip).
 
 **Leads inbox: a grid of lead boxes**
 - `/leads`: phones start with 2 columns and a 1 / 2 switch remembered on the device (the
@@ -235,7 +236,7 @@ options the owner chose; the skipped items are listed at the end.
   styles, so the global stylesheet stays under its 25 KB budget (docs/budget.md).
 - Removed: `LeadsPane`, `LeadCard`, `LeadActions`, `LeadActionsSheets`, `LeadLoadMore`,
   `LeadEditForm` (merged into `LeadEditSheet`), `ScheduleFlow`, `WindowPicker`, `WindowSheet`,
-  `availability/mock.ts` and its test.
+  `availability/mock.ts` and its test, and the kit `Calendar` (`src/ui/components/Calendar.tsx`).
 
 **Upgrading an existing database**
 - Run the app once (or `npm run db:migrate`) to apply 0005 and 0006: job types are renamed in
