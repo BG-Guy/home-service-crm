@@ -75,6 +75,11 @@ export const SMAP_CSS = `.smap{container-type:inline-size;--sm-left:268px;--sm-r
 .tl-row[data-fade] .tl-track,.tl-row[data-fade] .tl-label{opacity:.35}
 .tl-track{position:relative;min-height:30px;background-image:linear-gradient(to right,var(--sep) 1px,transparent 1px);background-size:calc(100% / var(--hours)) 100%}
 .tl-bar{position:absolute;height:22px;padding:0 5px;border-radius:7px;background:color-mix(in srgb,var(--c) 18%,var(--card));box-shadow:inset 0 0 0 1.5px var(--c);color:var(--label);font:700 11px/1 system-ui,sans-serif;font-variant-numeric:tabular-nums;cursor:pointer;transition:transform var(--dur-quick) var(--ease-spring-snappy),box-shadow var(--dur-quick) var(--ease-out)}
+.tl-gap{position:absolute;height:22px;display:flex;align-items:center;justify-content:center;container-type:inline-size;pointer-events:none}
+.tl-gap::before{content:"";position:absolute;left:3px;right:3px;top:50%;border-top:1.5px dashed color-mix(in srgb,var(--c) 60%,transparent)}
+.tl-mi{position:relative;display:none;padding:0 5px;border-radius:999px;background:var(--card);color:var(--label-2);font:600 10px/14px system-ui,sans-serif;font-variant-numeric:tabular-nums;box-shadow:0 0 0 1px var(--sep);white-space:nowrap}
+@container (min-width:46px){.tl-mi{display:inline}}
+.tl-row[data-fade] .tl-gap{opacity:.35}
 .tl-in{container-type:inline-size;display:flex;align-items:center;gap:4px;width:100%;height:100%;overflow:hidden;white-space:nowrap}
 .tl-full{display:none}
 .tl-dot{flex:none;width:6px;height:6px;border-radius:50%}

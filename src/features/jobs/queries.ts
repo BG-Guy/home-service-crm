@@ -137,6 +137,8 @@ type ListRow = {
   street: string;
   unit: string | null;
   city: string | null;
+  lat?: number | null;
+  lng?: number | null;
   serviceTypeName: string | null;
   sort: Date;
 };
@@ -168,6 +170,8 @@ export function toListItem(
         : r.street
       : maskStreetLine(r.street),
     addressMasked: !reveal,
+    lat: reveal ? (r.lat ?? null) : null,
+    lng: reveal ? (r.lng ?? null) : null,
     city: r.city,
     windowStart: isoOrNull(r.j.windowStart ?? r.j.scheduledStart),
     windowEnd: isoOrNull(r.j.windowEnd ?? r.j.scheduledEnd),
@@ -185,6 +189,8 @@ export const listRowSelect = {
   street: properties.street,
   unit: properties.unit,
   city: properties.city,
+  lat: properties.lat,
+  lng: properties.lng,
   serviceTypeName: serviceTypes.name,
   sort: sortKey,
 };

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { formatMiles, milesBetween } from "@/lib/geo";
 import { Avatar } from "@/ui/components/Avatar";
 import {
   compactWindow,
@@ -253,6 +254,15 @@ export function DayTimeline({
           {rows.map((r) => {
             const { lane, count } = lanes(r.jobs);
             const color = r.tech?.color ?? GRAY;
+            // A lane's vertical box. Full screen: the lanes share the row's height;
+            // a bar is at most 72 px tall, centered in its lane.
+            const box = (l: number) =>
+              lg
+                ? {
+                    top: `calc(${l} * 100% / ${count} + max(6px, (100% / ${count} - 72px) / 2))`,
+                    height: `min(72px, calc(100% / ${count} - 12px))`,
+                  }
+                : { top: 4 + l * LANE };
             return (
               <div
                 key={r.key}
@@ -326,14 +336,7 @@ export function DayTimeline({
                         style={{
                           left: pct(j.startMin),
                           width: `calc(${pct(j.endMin)} - ${pct(j.startMin)})`,
-                          // Full screen: the lanes share the row's height; a bar is
-                          // at most 72 px tall, centered in its lane.
-                          top: lg
-                            ? `calc(${lane.get(j.id) ?? 0} * 100% / ${count} + max(6px, (100% / ${count} - 72px) / 2))`
-                            : 4 + (lane.get(j.id) ?? 0) * LANE,
-                          height: lg
-                            ? `min(72px, calc(100% / ${count} - 12px))`
-                            : undefined,
+                          ...box(lane.get(j.id) ?? 0),
                           ["--c" as string]: color,
                         }}
                       >
@@ -394,6 +397,45 @@ export function DayTimeline({
                       </button>
                     );
                   })}
+                  {/* Miles between a tech's consecutive stops, on a dashed line in
+                      the gap between their bars (shown when the gap has room). */}
+                  {r.tech &&
+                    r.jobs.slice(1).map((b, i) => {
+                      const a = r.jobs[i];
+                      if (!a) return null;
+                      const l = lane.get(a.id) ?? 0;
+                      if (
+                        l !== (lane.get(b.id) ?? 0) ||
+                        b.startMin <= a.endMin ||
+                        a.lat == null ||
+                        a.lng == null ||
+                        b.lat == null ||
+                        b.lng == null
+                      )
+                        return null;
+                      return (
+                        <span
+                          key={`gap-${a.id}`}
+                          aria-hidden
+                          className="tl-gap"
+                          style={{
+                            left: pct(a.endMin),
+                            width: `calc(${pct(b.startMin)} - ${pct(a.endMin)})`,
+                            ...box(l),
+                            ["--c" as string]: color,
+                          }}
+                        >
+                          <span className="tl-mi">
+                            {formatMiles(
+                              milesBetween(
+                                { lat: a.lat, lng: a.lng },
+                                { lat: b.lat, lng: b.lng },
+                              ),
+                            )}
+                          </span>
+                        </span>
+                      );
+                    })}
                 </div>
               </div>
             );

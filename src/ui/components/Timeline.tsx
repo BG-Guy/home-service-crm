@@ -1,6 +1,7 @@
 import { Circle } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { formatMiles } from "@/lib/geo";
 import {
   addDaysToKey,
   DEFAULT_TIMEZONE,
@@ -156,6 +157,8 @@ export interface TripStep {
   href?: string;
   /** Trailing content (StatusPill, amount). */
   aside?: ReactNode;
+  /** Straight-line miles from the previous step (a route), shown on the line between them. */
+  miles?: number | null;
 }
 
 /**
@@ -219,13 +222,25 @@ export function TripTimeline({
             {times && (
               <div
                 className={cx(
-                  "num whitespace-nowrap pt-[3px] text-right text-footnote",
+                  "num relative whitespace-nowrap pt-[3px] text-right text-footnote",
                   st.state === "current"
                     ? "font-semibold text-label"
                     : "text-label-2",
                 )}
               >
                 {st.time}
+                {next?.miles != null && (
+                  // The leg's miles, against the line halfway to the next stop.
+                  <span
+                    className="absolute right-0 text-caption font-medium text-label-3"
+                    style={{
+                      top: "calc(50% + 11px)",
+                      transform: "translateY(-50%)",
+                    }}
+                  >
+                    {formatMiles(next.miles)}
+                  </span>
+                )}
               </div>
             )}
             <div aria-hidden className="relative flex justify-center">
@@ -259,6 +274,21 @@ export function TripTimeline({
                     doneLine ? "bg-label" : "bg-fill",
                   )}
                 />
+              )}
+              {!times && next?.miles != null && (
+                // No time column: the leg's miles sit on the line, halfway down.
+                <span
+                  className="num absolute left-1/2 z-[1] whitespace-nowrap rounded-pill bg-card px-1.5 text-caption font-semibold text-label-2"
+                  style={{
+                    top: "calc(50% + 11px)",
+                    transform: "translate(-50%, -50%)",
+                    fontSize: 11,
+                    lineHeight: "16px",
+                    boxShadow: "0 0 0 1px var(--sep)",
+                  }}
+                >
+                  {formatMiles(next.miles)}
+                </span>
               )}
             </div>
             <div

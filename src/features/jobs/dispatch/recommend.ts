@@ -10,6 +10,8 @@
 // leak into a score. Ranking people by age for work assignment is age
 // discrimination (ADEA and state law); keep it that way. Experience and tenure
 // are shown to the dispatcher but are not scored either.
+
+import { milesBetween } from "@/lib/geo";
 //
 // Score (lower is better), in "mile equivalents":
 //   score = extraMiles (or NO_ROUTE_MILES when nothing can be measured)
@@ -113,18 +115,8 @@ export interface Recommendation {
   suggestedStart: number | null;
 }
 
-const R_MI = 3958.7613;
-
-/** Haversine distance in miles. */
-export function milesBetween(a: LatLng, b: LatLng): number {
-  const r = Math.PI / 180;
-  const dLat = (b.lat - a.lat) * r;
-  const dLng = (b.lng - a.lng) * r;
-  const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLng / 2) ** 2;
-  return 2 * R_MI * Math.asin(Math.min(1, Math.sqrt(h)));
-}
+/** Haversine distance in miles (shared in `@/lib/geo`; re-exported for callers here). */
+export { milesBetween };
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 const pt = (s: { lat: number | null; lng: number | null }): LatLng | null =>

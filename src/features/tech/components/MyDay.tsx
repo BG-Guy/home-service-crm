@@ -13,6 +13,7 @@ import {
   odometerApprovalHint,
 } from "@/features/vehicles/api";
 import { TodayVehicleCard } from "@/features/vehicles/slots";
+import { legMiles } from "@/lib/geo";
 import { getSettings, isEnabled } from "@/lib/settings";
 import { formatInTz } from "@/lib/time";
 import type { SessionUser } from "@/lib/types";
@@ -41,7 +42,7 @@ function routeSteps(
   tz: string,
   withDate = false,
 ): TripStep[] {
-  return jobs.map((j) => {
+  const steps = jobs.map((j): TripStep => {
     const done = DONE.has(j.status);
     const current = j.id === currentId;
     return {
@@ -73,6 +74,18 @@ function routeSteps(
         ) : undefined,
     };
   });
+  // Miles between the day's stops on the route line (not across the days of
+  // "Still open from earlier").
+  if (!withDate)
+    legMiles(
+      jobs.map((j) =>
+        j.lat != null && j.lng != null ? { lat: j.lat, lng: j.lng } : null,
+      ),
+    ).forEach((mi, i) => {
+      const s = steps[i + 1];
+      if (s) s.miles = mi;
+    });
+  return steps;
 }
 
 function Slot({ children }: { children: ReactNode }) {

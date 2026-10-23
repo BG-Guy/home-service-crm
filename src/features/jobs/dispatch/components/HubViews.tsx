@@ -1,5 +1,6 @@
 import { CalendarClock, MapPin, MessageCircle, Phone } from "lucide-react";
 import Link from "next/link";
+import { legMiles } from "@/lib/geo";
 import { formatPhoneDisplay } from "@/lib/phone-display";
 import { experienceLabel } from "@/lib/tenure";
 import { formatDateKey, formatTime } from "@/lib/time";
@@ -570,6 +571,22 @@ export function TechPanel({
       ),
     });
   }
+  // Miles between stops on the route line (straight line, as on the map).
+  const where = new Map<string, { lat: number | null; lng: number | null }>(
+    t.jobs.map((s) => [s.id, s]),
+  );
+  if (job) where.set(`new-${job.id}`, job);
+  legMiles(
+    steps.map((s) => {
+      const p = where.get(s.id);
+      return p?.lat != null && p.lng != null
+        ? { lat: p.lat, lng: p.lng }
+        : null;
+    }),
+  ).forEach((mi, i) => {
+    const s = steps[i + 1];
+    if (s) s.miles = mi;
+  });
 
   const details = [
     {
