@@ -156,8 +156,8 @@ function GridSkeleton({ cols }: { cols: LeadCols }) {
       aria-hidden
       className={
         cols === 1
-          ? "grid gap-3 md:grid-cols-[repeat(auto-fill,minmax(340px,1fr))]"
-          : "grid grid-cols-2 gap-3 md:grid-cols-[repeat(auto-fill,minmax(232px,1fr))]"
+          ? "grid gap-3 md:grid-cols-[repeat(auto-fill,minmax(340px,1fr))] lg:grid-cols-1"
+          : "grid grid-cols-2 gap-3 md:grid-cols-[repeat(auto-fill,minmax(232px,1fr))] lg:grid-cols-1"
       }
     >
       {Array.from({ length: 6 }, (_, i) => (

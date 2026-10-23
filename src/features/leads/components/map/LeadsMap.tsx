@@ -14,6 +14,7 @@ import {
 import { FullscreenHub } from "@/ui/components/FullscreenHub";
 import { IconButton } from "@/ui/components/IconButton";
 import { cx } from "@/ui/cx";
+import { useInboxViewMaybe } from "../inbox-state";
 import { LeadBox } from "../LeadBox";
 import { useLeadCardMaybe } from "../lead-env";
 import { useNow } from "../lead-links";
@@ -91,8 +92,12 @@ export default function LeadsMap(props: LeadsMapProps) {
   useEffect(() => {
     if (openId) setPicked(openId);
   }, [openId]);
+  // In the inbox the list and the map share one selection (a box tap selects).
+  const inbox = useInboxViewMaybe();
   const selected =
-    props.selectedId !== undefined ? props.selectedId : (openId ?? picked);
+    props.selectedId !== undefined
+      ? props.selectedId
+      : (inbox?.selected ?? openId ?? picked);
   const count = props.count ?? boxes?.length ?? points.length;
 
   // The drawer's boxes open the card with their TL;DR at once.
@@ -102,6 +107,7 @@ export default function LeadsMap(props: LeadsMapProps) {
 
   const pick = (id: string) => {
     setPicked(id);
+    inbox?.setSelected(id);
     // Contract 3.4: a pin opens the card (once, also when onSelect is card.open).
     if (props.onSelect !== card?.open) card?.open(id);
     props.onSelect?.(id);

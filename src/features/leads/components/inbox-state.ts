@@ -10,9 +10,19 @@ export interface InboxViewState {
   /** Phones and tablets: the grid or the map. Desktop shows both. */
   show: InboxShow;
   setShow(s: InboxShow): void;
+  /** The map is on screen (desktop beside the list, or phone Map mode). */
+  mapOn: boolean;
+  /** The lead picked in the list or on the map: highlighted in both. */
+  selected: string | null;
+  setSelected(id: string | null): void;
 }
 
 export const InboxViewContext = createContext<InboxViewState | null>(null);
+
+/** The inbox's state, or null outside the inbox (the map on other screens). */
+export function useInboxViewMaybe(): InboxViewState | null {
+  return useContext(InboxViewContext);
+}
 
 export function useInboxView(): InboxViewState {
   const v = useContext(InboxViewContext);

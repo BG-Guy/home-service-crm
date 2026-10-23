@@ -91,11 +91,14 @@ export function LeadBox({
   layout,
   selected,
   onOpen,
+  onSelect,
 }: {
   lead: LeadBoxData;
   layout: "grid1" | "grid2" | "drawer";
   selected?: boolean;
   onOpen(id: string): void;
+  /** When the map is on screen, tapping the box selects it (shows it on the map); the expand button still opens the card. */
+  onSelect?: (id: string) => void;
 }) {
   const env = useLeadEnv();
   const card = useLeadCardMaybe();
@@ -339,8 +342,19 @@ export function LeadBox({
         "relative flex h-full flex-col rounded-card bg-card shadow-card",
         "hover-lift transition-shadow",
         wide ? "gap-3.5 p-4" : "gap-2.5 p-2.5 pt-3",
-        selected && "ring-2 ring-accent",
       )}
+      // Selected: an inset accent ring (the swipe wrapper clips anything drawn
+      // outside the box) over the card shadow, and a light accent tint. Inline, so
+      // it wins over .shadow-card.
+      style={
+        selected
+          ? {
+              backgroundColor:
+                "color-mix(in srgb, var(--accent) 6%, var(--card))",
+              boxShadow: "inset 0 0 0 2px var(--accent), var(--shadow-card)",
+            }
+          : undefined
+      }
     >
       <div className={cx("flex items-start", wide ? "gap-3" : "gap-2")}>
         <SlaAvatar
@@ -357,7 +371,8 @@ export function LeadBox({
           <h3 className="flex min-w-0 items-center gap-1">
             <button
               type="button"
-              onClick={() => onOpen(lead.id)}
+              onClick={() => (onSelect ?? onOpen)(lead.id)}
+              aria-pressed={onSelect ? !!selected : undefined}
               className={cx(
                 "box-hit min-w-0 truncate text-left font-semibold text-label outline-none",
                 wide ? "text-headline" : "text-[16px] leading-[21px]",

@@ -42,9 +42,14 @@ export function InboxView({
 }) {
   const [cols, setColsState] = useState<LeadCols>(initialCols);
   const [show, setShowState] = useState<InboxShow>(initialShow);
+  const [selected, setSelected] = useState<string | null>(null);
   const desktop = useMediaQuery("(min-width: 1024px)");
+  const mapOn = desktop || show === "map";
   const state = useMemo<InboxViewState>(
     () => ({
+      mapOn,
+      selected,
+      setSelected,
       cols,
       setCols: (c) => {
         setColsState(c);
@@ -59,7 +64,7 @@ export function InboxView({
         window.history.replaceState(null, "", url);
       },
     }),
-    [cols, show],
+    [cols, show, mapOn, selected],
   );
 
   const countLine = (
@@ -122,7 +127,9 @@ export function InboxView({
         <>
           {countLine}
           <div className="mt-1">{chips}</div>
-          <div className="mt-3 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(340px,40%)] lg:items-start lg:gap-5">
+          {/* Desktop: one column of leads on the left, the map (about half the
+              viewport, never squeezing the list under 340 px) as the main view. */}
+          <div className="mt-3 lg:grid lg:grid-cols-[minmax(340px,1fr)_min(50vw,calc(100%_-_360px))] lg:items-start lg:gap-5">
             <div className="min-w-0">{children}</div>
             <div className="max-lg:hidden lg:sticky lg:top-[calc(env(safe-area-inset-top)+60px)]">
               {desktop && (

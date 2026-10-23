@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Leads inbox: the map leads on desktop (2026-10-23)
+- Desktop (≥ 1024 px): one column of lead boxes on the left, the map about half the viewport
+  wide on the right (never squeezing the list under 340 px) as the main view.
+- While the map is on screen (desktop, or phone Map mode), tapping a box selects it: the box gets
+  an accent ring and tint, and its pin is highlighted with its name tag, panned into view if
+  needed. The expand (Open) button opens the lead card. A pin tap selects its box too (scrolled
+  into view) and opens the card as before. Phones in grid view still open the card on a tap.
+- One shared selection in the inbox state (`selected` / `setSelected`, `useInboxViewMaybe` for
+  the map); `LeadBox` gains `onSelect`. `LeadsGrid` reads the screen width itself, because it
+  streams in after the shell hydrated (reading it from context caused a hydration mismatch).
+
 ### Miles between a tech's stops (2026-10-23)
 - **Route maps** (Assign hub, schedule map): each leg long enough on screen carries its
   straight-line miles in a small pill on the line, turned along it (never upside down), with the
