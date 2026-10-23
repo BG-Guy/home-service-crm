@@ -1,14 +1,18 @@
-import { Inbox } from "lucide-react";
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import {
-  LeadsPane,
+  LEAD_COLS_COOKIE,
+  parseInboxShow,
+  parseLeadCols,
+} from "@/features/leads/components/inbox-prefs";
+import {
+  LeadsInbox,
   leadFilterFrom,
-} from "@/features/leads/components/LeadsPane";
+} from "@/features/leads/components/LeadsInbox";
+import { getLeadsMapData } from "@/features/leads/map-queries";
 import { requireUser } from "@/lib/auth/current";
 import { isEnabled } from "@/lib/settings";
-import { SplitView } from "@/ui/components/AppShell";
-import { EmptyState } from "@/ui/components/EmptyState";
 import { PageTransition } from "@/ui/motion/PageTransition";
 
 export const metadata: Metadata = { title: "Leads" };
@@ -20,21 +24,23 @@ export default async function LeadsPage({
 }) {
   const user = await requireUser("leads.view");
   if (!(await isEnabled("leads"))) notFound();
-  const filter = leadFilterFrom(await searchParams);
+  // The lead map's pins and today's jobs: started now, read by the map when it
+  // shows (desktop column, phone Map mode). A failure leaves the inbox as is.
+  const map = getLeadsMapData(user).catch((err: unknown) => {
+    console.error("[leads] map data failed:", err);
+    return null;
+  });
+  const sp = await searchParams;
+  const jar = await cookies();
+  const show = Array.isArray(sp.show) ? sp.show[0] : sp.show;
   return (
     <PageTransition>
-      <SplitView
-        showDetail={false}
-        list={<LeadsPane filter={filter} viewer={user} />}
-        detail={
-          <div className="flex h-dvh items-center justify-center">
-            <EmptyState
-              icon={<Inbox size={48} strokeWidth={1.5} />}
-              title="Select a lead"
-              message="Answer new leads within 5 minutes. The timer on each card shows how long they've waited."
-            />
-          </div>
-        }
+      <LeadsInbox
+        filter={leadFilterFrom(sp)}
+        viewer={user}
+        cols={parseLeadCols(jar.get(LEAD_COLS_COOKIE)?.value)}
+        show={parseInboxShow(show)}
+        map={map}
       />
     </PageTransition>
   );

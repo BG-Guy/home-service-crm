@@ -16,6 +16,7 @@ Previous measurement (2026-10-15 integration) in brackets.
 | `/map` (excluded from the route budget) | — | 22.7 KB + Leaflet ~43 KB in a lazy `ssr:false` chunk | ok |
 | `/dispatch` Assign hub (Leaflet excluded, as `/map`) | ≤ 30 KB gz | 10.7 KB route JS + `RouteMap` / Leaflet in a lazy `ssr:false` chunk loaded only once the map is on screen (never on the phone list); layout CSS is route-local, global CSS +0 | ok |
 | Full-screen hubs, R1 (2026-10-22: wall mode, Assign hub map, schedule board; Leaflet excluded) | ≤ 30 KB gz per route | `/map` 18.7 → 23.8 KB, `/dispatch` 10.7 → 15.7 KB, `/schedule` 8.8 → 15.0 KB (measured against `.next-smap`). Most of each is `FullscreenHub` (4.4 KB gz with its CSS: nested hubs, history carry-over, toast top layer); the wall legend 1.2 KB; `TechMap`'s marker CSS and declutter ride in its lazy Leaflet chunk; `BoardGrid` stays lazy (phones load it only when the board opens). Global CSS +33 B (toast host popover reset) | ok. Open: load FullscreenHub's enter/exit logic on first open (~3 KB less per route) |
+| Leads flow redesign (2026-10-23; inbox grid, lead card, booking, job types, lead map; Leaflet excluded) | ≤ 30 KB gz per route, shell and CSS unchanged budgets | Shell 139.8 → 139.8 KB. Route JS (`.next-r2` → final build): `/leads` 16.4 → 22.0 (the lead card, map and tags sheets are lazy chunks; Leaflet loads only in Map mode), `/leads/[id]` 27.8 → 26.4, `/leads/new` 10.2 → 15.7, `/leads/new/schedule` 11.5 → 17.3, `/leads/new/done` 0.6 → 1.1, `/dispatch` 15.6 → 14.9, `/settings/services` 21.2 → 22.0, `/settings/jobs` 7.9 → 8.7, `/team/[id]` 13.8 → 27.2 (working hours and time off; lazy-load their sheets next), `/jobs/new` 30.8 → 33.5 (over, below). Global CSS 24.42 → 24.96 KB gz: the new screens first took it to 25.38; moving one-off values (kind tints, a muted avatar, the pin shadow, the in-card Undo bar) to inline styles and reusing kit utilities (`tint-bg`, `ring-2 ring-inset ring-accent`, `.box-hit`) brought it back. The ~86 new rules left cost 6–23 B gz each (responsive layout) | ok, CSS 0.04 KB under: the next CSS addition must pay for itself |
 | `/schedule` Map view (2026-10-22; Leaflet excluded) | route growth ≤ 8 KB gz | Route JS 8.6 → 8.8 KB. The map view is its own chunk (`LazyScheduleMap`), loaded only on `?view=map`: view 13.3 KB (layout, panels, timeline, route-local CSS, `FullscreenHub` ≈ 3.8 KB) + 3.3 KB shared kit pieces, job details 4.0 KB (preloaded when idle), canvas 5.5 KB + Leaflet 41.5 KB + Leaflet CSS 2.6 KB (`ssr:false`). Global CSS +18 B; shell unchanged | ok (calendar views pay +0.2 KB) |
 
 **Design refresh v2 (2026-10-19, F2):** 149.6 → 139.2 KB gz (framework 129.2 + root layout 3.9 +
@@ -58,15 +59,16 @@ left: the next shell addition must pay for itself (see "Ship the remaining app s
 | `/settings/reminders` | 47.0 KB [47.5] | Reminders manager + template editor on one route; split the editor. |
 | `/estimates/[id]` | 44.7 KB [43.4] | Estimate builder + pricebook picker + doc sheets. |
 | `/today` | 44.2 KB [44.0] | My Day + Ops board + clock card + vehicle/tool cards; lazy-load the office board for techs and vice versa. |
-| `/leads/[id]` | 44.1 KB [46.0] | Lead actions, edit sheet, composer. |
 | `/invoices/[id]` | 41.9 KB [40.8] | Line editor + pricebook picker + invoice controls. |
 | `/team/[id]` | 37.3 KB [37.2] | Member controls + edit sheet + overrides. |
 | `/i/[token]` (public) | 35.2 KB [30.1] | Receipt flag form + pay CTA + receipt labels; lazy-load the flag sheet. |
 | `/j/[token]` (public) | 33.8 KB [28.7] | Job portal actions (confirm/reschedule, documents); lazy-load the reschedule sheet. |
 | `/vehicles/[id]` | 33.4 KB [31.7] | Six tabs of log sheets. |
 | `/today/finish` | 32.2 KB [33.2] | Finish-my-day sheet pieces. |
+| `/jobs/new` | 33.5 KB [30.8] (2026-10-23) | New job form + customer/address pickers; the leads redesign added the job type cards (`JobTypePicker` 2.0 KB, kinds 0.5 KB). Lazy-load the new-customer and address sheets. |
 
-`/insights` dropped under the budget (26.1 KB, was 35.4 KB). `/dev/ui` (38.0 KB) is the
+`/insights` dropped under the budget (26.1 KB, was 35.4 KB). `/leads/[id]` dropped under it in the
+leads redesign (26.4 KB, was 44.1 KB at QA round 2): the lead card's pieces load on first open. `/dev/ui` (38.0 KB) is the
 dev-only gallery and isn't budgeted.
 
 ## `/today` shell breakdown at F5 (gz, historical)

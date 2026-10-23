@@ -25,6 +25,21 @@ export const settingsShape = {
       /** Schedule board visible hours (company TZ). */
       board_start_hour: z.number().int().min(0).max(23).default(7),
       board_end_hour: z.number().int().min(1).max(24).default(20),
+      // Booking availability (leads-flow redesign, item 8). A window is open when
+      // at least one tech fits: works then, has the skill, is under the cap, and the
+      // drive fits.
+      /** Most jobs one tech takes in a day (one cap for everyone). */
+      daily_job_cap: z.number().int().min(1).max(30).default(6),
+      /**
+       * Far jobs: a window is hidden (counts as full) when the job adds more than
+       * this many miles of driving for every tech.
+       */
+      max_extra_miles: z.number().int().min(1).max(500).default(25),
+      /**
+       * Offer evening and weekend windows outside business hours. Off by default:
+       * the office books emergencies by hand on New job.
+       */
+      after_hours_booking: z.boolean().default(false),
     })
     .prefault({}),
 } as const;

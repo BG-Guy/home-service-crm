@@ -51,6 +51,15 @@ export const zTimeEntrySource = e(TIME_ENTRY_SOURCES);
 export const CONTRACT_KINDS = ["repair", "improvement"] as const;
 export const zContractKind = e(CONTRACT_KINDS);
 
+/**
+ * The three job types every trade books under (service_types.kind): Free estimate,
+ * Service call, Project. The trade's own jobs (Lockout, Rekey…) are service_types
+ * rows of one of these kinds. Labels, hints and defaults: src/features/jobs/kinds.ts.
+ */
+export const JOB_KINDS = ["estimate", "service", "project"] as const;
+export const zJobKind = e(JOB_KINDS);
+export type JobKind = (typeof JOB_KINDS)[number];
+
 export const CHECKLIST_ITEM_TYPES = [
   "check",
   "text",

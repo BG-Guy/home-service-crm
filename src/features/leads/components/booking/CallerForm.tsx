@@ -1,25 +1,41 @@
 "use client";
 
-import { Check, UserRound } from "lucide-react";
+import { Check, ClipboardList, UserRound } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
+import { JobTypePicker } from "@/features/jobs/components/JobTypePicker";
+import {
+  type JobTypeRow,
+  type JobTypeValue,
+  OTHER_JOB,
+  serviceTypeFor,
+  valueFromType,
+} from "@/features/jobs/components/job-type-choice";
+import type { JobKind } from "@/features/jobs/kinds";
 import type { CustomFieldDef } from "@/features/settings/contracts";
+import { formatRelative } from "@/lib/time";
 import { BottomBar } from "@/ui/components/BottomBar";
 import { Button } from "@/ui/components/Button";
-import { Chip } from "@/ui/components/Chip";
 import { Select, TextArea, TextField } from "@/ui/components/Field";
 import { MoneyField } from "@/ui/components/MoneyField";
 import { PhoneField } from "@/ui/components/PhoneField";
 import { toast } from "@/ui/components/Toast";
+import { Toggle } from "@/ui/components/Toggle";
 import { cx } from "@/ui/cx";
 import { NAV_FORWARD } from "@/ui/motion/PageTransition";
 import { createLeadAndCustomer, lookupCaller } from "../../actions";
-import type { CallerMatch } from "../../contracts";
+import type { CallerLookup, CallerMatch, LeadPriority } from "../../contracts";
+import { BookingSteps } from "./BookingSteps";
+import { useKeepFocusVisible } from "./keep-focus-visible";
+import { UrgencyFields } from "./UrgencyFields";
 
-// Step 1 of the call-to-booking flow (/leads/new): built for use while on the
-// phone. Phone first (returning callers pop up as you type), then the address,
-// the service as chips, notes, source and an optional quoted price.
+// Who (and What) of the booking flow (/leads/new), built for use while on the
+// phone and laid out to fit the first phone screen: phone and name, then source,
+// quoted price and the text consent, the address, and the job type tiles. Returning
+// callers pop up as you type; when they already have an open lead the office
+// decides to update it or start a new one. Urgency and after-hours carry into the
+// job at booking.
 
 export interface CallerDefaults {
   leadId: string | null;
@@ -31,11 +47,14 @@ export interface CallerDefaults {
   state: string;
   zip: string;
   serviceTypeId: string | null;
+  kind: JobKind | null;
   service: string;
   notes: string;
   sourceId: string | null;
   priceCents: number | null;
   smsConsent: boolean;
+  priority: LeadPriority;
+  afterHours: boolean;
 }
 
 // Custom fields live under "More details": their chunk loads when it opens.
@@ -48,11 +67,16 @@ const CustomFieldsFields = dynamic(
 );
 
 const digits = (s: string) => s.replace(/\D/g, "");
+const AFTER_HOURS_RE = /after[\s-]?hours/i;
+
+type Choice = { mode: "update"; leadId: string } | { mode: "new" } | null;
+
+const statusWord = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export function CallerForm({
   defaults,
   sources,
-  services,
+  types,
   zipHint,
   cityHint,
   consentText,
@@ -61,7 +85,8 @@ export function CallerForm({
 }: {
   defaults: CallerDefaults;
   sources: { id: string; name: string }[];
-  services: { id: string; name: string }[];
+  /** Live job types (`listServiceTypeOptions()`). */
+  types: JobTypeRow[];
   zipHint: string | null;
   cityHint: string | null;
   consentText: string;
@@ -70,6 +95,8 @@ export function CallerForm({
 }) {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
+  const choiceRef = useRef<HTMLDivElement>(null);
+  useKeepFocusVisible(formRef);
   const editing = !!defaults.leadId;
   const [phone, setPhone] = useState(defaults.phone);
   const [name, setName] = useState(defaults.name);
@@ -78,12 +105,23 @@ export function CallerForm({
   const [city, setCity] = useState(defaults.city);
   const [state, setState] = useState(defaults.state);
   const [zip, setZip] = useState(defaults.zip);
-  const [serviceId, setServiceId] = useState<string | null>(
-    defaults.serviceTypeId ?? (defaults.service ? "other" : null),
+  const [type, setType] = useState<JobTypeValue>(() =>
+    valueFromType(
+      types,
+      defaults.serviceTypeId,
+      defaults.kind,
+      defaults.service,
+    ),
   );
+  const [priority, setPriority] = useState<LeadPriority>(defaults.priority);
+  const [afterHours, setAfterHours] = useState(defaults.afterHours);
   const [priceCents, setPriceCents] = useState(defaults.priceCents);
-  const [matches, setMatches] = useState<CallerMatch[]>([]);
+  const [lookup, setLookup] = useState<CallerLookup>({
+    matches: [],
+    openLeads: [],
+  });
   const [linked, setLinked] = useState<CallerMatch | null>(null);
+  const [choice, setChoice] = useState<Choice>(null);
   const [errors, setErrors] = useState<Record<string, string[]>>({});
   const [pending, start] = useTransition();
   const [intent, setIntent] = useState<"schedule" | "lead">("schedule");
@@ -95,25 +133,32 @@ export function CallerForm({
   const lookupSeq = useRef(0);
   useEffect(() => {
     if (editing) return;
-    const d = digits(phone);
-    if (d.length < 10) {
-      setMatches([]);
+    if (digits(phone).length < 10) {
+      setLookup({ matches: [], openLeads: [] });
       return;
     }
     const seq = ++lookupSeq.current;
     const t = setTimeout(() => {
       lookupCaller(phone)
-        .then((m) => {
-          if (seq === lookupSeq.current) setMatches(m);
+        .then((r) => {
+          if (seq === lookupSeq.current) setLookup(r);
         })
         .catch(() => {});
     }, 250);
     return () => clearTimeout(t);
   }, [phone, editing]);
   useEffect(() => {
-    if (linked && !matches.some((m) => m.customerId === linked.customerId))
+    if (
+      linked &&
+      !lookup.matches.some((m) => m.customerId === linked.customerId)
+    )
       setLinked(null);
-  }, [matches, linked]);
+    if (
+      choice?.mode === "update" &&
+      !lookup.openLeads.some((o) => o.id === choice.leadId)
+    )
+      setChoice(null);
+  }, [lookup, linked, choice]);
 
   const applyMatch = (m: CallerMatch) => {
     setLinked(m);
@@ -126,6 +171,18 @@ export function CallerForm({
       setZip(m.address.zip);
     }
   };
+
+  const pickType = (v: JobTypeValue) => {
+    setType(v);
+    // "After-hours lockout" and the like turn the after-hours switch on.
+    const job = types.find((t) => t.id === v.job);
+    if (job && AFTER_HOURS_RE.test(job.name)) setAfterHours(true);
+  };
+
+  const whoDone =
+    (digits(phone).length >= 10 || name.trim().length > 0) &&
+    street.trim().length > 0 &&
+    zip.trim().length > 0;
 
   const submit = (which: "schedule" | "lead") => {
     const form = formRef.current;
@@ -144,51 +201,80 @@ export function CallerForm({
       const v = fd.get(k);
       return typeof v === "string" ? v : "";
     };
+    const payload = {
+      intent: which,
+      leadId: defaults.leadId ?? undefined,
+      sourceId: text("sourceId"),
+      name,
+      phone,
+      email: text("email"),
+      street,
+      unit,
+      city,
+      state,
+      zip,
+      kind: type.kind ?? undefined,
+      serviceTypeId: serviceTypeFor(types, type) ?? "",
+      service: type.job === OTHER_JOB ? text("service") : "",
+      priority,
+      afterHours,
+      priceCents: priceCents ?? undefined,
+      notes: text("notes"),
+      smsConsent: fd.get("smsConsent") === "on",
+      ...(Object.keys(custom).length ? { custom } : {}),
+      // Repeat caller (contract 3.2): the office's answer to "Update their open
+      // lead or start a new one?".
+      ...(choice?.mode === "update"
+        ? { mergeIntoLeadId: choice.leadId }
+        : choice?.mode === "new"
+          ? { forceNew: true as const }
+          : {}),
+      clientId: crypto.randomUUID(),
+    };
     start(async () => {
-      const r = await createLeadAndCustomer({
-        intent: which,
-        leadId: defaults.leadId ?? undefined,
-        sourceId: text("sourceId"),
-        name,
-        phone,
-        email: text("email"),
-        street,
-        unit,
-        city,
-        state,
-        zip,
-        serviceTypeId: serviceId && serviceId !== "other" ? serviceId : "",
-        service: serviceId === "other" ? text("service") : "",
-        priceCents: priceCents ?? undefined,
-        notes: text("notes"),
-        smsConsent: fd.get("smsConsent") === "on",
-        ...(Object.keys(custom).length ? { custom } : {}),
-        clientId: crypto.randomUUID(),
-      });
+      const r = await createLeadAndCustomer(payload);
       if (!r.ok) {
         setErrors(r.fieldErrors ?? { _: [r.error] });
         toast.error(r.error);
         return;
       }
       setErrors({});
-      const leadId = r.data?.leadId;
+      const data = r.data;
+      if (data?.needsChoice) {
+        // They already have an open lead: nothing was saved; ask first.
+        setLookup((l) => ({ ...l, openLeads: data.openLeads ?? l.openLeads }));
+        toast.warning("They already have an open lead", {
+          message: "Update it or start a new one, then save again.",
+        });
+        requestAnimationFrame(() =>
+          choiceRef.current?.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          }),
+        );
+        return;
+      }
+      const leadId = data?.leadId;
       if (!leadId) return;
       if (which === "schedule") {
-        // Back from step 2 returns to this lead's values, not an empty form.
+        // Back from When returns to this lead's values, not an empty form.
         window.history.replaceState(null, "", `/leads/new?leadId=${leadId}`);
-        router.push(`/leads/new/schedule?leadId=${leadId}`, {
+        router.push(`/leads/new/schedule?leadId=${leadId}&from=call`, {
           transitionTypes: NAV_FORWARD,
         });
       } else {
         toast.success(
-          r.data?.merged ? "Added to their open lead" : "Lead saved",
+          data?.merged || choice?.mode === "update"
+            ? "Their open lead is updated"
+            : "Lead saved",
         );
         router.push(`/leads/${leadId}`, { transitionTypes: NAV_FORWARD });
       }
     });
   };
 
-  const match = !editing && !linked ? matches[0] : null;
+  const match = !editing && !linked ? lookup.matches[0] : null;
+  const openLeads = editing ? [] : lookup.openLeads.slice(0, 3);
 
   return (
     <form
@@ -197,15 +283,11 @@ export function CallerForm({
         e.preventDefault();
         submit(canSchedule ? "schedule" : "lead");
       }}
-      className="flex flex-col gap-[var(--section-gap)]"
+      className="flex flex-col gap-4"
     >
-      <section aria-labelledby="caller-h" className="flex flex-col gap-3">
-        <h2
-          id="caller-h"
-          className="px-1 text-subhead font-semibold text-label-2"
-        >
-          Caller
-        </h2>
+      {canSchedule && <BookingSteps current={whoDone ? 2 : 1} />}
+
+      <div className="grid gap-3 min-[360px]:grid-cols-2">
         <PhoneField
           label="Phone"
           name="phone"
@@ -216,43 +298,6 @@ export function CallerForm({
           disabled={editing}
           hint={editing ? "Saved with the lead" : undefined}
         />
-        {match && (
-          <output className="list-card enter-rise flex items-center gap-3 px-4 py-3">
-            <span
-              aria-hidden
-              className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--accent)_var(--tint-a),transparent)] text-accent-text"
-            >
-              <UserRound size={20} />
-            </span>
-            <span className="flex min-w-0 flex-1 flex-col">
-              <span className="text-footnote text-label-2">
-                Returning customer
-              </span>
-              <span className="truncate text-headline">
-                {match.name}
-                <span className="font-normal text-label-2">
-                  {" · "}
-                  {match.jobs} job{match.jobs === 1 ? "" : "s"}
-                </span>
-              </span>
-            </span>
-            <Button
-              variant="tinted"
-              size="sm"
-              onClick={() => applyMatch(match)}
-              aria-label={`Use ${match.name}'s details`}
-            >
-              Use
-            </Button>
-          </output>
-        )}
-        {linked && (
-          <p className="flex items-center gap-2 px-1 text-footnote text-label-2">
-            <Check aria-hidden size={16} className="text-success" />
-            Linked to {linked.name}
-            {linked.address ? "; their address is filled in" : ""}
-          </p>
-        )}
         <TextField
           label="Name"
           name="name"
@@ -262,16 +307,133 @@ export function CallerForm({
           error={err("name")}
           maxLength={200}
         />
-      </section>
+      </div>
 
-      <section aria-labelledby="addr-h" className="flex flex-col gap-3">
-        <h2
-          id="addr-h"
-          className="px-1 text-subhead font-semibold text-label-2"
+      {match && (
+        <output className="list-card enter-rise flex items-center gap-3 px-4 py-3">
+          <span
+            aria-hidden
+            className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--accent)_var(--tint-a),transparent)] text-accent-text"
+          >
+            <UserRound size={20} />
+          </span>
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="text-footnote text-label-2">
+              Returning customer
+            </span>
+            <span className="truncate text-headline">
+              {match.name}
+              <span className="font-normal text-label-2">
+                {" · "}
+                {match.jobs} job{match.jobs === 1 ? "" : "s"}
+              </span>
+            </span>
+          </span>
+          <Button
+            variant="tinted"
+            size="sm"
+            onClick={() => applyMatch(match)}
+            aria-label={`Use ${match.name}'s details`}
+          >
+            Use
+          </Button>
+        </output>
+      )}
+      {linked && (
+        <p className="-mt-1 flex items-center gap-2 px-1 text-footnote text-label-2">
+          <Check aria-hidden size={16} className="text-success" />
+          Linked to {linked.name}
+          {linked.address ? "; their address is filled in" : ""}
+        </p>
+      )}
+
+      {openLeads.length > 0 && (
+        <div
+          ref={choiceRef}
+          className="list-card enter-rise flex flex-col gap-3 px-4 py-3.5"
         >
-          Service address
-        </h2>
-        <div className="grid grid-cols-[minmax(0,1fr)_96px] gap-3">
+          <p className="flex items-center gap-2 text-headline">
+            <ClipboardList
+              aria-hidden
+              size={18}
+              className="shrink-0 text-accent-text"
+            />
+            Update their open lead or start a new one?
+          </p>
+          <div
+            role="radiogroup"
+            aria-label="Their open lead"
+            className="flex flex-col gap-2"
+          >
+            {openLeads.map((o) => (
+              <ChoiceRow
+                key={o.id}
+                on={choice?.mode === "update" && choice.leadId === o.id}
+                onPick={() => setChoice({ mode: "update", leadId: o.id })}
+                title={
+                  o.service
+                    ? `Update their ${o.service} lead`
+                    : "Update their open lead"
+                }
+                sub={[
+                  statusWord(o.status),
+                  formatRelative(o.createdAt),
+                  o.address,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              />
+            ))}
+            <ChoiceRow
+              on={choice?.mode === "new"}
+              onPick={() => setChoice({ mode: "new" })}
+              title="Start a new lead"
+              sub="Keep the open one as it is"
+            />
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-3">
+        <Select
+          label="Source"
+          name="sourceId"
+          required
+          defaultValue={defaults.sourceId ?? ""}
+          error={err("sourceId")}
+          options={[
+            { value: "", label: "Choose a source", disabled: true },
+            ...sources.map((s) => ({ value: s.id, label: s.name })),
+          ]}
+        />
+        <MoneyField
+          label="Quoted price"
+          placeholder="Optional"
+          valueCents={priceCents}
+          onChangeCents={setPriceCents}
+          error={err("price") ?? err("priceCents")}
+        />
+      </div>
+
+      {/* ⚖️ Verbal SMS consent: the script is read to them before the switch is set. */}
+      {/* biome-ignore lint/a11y/noLabelWithoutControl: the Toggle input is a descendant */}
+      <label className="list-card grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-4 py-2.5">
+        <span className="text-subhead font-semibold text-label">
+          They agreed to texts (verbal)
+        </span>
+        <Toggle
+          name="smsConsent"
+          defaultChecked={defaults.smsConsent}
+          disabled={editing}
+          className="shrink-0"
+        />
+        <span className="col-span-2 text-caption text-label-2">
+          Read this to them first: “{consentText}”
+        </span>
+      </label>
+
+      <div className="flex flex-col gap-3">
+        <div className="grid grid-cols-[minmax(0,1fr)_84px] gap-3">
           <TextField
             label="Street"
             name="street"
@@ -292,7 +454,7 @@ export function CallerForm({
             maxLength={40}
           />
         </div>
-        <div className="grid grid-cols-[minmax(0,1fr)_72px_104px] gap-3">
+        <div className="grid grid-cols-[minmax(0,1fr)_64px_96px] gap-3">
           <TextField
             label="City"
             name="city"
@@ -324,89 +486,41 @@ export function CallerForm({
             maxLength={10}
           />
         </div>
-      </section>
+      </div>
 
-      <section aria-labelledby="svc-h" className="flex flex-col gap-3">
-        <h2 id="svc-h" className="px-1 text-subhead font-semibold text-label-2">
-          What do they need?
-        </h2>
-        {/* biome-ignore lint/a11y/useSemanticElements: chip group */}
-        <div
-          role="group"
-          aria-labelledby="svc-h"
-          className="flex flex-wrap gap-2"
-        >
-          {services.map((s) => (
-            <Chip
-              key={s.id}
-              selected={serviceId === s.id}
-              onClick={() => setServiceId(serviceId === s.id ? null : s.id)}
-            >
-              {s.name}
-            </Chip>
-          ))}
-          <Chip
-            selected={serviceId === "other"}
-            onClick={() => setServiceId(serviceId === "other" ? null : "other")}
-          >
-            Other
-          </Chip>
-        </div>
-        {serviceId === "other" && (
-          <TextField
-            label="Describe it"
-            name="service"
-            placeholder="e.g. Garage door won't close"
-            defaultValue={defaults.service}
-            maxLength={120}
-          />
-        )}
-        <TextArea
-          label="Notes"
-          name="notes"
-          rows={3}
-          maxLength={5000}
-          defaultValue={defaults.notes}
-          placeholder="Gate code, pets, what they told you"
+      <JobTypePicker
+        variant="tiles"
+        types={types}
+        value={type}
+        onChange={pickType}
+        error={err("serviceTypeId")?.[0] ?? err("kind")?.[0]}
+      />
+      {type.job === OTHER_JOB && (
+        <TextField
+          label="Describe it"
+          name="service"
+          placeholder="e.g. Garage door won't close"
+          defaultValue={defaults.service}
+          maxLength={120}
         />
-      </section>
+      )}
 
-      <section className="grid gap-3 sm:grid-cols-2">
-        <Select
-          label="Source"
-          name="sourceId"
-          required
-          defaultValue={defaults.sourceId ?? ""}
-          error={err("sourceId")}
-          options={[
-            { value: "", label: "Choose a source", disabled: true },
-            ...sources.map((s) => ({ value: s.id, label: s.name })),
-          ]}
-        />
-        <MoneyField
-          label="Quoted price"
-          placeholder="Optional"
-          valueCents={priceCents}
-          onChangeCents={setPriceCents}
-          error={err("price") ?? err("priceCents")}
-        />
-      </section>
+      <UrgencyFields
+        priority={priority}
+        onPriority={setPriority}
+        afterHours={afterHours}
+        onAfterHours={setAfterHours}
+      />
 
-      <label className="list-card flex min-h-11 items-start gap-3 px-4 py-3 text-footnote text-label-2">
-        <input
-          type="checkbox"
-          name="smsConsent"
-          defaultChecked={defaults.smsConsent}
-          disabled={editing}
-          className="mt-0.5 size-5 shrink-0 accent-[var(--accent)]"
-        />
-        <span>
-          <span className="block text-subhead font-medium text-label">
-            They agreed to texts (verbal)
-          </span>
-          Read this to them first: “{consentText}”
-        </span>
-      </label>
+      <TextArea
+        label="Notes"
+        name="notes"
+        rows={2}
+        maxLength={5000}
+        defaultValue={defaults.notes}
+        placeholder="Gate code, pets, what they told you"
+        hint={canSchedule ? "The tech sees these on the job." : undefined}
+      />
 
       {!editing && (
         <details
@@ -468,7 +582,7 @@ export function CallerForm({
               loading={pending && intent === "schedule"}
               disabled={pending}
             >
-              Save &amp; schedule
+              Save &amp; book
             </Button>
           ) : (
             <Button
@@ -483,5 +597,57 @@ export function CallerForm({
         }
       />
     </form>
+  );
+}
+
+function ChoiceRow({
+  on,
+  onPick,
+  title,
+  sub,
+}: {
+  on: boolean;
+  onPick: () => void;
+  title: string;
+  sub: string;
+}) {
+  return (
+    // biome-ignore lint/a11y/useSemanticElements: list-row radio
+    <button
+      type="button"
+      role="radio"
+      aria-checked={on}
+      onClick={onPick}
+      className={cx(
+        "pressable flex min-h-[52px] w-full items-center gap-3 rounded-tile px-3 py-2 text-left transition-shadow duration-[var(--dur-quick)]",
+        on ? "ring-2 ring-inset ring-accent" : "bg-fill-2",
+      )}
+      style={
+        on
+          ? {
+              backgroundColor:
+                "color-mix(in srgb, var(--accent) 8%, var(--card))",
+            }
+          : undefined
+      }
+    >
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate text-subhead font-semibold text-label">
+          {title}
+        </span>
+        <span className="truncate text-footnote text-label-2">{sub}</span>
+      </span>
+      <span
+        aria-hidden
+        className={cx(
+          "flex size-6 shrink-0 items-center justify-center rounded-full",
+          on
+            ? "bg-accent-fill text-on-accent"
+            : "shadow-[inset_0_0_0_1.5px_var(--label-3)]",
+        )}
+      >
+        {on && <Check size={14} strokeWidth={3} />}
+      </span>
+    </button>
   );
 }

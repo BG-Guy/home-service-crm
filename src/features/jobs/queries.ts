@@ -669,6 +669,8 @@ export async function requireJobsReader(): Promise<SessionUser> {
 }
 
 export { requireUser };
+/** Job types for pickers, grouped by kind (./service-types.ts; no auth check). */
+export { listServiceTypeOptions } from "./service-types";
 
 /** Live job photos by tag (Complete sheet "recommended photos" row). Caller checks access. */
 export async function jobPhotoCounts(

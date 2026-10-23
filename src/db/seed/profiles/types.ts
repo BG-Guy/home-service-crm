@@ -24,6 +24,34 @@ export interface ProfilePricebookItem {
   isSpecialOrder?: boolean;
 }
 
+/** One of the three job types (service_types.kind; see src/features/jobs/kinds.ts). */
+export type ProfileJobKind = "estimate" | "service" | "project";
+
+/**
+ * A trade job: a service_types row under one of the three job types (Free
+ * estimate, Service call, Project), with its own rules. The generic rows (keys
+ * "estimate_visit", "service_call", "installation" = Project) come from the base seed.
+ */
+export interface ProfileTradeJob {
+  key: string;
+  name: string;
+  kind: ProfileJobKind;
+  color: string;
+  /** Icon name from src/ui/icons.ts (the Settings → Job types picker list). */
+  icon: string;
+  /** Words customers use; lead forms match them to this job. */
+  aliases: string[];
+  defaultDurationMin: number;
+  defaultPriceCents: number | null;
+  contractKind: "repair" | "improvement";
+  warrantyDays: number;
+  photosRequiredBefore?: number;
+  photosRequiredAfter?: number;
+  /** ⚖️ Photo ID + proof of address and a signed authority line before opening anything. */
+  requiresOwnershipCheck?: boolean;
+  requiresSignedEstimate?: boolean;
+}
+
 /**
  * A job recipe. The plan picks recipes by job number (see buildJobs), so the order
  * of each list matters: PART_SCENARIOS[0] and [3] land on the past deposit jobs when
@@ -31,7 +59,10 @@ export interface ProfilePricebookItem {
  */
 export interface ProfileScenario {
   key: string;
-  /** Service type key (base types or the profile's extra type). */
+  /**
+   * Service type key: a generic one ("service_call", "installation" = Project,
+   * "estimate_visit" = Free estimate), a trade job's or the extra type's.
+   */
   service: string;
   title: string;
   lines: [string, number][];
@@ -174,10 +205,18 @@ export interface DemoProfile {
   laborScenarios: ProfileScenario[];
   specialJobs: {
     /** J12: C7's charged-back job. */
-    dispute: { title: string; lines: ProfileLineSpec[]; discountCents: number };
+    dispute: {
+      title: string;
+      /** Service type key: a regular daytime job. */
+      service: string;
+      lines: ProfileLineSpec[];
+      discountCents: number;
+    };
     /** J67: on hold, waiting on the special-order part (deposit paid). */
     specialOrder: {
       title: string;
+      /** Service type key. */
+      service: string;
       lines: ProfileLineSpec[];
       depositCents: number;
     };
@@ -186,6 +225,8 @@ export interface DemoProfile {
     /** J69: done this morning, paid cash. */
     todayCash: {
       title: string;
+      /** Service type key. */
+      service: string;
       lines: ProfileLineSpec[];
       discountCents: number;
     };
@@ -218,10 +259,16 @@ export interface DemoProfile {
     landingUrl: string;
   };
   settings: {
+    /**
+     * The trade's jobs under the three job types ("What's the job?" chips), besides
+     * the extra type below. Sorted after the generic rows, in this order.
+     */
+    tradeJobs: ProfileTradeJob[];
     /** Extra service type (tech3's comp override pays a special rate on it). */
     extraServiceType: {
       key: string;
       name: string;
+      kind: ProfileJobKind;
       color: string;
       icon: string;
       aliases: string[];

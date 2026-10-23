@@ -125,7 +125,8 @@ export type BadgeKey =
   | "approvals.pending"
   | "tasks.due"
   | "invoices.overdue"
-  | "disputes.open";
+  | "disputes.open"
+  | "jobs.needs_tech";
 
 export interface NavItem {
   /** Unique across all modules, e.g. 'jobs', 'settings.payments'. */

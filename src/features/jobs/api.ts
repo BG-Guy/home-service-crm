@@ -44,7 +44,9 @@ import {
   primaryOf,
   serviceFeeDisclosure,
 } from "./internal";
-import { contactWindow } from "./machine";
+import { type JobKind, KIND_LABEL, primaryTypeId } from "./kinds";
+import { buildWindow, contactWindow } from "./machine";
+import { listServiceTypeOptions } from "./service-types";
 
 // B2 jobs API (BUILD_PLAN §6.2). Writes take `tx` first and `actor` last, run in the
 // caller's transaction, emit their own events and write their own activity. No
@@ -257,6 +259,112 @@ export async function createJob(
   }
   if (input.leadId) await markLeadConverted(tx, input.leadId, { jobId }, actor);
   return { jobId, number, status };
+}
+
+/** A booking from a lead (leads-flow redesign, contract 3.3). */
+export interface BookedJobInput {
+  leadId: string;
+  customerId: string;
+  propertyId: string;
+  kind: JobKind;
+  /** The trade job ("Rekey"); null = the kind's own row ("Service call"). */
+  serviceTypeId: string | null;
+  /** What the lead typed, the title when no trade job is picked. */
+  serviceText?: string | null;
+  /** Company-local arrival window: 'YYYY-MM-DD' and 'HH:MM'. */
+  date: string;
+  start: string;
+  end: string;
+  priority: "normal" | "urgent" | "emergency";
+  afterHours: boolean;
+  customerNotes: string | null;
+  /** The day (and words) the customer asked for, kept on the job. */
+  requestedDate?: string | null;
+  requestedWindow?: string | null;
+}
+
+const hhmmToMin = (t: string) => {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(t);
+  return m ? Number(m[1]) * 60 + Number(m[2]) : Number.NaN;
+};
+
+/**
+ * Book a lead: one arrival window, the job type, priority, after-hours and the
+ * customer's notes, and NO tech. The job waits in the Assign hub ("Needs a tech")
+ * as 'unscheduled' with its window; assigning a tech there schedules it and fires
+ * job.scheduled, which sends the customer's confirmation. The type must belong to
+ * the kind (else the kind's own row is used); the checklist comes from the type, so
+ * a lockout keeps its ⚖️ ownership check. createJob marks the lead booked
+ * (markLeadConverted).
+ */
+export async function createBookedJob(
+  tx: Tx,
+  input: BookedJobInput,
+  actor: Actor,
+): Promise<{
+  jobId: string;
+  number: string;
+  status: JobStatus;
+  title: string;
+}> {
+  const types = await listServiceTypeOptions({ tx });
+  let type = input.serviceTypeId
+    ? (types.find((t) => t.id === input.serviceTypeId) ?? null)
+    : null;
+  if (input.serviceTypeId && !type)
+    throw new ValidationError({
+      serviceTypeId: ["That job isn't offered any more. Pick another."],
+    });
+  if (type && type.kind !== input.kind)
+    throw new ValidationError({
+      serviceTypeId: [`${type.name} isn't a ${KIND_LABEL[input.kind]} job.`],
+    });
+  if (!type) {
+    const id = primaryTypeId(types, input.kind);
+    type = id ? (types.find((t) => t.id === id) ?? null) : null;
+  }
+  const minutes = hhmmToMin(input.end) - hhmmToMin(input.start);
+  if (!(minutes > 0 && minutes <= 12 * 60))
+    throw new ValidationError({ window: ["Pick an arrival window."] });
+  const win = buildWindow(
+    input.date,
+    input.start,
+    minutes,
+    await getCompanyTimezone(),
+  );
+  if (win.end.getTime() <= Date.now())
+    throw new ValidationError({
+      window: ["That window has already passed. Pick a later one."],
+    });
+  const typed = input.serviceText?.trim();
+  const title = (
+    type && !type.primary
+      ? type.name
+      : typed || type?.name || KIND_LABEL[input.kind]
+  ).slice(0, 200);
+  const custom: Record<string, unknown> = {};
+  if (input.requestedDate) custom.requested_date = input.requestedDate;
+  if (input.requestedWindow?.trim())
+    custom.requested_window = input.requestedWindow.trim().slice(0, 60);
+  const created = await createJob(
+    tx,
+    {
+      customerId: input.customerId,
+      propertyId: input.propertyId,
+      serviceTypeId: type?.id ?? null,
+      leadId: input.leadId,
+      title,
+      customerNotes: input.customerNotes?.trim() || null,
+      priority: input.priority,
+      afterHours: input.afterHours,
+      windowStart: win.start,
+      windowEnd: win.end,
+      assignees: [],
+      custom,
+    },
+    actor,
+  );
+  return { ...created, title };
 }
 
 async function loadJobViews(where: SQL, viewerId?: string): Promise<JobView[]> {

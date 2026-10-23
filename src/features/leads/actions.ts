@@ -1,8 +1,9 @@
 "use server";
 
-import { and, asc, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db, type Tx } from "@/db";
+import { zJobKind } from "@/db/enums";
 import {
   apiKeys,
   jobs,
@@ -14,12 +15,16 @@ import {
 } from "@/db/schema";
 import {
   ensureProperty,
-  findOrCreateCustomer,
+  findCustomerMatch,
   logCall,
+  updateContactFromLead,
 } from "@/features/customers/api";
-import { enqueueMessage } from "@/features/messaging/api";
+import {
+  cancelScheduledMessages,
+  enqueueMessage,
+} from "@/features/messaging/api";
 import { validateCustomValues } from "@/features/settings/api";
-import { createTask } from "@/features/tasks/api";
+import { closeTasksFor, createTask } from "@/features/tasks/api";
 import { action, zf } from "@/lib/action";
 import { writeActivity } from "@/lib/activity";
 import { requireUser } from "@/lib/auth/current";
@@ -35,12 +40,17 @@ import { getSettings, updateSettings } from "@/lib/settings";
 import type { Actor } from "@/lib/types";
 import { markLeadResponded } from "./api";
 import type {
+  CallerLookup,
   CallerMatch,
+  CallerOpenLead,
   IssuedSecrets,
+  LeadCardData,
+  LeadChangeResult,
   LeadPreviewResult,
   LeadStatus,
 } from "./contracts";
-import { previewLead, processLead, recordLeadConsent } from "./intake/process";
+import { ensureLeadCustomer } from "./ensure-customer";
+import { dedupeHashOf, previewLead, processLead } from "./intake/process";
 import {
   hashKey,
   newHookSecret,
@@ -49,7 +59,22 @@ import {
   randomToken,
 } from "./keys";
 import { lostReasonLabel } from "./labels";
-import { type LeadFilter, listLeads } from "./queries";
+import {
+  getLeadCard,
+  type LeadFilter,
+  leadStatusHistory,
+  listLeads,
+  openLeadsForPhone,
+} from "./queries";
+import {
+  isOpenStatus,
+  previousOpenStatus,
+  releaseRule,
+  reopenRule,
+  STATUS_WORD,
+  type StatusEventRaw,
+  undoPatch,
+} from "./rules";
 
 // Lead mutations (SPEC M04). Every write: action() → perm + flag → zod → one tx with
 // the domain write + events + audit + activity → revalidate.
@@ -73,7 +98,18 @@ async function loadLead(tx: Tx, id: string): Promise<LeadRow> {
   return l;
 }
 
-/** Status change with event + activity (no-op when unchanged). */
+/** Row lock: two people changing one lead at once → one after the other. */
+async function lockLead(tx: Tx, id: string): Promise<LeadRow> {
+  await tx.execute(sql`select 1 from leads where id = ${id} for update`);
+  return loadLead(tx, id);
+}
+
+/**
+ * Status change with its lead_events row, event and activity. The row records
+ * what the change overwrote (`raw.prev`), so Undo can put it back
+ * (`undoLeadChange`). Returns that row's id; null when nothing changed. `record`
+ * writes the row even when the status stays (Looks legit, Undo of it).
+ */
 async function changeStatus(
   tx: Tx,
   l: LeadRow,
@@ -81,132 +117,78 @@ async function changeStatus(
   actor: Actor,
   extra: Partial<LeadRow> = {},
   summary?: string,
-): Promise<void> {
-  if (l.status === to && Object.keys(extra).length === 0) return;
+  opts: { record?: boolean; raw?: Record<string, unknown> } = {},
+): Promise<string | null> {
+  const moved = l.status !== to;
+  if (!moved && Object.keys(extra).length === 0 && !opts.record) return null;
   await tx
     .update(leads)
     .set({ status: to, ...extra, updatedAt: new Date() })
     .where(eq(leads.id, l.id));
-  if (l.status === to) return;
+  if (!moved && !opts.record) return null;
   const entity = { type: "lead", id: l.id } as const;
-  await tx.insert(leadEvents).values({
-    leadId: l.id,
-    kind: "status",
-    outcome: to,
-    actorUserId: actor.userId,
-    raw: { from: l.status, to, lost_reason: extra.lostReason ?? null },
-  });
-  await emit(
-    tx,
-    "lead.status_changed",
-    entity,
-    {
-      lead_id: l.id,
-      from: l.status,
-      to,
-      lost_reason: extra.lostReason ?? null,
+  const raw: StatusEventRaw & Record<string, unknown> = {
+    from: l.status,
+    to,
+    lost_reason: extra.lostReason ?? null,
+    prev: {
+      lost_reason: l.lostReason,
+      spam_score: l.spamScore,
+      spam_reason: l.spamReason,
+      converted_job_id: l.convertedJobId,
     },
-    { actor },
-  );
+    ...opts.raw,
+  };
+  const [ev] = await tx
+    .insert(leadEvents)
+    .values({
+      leadId: l.id,
+      kind: "status",
+      outcome: to,
+      actorUserId: actor.userId,
+      raw,
+    })
+    .returning({ id: leadEvents.id });
+  if (moved)
+    await emit(
+      tx,
+      "lead.status_changed",
+      entity,
+      {
+        lead_id: l.id,
+        from: l.status,
+        to,
+        lost_reason: extra.lostReason ?? null,
+      },
+      { actor },
+    );
   await writeActivity(tx, {
     entity,
     customerId: l.customerId,
     kind: "lead.status_changed",
-    summary: summary ?? `Status: ${l.status} → ${to}`,
+    summary:
+      summary ??
+      `Status: ${STATUS_WORD[l.status as LeadStatus] ?? l.status} → ${STATUS_WORD[to]}`,
     actorUserId: actor.userId,
   });
+  return ev?.id ?? null;
 }
 
-/** Create the customer (and property) for a lead that has none yet. */
-async function ensureLeadCustomer(
-  tx: Tx,
+const changed = (
   l: LeadRow,
-  actor: Actor,
-): Promise<{ customerId: string | null; propertyId: string | null }> {
-  if (l.customerId)
-    return { customerId: l.customerId, propertyId: l.propertyId };
-  if (!l.phone && !l.email && !l.name)
-    return { customerId: null, propertyId: null };
-  const [src] = l.leadSourceId
-    ? await tx
-        .select({ name: leadSources.name })
-        .from(leadSources)
-        .where(eq(leadSources.id, l.leadSourceId))
-        .limit(1)
-    : [];
-  const a = l.address;
-  const fc = await findOrCreateCustomer(
-    tx,
-    {
-      displayName: l.name,
-      phone: l.phone,
-      email: l.email,
-      address:
-        a?.street && a.zip
-          ? {
-              street: a.street,
-              unit: a.unit ?? null,
-              city: a.city ?? "",
-              state: a.state ?? "",
-              zip: a.zip,
-            }
-          : null,
-      leadSourceId: l.leadSourceId,
-      source: src?.name ?? null,
-      firstTouch:
-        (l.attribution?.first_touch as Record<string, unknown>) ??
-        (Object.keys(l.attribution ?? {}).length ? l.attribution : null),
-      isTest: l.isTest,
-    },
-    actor,
-  );
-  await tx
-    .update(leads)
-    .set({
-      customerId: fc.customerId,
-      propertyId: fc.propertyId ?? l.propertyId,
-      isReturning: l.isReturning || !fc.created,
-      updatedAt: new Date(),
-    })
-    .where(eq(leads.id, l.id));
-  if (l.smsConsent || l.marketingConsent) {
-    // Consent evidence comes from the original submission (IP and browser of the
-    // received/spam event), not from whoever approves the lead later.
-    const [ev] = await tx
-      .select({ ip: leadEvents.ip, userAgent: leadEvents.userAgent })
-      .from(leadEvents)
-      .where(
-        and(
-          eq(leadEvents.leadId, l.id),
-          sql`${leadEvents.kind} in ('received', 'spam')`,
-        ),
-      )
-      .orderBy(leadEvents.createdAt)
-      .limit(1);
-    await recordLeadConsent(tx, {
-      customerId: fc.customerId,
-      phone: l.phone,
-      email: l.email,
-      sms: l.smsConsent,
-      marketing: l.marketingConsent,
-      textShown: (l.extra?._consent_text as string) ?? null,
-      pageUrl:
-        ((l.attribution?.page_url ?? l.attribution?.landing_url) as
-          | string
-          | undefined) ?? null,
-      ip: ev?.ip ?? null,
-      userAgent: ev?.userAgent ?? null,
-      source: "web_form",
-      actor,
-    });
-  }
-  return {
-    customerId: fc.customerId,
-    propertyId: fc.propertyId ?? l.propertyId,
-  };
-}
+  status: LeadStatus,
+  eventId: string | null,
+): LeadChangeResult => ({ leadId: l.id, status, eventId });
 
 // ------------------------------------------------------------------ manual entry
+
+const isoDay = z.preprocess(
+  (v) => (v === "" || v === null ? undefined : v),
+  z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a date.")
+    .optional(),
+);
 
 const manualLeadSchema = z.object({
   sourceId: z.string().uuid({ message: "Choose how they heard about you." }),
@@ -218,11 +200,18 @@ const manualLeadSchema = z.object({
   service: optText(120),
   price: optText(30),
   priceCents: zf.optionalInt(),
-  preferredDate: optText(10),
+  preferredDate: isoDay,
   preferredWindow: optText(60),
   notes: optText(5000),
   smsConsent: zf.checkbox(),
   custom: z.record(z.string(), z.unknown()).optional(),
+  /** Booking prefs typed on the call (contract 3.2), kept on the lead until Book. */
+  kind: z.preprocess((v) => (v === "" ? undefined : v), zJobKind.optional()),
+  priority: z.preprocess(
+    (v) => (v === "" ? undefined : v),
+    z.enum(["normal", "urgent", "emergency"]).optional(),
+  ),
+  afterHours: zf.checkbox().optional(),
   clientId: z.string().uuid().optional(),
 });
 
@@ -234,11 +223,65 @@ type ManualIntake = Omit<z.infer<typeof manualLeadSchema>, "clientId"> & {
   zip?: string;
 };
 
+/** The call's booking prefs → `leads.extra._booking` (read back by getLeadPrefill). */
+function bookingExtra(
+  input: Pick<ManualIntake, "kind" | "priority" | "afterHours">,
+): Record<string, unknown> | null {
+  if (!input.kind && !input.priority && !input.afterHours) return null;
+  return {
+    kind: input.kind ?? null,
+    priority: input.priority ?? null,
+    after_hours: input.afterHours === true,
+  };
+}
+
+async function saveBookingPrefs(
+  tx: Tx,
+  leadId: string,
+  input: Pick<ManualIntake, "kind" | "priority" | "afterHours">,
+): Promise<void> {
+  const b = bookingExtra(input);
+  if (!b) return;
+  await tx
+    .update(leads)
+    .set({
+      extra: sql`coalesce(${leads.extra}, '{}'::jsonb) || jsonb_build_object('_booking', ${JSON.stringify(b)}::jsonb)`,
+    })
+    .where(eq(leads.id, leadId));
+}
+
+/**
+ * Phone leads count as answered (build SPEC fix): the office typed them in while
+ * talking to the caller, so the first response is now, by them, and a new lead
+ * is contacted (and theirs when nobody has it). The missed-lead automations
+ * (auto-reply, 5/15-min alerts, "tried to reach you") check `lead.status = new`
+ * and skip it.
+ */
+async function answerPhoneLead(
+  tx: Tx,
+  leadId: string,
+  userId: string,
+  actor: Actor,
+): Promise<void> {
+  await markLeadResponded(tx, leadId, { userId, channel: "call" }, actor);
+  const l = await loadLead(tx, leadId);
+  if (l.status === "new")
+    await changeStatus(
+      tx,
+      l,
+      "contacted",
+      actor,
+      { assignedUserId: l.assignedUserId ?? userId },
+      "Answered on the phone",
+    );
+}
+
 /** The manual-entry intake (createLead, createLeadAndCustomer): same pipeline as a web form. */
 async function runManualIntake(
   tx: Tx,
   input: ManualIntake,
   actor: Actor,
+  opts: { merge?: boolean } = {},
 ): Promise<{ leadId: string; merged: boolean }> {
   if (!input.name && !input.phone && !input.email)
     throw new ValidationError({ name: ["Enter a name, phone or email."] });
@@ -259,6 +302,8 @@ async function runManualIntake(
     if (!v.ok) throw new ValidationError(v.fieldErrors);
     custom = v.values;
   }
+  // `merge: false` ("Start a new one"): the intake skips its double-submit and
+  // same-service merges but still links the existing customer.
   const outcome = await processLead(
     {
       auth: { kind: "manual", source: src, actor },
@@ -290,7 +335,7 @@ async function runManualIntake(
       referer: null,
     },
     undefined,
-    { tx },
+    { tx, merge: opts.merge },
   );
   if (outcome.status === "invalid") throw new ValidationError(outcome.errors);
   if (outcome.status === "created" || outcome.status === "merged") {
@@ -299,6 +344,7 @@ async function runManualIntake(
         .update(leads)
         .set({ serviceTypeId: input.serviceTypeId })
         .where(eq(leads.id, outcome.leadId));
+    await saveBookingPrefs(tx, outcome.leadId, input);
     return { leadId: outcome.leadId, merged: outcome.status === "merged" };
   }
   throw new ConflictError("lead_rejected", "Couldn't save this lead.");
@@ -311,8 +357,10 @@ export const createLead = action({
   feature: "leads",
   input: manualLeadSchema,
   audit: "lead.created_manual",
-  async run({ input, tx, actor }) {
-    return runManualIntake(tx, input, actor);
+  async run({ input, tx, user, actor }) {
+    const r = await runManualIntake(tx, input, actor);
+    await answerPhoneLead(tx, r.leadId, user.id, actor);
+    return r;
   },
   revalidate: ({ data }) => LEADS_PATHS(data.leadId),
 });
@@ -327,12 +375,54 @@ const callerSchema = manualLeadSchema.omit({ address: true }).extend({
   intent: z.enum(["schedule", "lead"]).default("lead"),
   /** Back from step 2: re-save the lead this flow already created (no second lead). */
   leadId: optUuid,
+  /** Repeat caller, "Update their open lead" (contract 3.2). */
+  mergeIntoLeadId: optUuid,
+  /** Repeat caller, "Start a new one" (contract 3.2). */
+  forceNew: zf.checkbox().optional(),
 });
+
+type CallerInput = z.infer<typeof callerSchema>;
+
+const addressOf = (input: CallerInput, fallback: LeadRow["address"]) =>
+  input.street && input.zip
+    ? {
+        street: input.street,
+        ...(input.unit ? { unit: input.unit } : {}),
+        city: input.city ?? "",
+        state: (input.state ?? "").toUpperCase().slice(0, 2),
+        zip: input.zip,
+      }
+    : fallback;
+
+async function linkProperty(
+  tx: Tx,
+  l: LeadRow,
+  address: LeadRow["address"],
+  actor: Actor,
+): Promise<void> {
+  if (!l.customerId || !address?.street || !address.zip) return;
+  const p = await ensureProperty(
+    tx,
+    l.customerId,
+    {
+      street: address.street,
+      unit: address.unit ?? null,
+      city: address.city ?? "",
+      state: address.state ?? "",
+      zip: address.zip,
+    },
+    actor,
+  );
+  await tx
+    .update(leads)
+    .set({ propertyId: p.propertyId })
+    .where(eq(leads.id, l.id));
+}
 
 /** Back from step 2 → step 1 → save again: edit the saved lead in place. */
 async function resaveCallerLead(
   tx: Tx,
-  input: z.infer<typeof callerSchema> & { leadId: string },
+  input: CallerInput & { leadId: string },
   actor: Actor,
 ): Promise<{ leadId: string; merged: boolean }> {
   const l = await loadLead(tx, input.leadId);
@@ -343,16 +433,7 @@ async function resaveCallerLead(
     const { getServiceType } = await import("@/features/settings/api");
     serviceText = (await getServiceType(input.serviceTypeId))?.name ?? null;
   }
-  const address =
-    input.street && input.zip
-      ? {
-          street: input.street,
-          ...(input.unit ? { unit: input.unit } : {}),
-          city: input.city ?? "",
-          state: (input.state ?? "").toUpperCase().slice(0, 2),
-          zip: input.zip,
-        }
-      : l.address;
+  const address = addressOf(input, l.address);
   await tx
     .update(leads)
     .set({
@@ -360,30 +441,16 @@ async function resaveCallerLead(
       serviceTypeId: input.serviceTypeId ?? null,
       serviceText,
       quotedPriceCents: input.priceCents ?? null,
+      preferredDate: input.preferredDate ?? null,
+      preferredWindow: input.preferredWindow ?? null,
       notes: input.notes ?? null,
       leadSourceId: input.sourceId,
       address,
       updatedAt: new Date(),
     })
     .where(eq(leads.id, l.id));
-  if (l.customerId && address?.street && address.zip) {
-    const p = await ensureProperty(
-      tx,
-      l.customerId,
-      {
-        street: address.street,
-        unit: address.unit ?? null,
-        city: address.city ?? "",
-        state: address.state ?? "",
-        zip: address.zip,
-      },
-      actor,
-    );
-    await tx
-      .update(leads)
-      .set({ propertyId: p.propertyId })
-      .where(eq(leads.id, l.id));
-  }
+  await linkProperty(tx, l, address, actor);
+  await saveBookingPrefs(tx, l.id, input);
   await writeActivity(tx, {
     entity: { type: "lead", id: l.id },
     customerId: l.customerId,
@@ -395,18 +462,89 @@ async function resaveCallerLead(
 }
 
 /**
+ * Repeat caller, "Update their open lead" (contract 3.2): what was typed on this
+ * call goes onto the chosen open lead (new notes are added under the old ones,
+ * the new address replaces the old one) instead of a second lead.
+ */
+async function updateOpenLead(
+  tx: Tx,
+  input: CallerInput & { mergeIntoLeadId: string },
+  e164: string | null,
+  actor: Actor,
+): Promise<{ leadId: string; merged: boolean }> {
+  const l = await lockLead(tx, input.mergeIntoLeadId);
+  if (!isOpenStatus(l.status))
+    throw new ConflictError(
+      "not_open",
+      "That lead was closed in the meantime. Start a new one.",
+    );
+  if (e164 && l.phone && l.phone !== e164)
+    throw new ConflictError(
+      "other_phone",
+      "That lead belongs to another phone number.",
+    );
+  let serviceText = input.service ?? l.serviceText;
+  if (input.serviceTypeId && !input.service) {
+    const { getServiceType } = await import("@/features/settings/api");
+    serviceText =
+      (await getServiceType(input.serviceTypeId))?.name ?? serviceText;
+  }
+  const address = addressOf(input, l.address);
+  const notes =
+    input.notes && l.notes && !l.notes.includes(input.notes)
+      ? `${l.notes}\n\n${input.notes}`
+      : (input.notes ?? l.notes);
+  await tx
+    .update(leads)
+    .set({
+      name: input.name ?? l.name,
+      phone: l.phone ?? e164,
+      serviceTypeId: input.serviceTypeId ?? l.serviceTypeId,
+      serviceText,
+      quotedPriceCents: input.priceCents ?? l.quotedPriceCents,
+      preferredDate: input.preferredDate ?? l.preferredDate,
+      preferredWindow: input.preferredWindow ?? l.preferredWindow,
+      notes,
+      address,
+      isReturning: true,
+      updatedAt: new Date(),
+    })
+    .where(eq(leads.id, l.id));
+  await linkProperty(tx, l, address, actor);
+  await saveBookingPrefs(tx, l.id, input);
+  await tx.insert(leadEvents).values({
+    leadId: l.id,
+    kind: "touch",
+    actorUserId: actor.userId,
+    raw: { reason: "repeat_caller", updated: true },
+  });
+  await writeActivity(tx, {
+    entity: { type: "lead", id: l.id },
+    customerId: l.customerId,
+    kind: "lead.touched",
+    summary: "Called again: lead updated with this call",
+    actorUserId: actor.userId,
+  });
+  return { leadId: l.id, merged: true };
+}
+
+/**
  * Call-to-booking step 1 (/leads/new): the lead AND its customer + property in one
  * transaction. The lead runs the manual intake (consent, spam score, dedupe and
  * the returning-customer match by phone), then the same `ensureLeadCustomer` as
  * Convert. A lead the intake kept as spam or flagged for review gets no customer.
+ *
+ * Repeat callers (contract 3.2): when the phone already has an open lead and the
+ * office hasn't chosen yet, nothing is saved and `{ needsChoice, openLeads }`
+ * comes back; `mergeIntoLeadId` updates that lead, `forceNew` starts a new one.
+ * The lead counts as answered (`answerPhoneLead`).
  */
 export const createLeadAndCustomer = action({
   name: "leads.create_with_customer",
   perm: "leads.create",
   feature: "leads",
   input: callerSchema,
-  audit: "lead.created_manual",
-  async run({ input, tx, user, actor }) {
+  async run({ input, tx, user, actor, audit }) {
     const schedule = input.intent === "schedule";
     if (schedule && !user.perms.has("leads.convert"))
       throw new ForbiddenError(undefined, "leads.convert");
@@ -415,11 +553,43 @@ export const createLeadAndCustomer = action({
         ...(input.street ? {} : { street: ["Enter the street to schedule."] }),
         ...(input.zip ? {} : { zip: ["Enter the ZIP to schedule."] }),
       });
-    if (input.leadId && !user.perms.has("leads.edit"))
+    if (
+      (input.leadId || input.mergeIntoLeadId) &&
+      !user.perms.has("leads.edit")
+    )
       throw new ForbiddenError(undefined, "leads.edit");
-    const r = input.leadId
-      ? await resaveCallerLead(tx, { ...input, leadId: input.leadId }, actor)
-      : await runManualIntake(tx, input, actor);
+    const { normalizePhone } = await import("@/lib/phone");
+    const e164 = input.phone ? normalizePhone(input.phone) : null;
+    let r: { leadId: string; merged: boolean };
+    if (input.leadId) {
+      r = await resaveCallerLead(tx, { ...input, leadId: input.leadId }, actor);
+    } else if (input.mergeIntoLeadId) {
+      r = await updateOpenLead(
+        tx,
+        { ...input, mergeIntoLeadId: input.mergeIntoLeadId },
+        e164,
+        actor,
+      );
+    } else {
+      // Ask first (only people who can see leads get to choose).
+      if (!input.forceNew && e164 && user.perms.has("leads.view")) {
+        const match = await findCustomerMatch({ phone: e164 }, { tx });
+        const openLeads = await openLeadsForPhone(e164, {
+          customerIds: match ? [match.customerId] : [],
+        });
+        if (openLeads.length > 0)
+          return {
+            needsChoice: true as const,
+            openLeads,
+            leadId: null,
+            merged: false,
+            customerId: null,
+            propertyId: null,
+          };
+      }
+      r = await runManualIntake(tx, input, actor, { merge: !input.forceNew });
+    }
+    await answerPhoneLead(tx, r.leadId, user.id, actor);
     const l = await loadLead(tx, r.leadId);
     if (l.status === "booked")
       throw new ConflictError(
@@ -438,88 +608,120 @@ export const createLeadAndCustomer = action({
         "needs_review",
         "Saved, but this lead needs a review before it can be scheduled.",
       );
-    return { ...r, customerId: c.customerId, propertyId: c.propertyId };
+    await audit({
+      action: "lead.created_manual",
+      entity: { type: "lead", id: r.leadId },
+      after: { ...input, merged: r.merged },
+      full: true,
+    });
+    return {
+      needsChoice: false as const,
+      openLeads: [] as CallerOpenLead[],
+      leadId: r.leadId as string | null,
+      merged: r.merged,
+      customerId: c.customerId,
+      propertyId: c.propertyId,
+    };
   },
-  revalidate: ({ data }) => LEADS_PATHS(data.leadId),
+  revalidate: ({ data }) => LEADS_PATHS(data.leadId ?? undefined),
 });
 
-/** Returning-caller lookup while the phone is typed (step 1). Exact phone match only. */
-export async function lookupCaller(phone: string): Promise<CallerMatch[]> {
+/**
+ * Returning-caller lookup while the phone is typed (step 1). Exact phone match
+ * only. `openLeads` (contract 3.2): that phone's open leads, for "Update their
+ * open lead or start a new one?".
+ */
+export async function lookupCaller(phone: string): Promise<CallerLookup> {
   const user = await requireUser("leads.create");
-  if (!user.perms.has("customers.view")) return [];
   const { normalizePhone } = await import("@/lib/phone");
   const e164 = normalizePhone(String(phone ?? "").slice(0, 40));
-  if (!e164) return [];
-  const { findDuplicates } = await import("@/features/customers/queries");
-  const dups = (await findDuplicates({ phoneE164: e164 })).slice(0, 3);
-  if (dups.length === 0) return [];
-  const ids = dups.map((d) => d.id);
-  const reveal = user.perms.has("customers.contact_view");
-  const [counts, props] = await Promise.all([
-    db
-      .select({ id: jobs.customerId, n: sql<number>`count(*)::int` })
-      .from(jobs)
-      .where(and(inArray(jobs.customerId, ids), ne(jobs.status, "cancelled")))
-      .groupBy(jobs.customerId),
-    reveal
-      ? db
-          .select({
-            id: properties.id,
-            customerId: properties.customerId,
-            street: properties.street,
-            unit: properties.unit,
-            city: properties.city,
-            state: properties.state,
-            zip: properties.zip,
-          })
-          .from(properties)
+  if (!e164) return { matches: [], openLeads: [] };
+  let matches: CallerMatch[] = [];
+  if (user.perms.has("customers.view")) {
+    const { findDuplicates } = await import("@/features/customers/queries");
+    const dups = (await findDuplicates({ phoneE164: e164 })).slice(0, 3);
+    if (dups.length > 0) {
+      const ids = dups.map((d) => d.id);
+      const reveal = user.perms.has("customers.contact_view");
+      const [counts, props] = await Promise.all([
+        db
+          .select({ id: jobs.customerId, n: sql<number>`count(*)::int` })
+          .from(jobs)
           .where(
-            and(
-              inArray(properties.customerId, ids),
-              isNull(properties.deletedAt),
-            ),
+            and(inArray(jobs.customerId, ids), ne(jobs.status, "cancelled")),
           )
-          .orderBy(desc(properties.isPrimary), asc(properties.createdAt))
-      : Promise.resolve([]),
-  ]);
-  return dups.map((d) => {
-    const p = props.find((x) => x.customerId === d.id);
-    return {
-      customerId: d.id,
-      name: d.displayName,
-      jobs: counts.find((x) => x.id === d.id)?.n ?? 0,
-      address: p
-        ? {
-            propertyId: p.id,
-            street: p.street,
-            unit: p.unit,
-            city: p.city ?? "",
-            state: p.state ?? "",
-            zip: p.zip,
-          }
-        : null,
-    };
-  });
+          .groupBy(jobs.customerId),
+        reveal
+          ? db
+              .select({
+                id: properties.id,
+                customerId: properties.customerId,
+                street: properties.street,
+                unit: properties.unit,
+                city: properties.city,
+                state: properties.state,
+                zip: properties.zip,
+              })
+              .from(properties)
+              .where(
+                and(
+                  inArray(properties.customerId, ids),
+                  isNull(properties.deletedAt),
+                ),
+              )
+              .orderBy(desc(properties.isPrimary), asc(properties.createdAt))
+          : Promise.resolve([]),
+      ]);
+      matches = dups.map((d) => {
+        const p = props.find((x) => x.customerId === d.id);
+        return {
+          customerId: d.id,
+          name: d.displayName,
+          jobs: counts.find((x) => x.id === d.id)?.n ?? 0,
+          address: p
+            ? {
+                propertyId: p.id,
+                street: p.street,
+                unit: p.unit,
+                city: p.city ?? "",
+                state: p.state ?? "",
+                zip: p.zip,
+              }
+            : null,
+        };
+      });
+    }
+  }
+  const openLeads = user.perms.has("leads.view")
+    ? await openLeadsForPhone(e164, {
+        customerIds: matches.map((m) => m.customerId),
+      })
+    : [];
+  return { matches, openLeads };
 }
 
 // ------------------------------------------------------------------ inbox actions
 
+/**
+ * Claim a lead, or take over someone else's (`force`: the UI asks first). The
+ * person who had it is told (in-app, plus push/email per their "Other alerts"
+ * preference).
+ */
 export const claimLead = action({
   name: "leads.claim",
   perm: "leads.edit",
   feature: "leads",
   input: z.object({ leadId: uuid, force: zf.checkbox().optional() }),
   audit: "lead.claimed",
-  async run({ input, tx, user, actor, activity }) {
+  async run({ input, tx, user, activity }) {
     // Row lock: two people tapping Claim at once → exactly one wins.
-    await tx.execute(
-      sql`select 1 from leads where id = ${input.leadId} for update`,
-    );
-    const l = await loadLead(tx, input.leadId);
-    if (l.assignedUserId === user.id) return { claimed: true };
-    if (l.assignedUserId && !input.force) {
+    const l = await lockLead(tx, input.leadId);
+    if (l.assignedUserId === user.id)
+      return { claimed: true, previousUserId: null as string | null };
+    const prev = l.assignedUserId;
+    if (prev && !input.force) {
       const { getUserBriefs } = await import("@/features/team/api");
-      const who = (await getUserBriefs([l.assignedUserId]))[l.assignedUserId];
+      const who = (await getUserBriefs([prev]))[prev];
       throw new ConflictError(
         "already_claimed",
         `${who?.name ?? "Someone"} already claimed this lead.`,
@@ -533,34 +735,79 @@ export const claimLead = action({
       entity: { type: "lead", id: l.id },
       customerId: l.customerId,
       kind: "lead.claimed",
-      summary: `Claimed by ${user.name}`,
+      summary: prev ? `Taken over by ${user.name}` : `Claimed by ${user.name}`,
     });
-    void actor;
-    return { claimed: true };
+    if (prev) {
+      const { notify } = await import("@/features/notify/api");
+      await notify(tx, {
+        to: { userIds: [prev] },
+        type: "staff.generic",
+        title: `${user.name} took over ${l.name?.trim() || "a lead"}`,
+        body: "They have it now, so there's nothing more for you to do on it.",
+        url: `/leads/${l.id}`,
+        entity: { type: "lead", id: l.id },
+      });
+    }
+    return { claimed: true, previousUserId: prev };
   },
   auditEntity: ({ input }) => ({ type: "lead", id: input.leadId }),
   revalidate: ({ input }) => LEADS_PATHS(input.leadId),
 });
 
-export const assignLead = action({
-  name: "leads.assign",
+/**
+ * Release (Claim's way back): your lead goes back to nobody. `giveBackTo` is the
+ * Undo of a take over: the lead goes back to the person who had it.
+ */
+export const releaseLead = action({
+  name: "leads.release",
   perm: "leads.edit",
   feature: "leads",
-  input: z.object({ leadId: uuid, userId: optUuid }),
-  audit: "lead.assigned",
-  async run({ input, tx, activity }) {
-    const l = await loadLead(tx, input.leadId);
+  input: z.object({ leadId: uuid, giveBackTo: optUuid }),
+  audit: "lead.released",
+  async run({ input, tx, user, activity }) {
+    const l = await lockLead(tx, input.leadId);
+    const entity = { type: "lead", id: l.id } as const;
+    if (input.giveBackTo) {
+      if (l.assignedUserId !== user.id)
+        throw new ConflictError("not_yours", "This lead isn't yours anymore.");
+      const { listUsers } = await import("@/features/team/api");
+      const to = (await listUsers({ perm: "leads.edit" })).find(
+        (u) => u.id === input.giveBackTo,
+      );
+      if (!to)
+        throw new ValidationError({
+          giveBackTo: ["They can't take leads anymore."],
+        });
+      await tx
+        .update(leads)
+        .set({ assignedUserId: to.id, updatedAt: new Date() })
+        .where(eq(leads.id, l.id));
+      await activity({
+        entity,
+        customerId: l.customerId,
+        kind: "lead.claimed",
+        summary: `Given back to ${to.name}`,
+      });
+      return { assignedUserId: to.id as string | null };
+    }
+    const rule = releaseRule(l.assignedUserId, user.id);
+    if (rule === "unassigned") return { assignedUserId: null };
+    if (rule === "someone_else")
+      throw new ConflictError(
+        "someone_else",
+        "Someone else has this lead. Take it over first.",
+      );
     await tx
       .update(leads)
-      .set({ assignedUserId: input.userId ?? null, updatedAt: new Date() })
+      .set({ assignedUserId: null, updatedAt: new Date() })
       .where(eq(leads.id, l.id));
     await activity({
-      entity: { type: "lead", id: l.id },
+      entity,
       customerId: l.customerId,
-      kind: "lead.assigned",
-      summary: input.userId ? "Lead reassigned" : "Lead unassigned",
+      kind: "lead.claimed",
+      summary: `Released by ${user.name}`,
     });
-    return { ok: true };
+    return { assignedUserId: null };
   },
   auditEntity: ({ input }) => ({ type: "lead", id: input.leadId }),
   revalidate: ({ input }) => LEADS_PATHS(input.leadId),
@@ -603,10 +850,19 @@ const OUTCOMES = [
   "busy",
 ] as const;
 
+/** The texts that follow a lead until someone reaches them. */
+const FOLLOW_UP_TEMPLATES = [
+  "lead.ack",
+  "lead.ack_after_hours",
+  "lead.not_reached",
+  "lead.no_answer",
+];
+
 /**
  * Call outcome sheet. Any attempt answers the speed-to-lead clock and moves `new` →
  * `contacted`. "No answer"/voicemail/busy → a `lead_retry` task (+15 min) and an
- * auto-drafted `lead.no_answer` text (an outbox card in link mode).
+ * auto-drafted `lead.no_answer` text (an outbox card in link mode). "Wrong number"
+ * stops the follow-ups: the queued texts to that number and open call-back tasks.
  */
 export const logLeadCall = action({
   name: "leads.call_log",
@@ -649,6 +905,29 @@ export const logLeadCall = action({
         .where(eq(leads.id, l.id));
     let retryTaskId: string | null = null;
     let textQueued = false;
+    let followUpsStopped = false;
+    if (input.outcome === "wrong_number") {
+      const entity = { type: "lead", id: l.id } as const;
+      const texts = await cancelScheduledMessages(
+        tx,
+        { entity, templateKeys: FOLLOW_UP_TEMPLATES },
+        "wrong_number",
+      );
+      const tasks = await closeTasksFor(
+        tx,
+        { kind: "lead_retry", entity },
+        "dismissed",
+        actor,
+      );
+      followUpsStopped = texts + tasks > 0;
+      await writeActivity(tx, {
+        entity,
+        customerId: l.customerId,
+        kind: "lead.updated",
+        summary: "Wrong number: follow-up texts and call-backs stopped",
+        actorUserId: actor.userId,
+      });
+    }
     if (["no_answer", "voicemail", "busy"].includes(input.outcome)) {
       const t = await createTask(
         tx,
@@ -687,11 +966,15 @@ export const logLeadCall = action({
         }
       }
     }
-    return { callId, retryTaskId, textQueued };
+    return { callId, retryTaskId, textQueued, followUpsStopped };
   },
   revalidate: ({ input }) => [...LEADS_PATHS(input.leadId), "/tasks"],
 });
 
+/**
+ * Open-status steps and their way back: Contacted ↔ Not contacted, Qualify ↔
+ * Unqualify (rules.ts STATUS_STEPS). Closed leads come back through Reopen.
+ */
 export const setLeadStatus = action({
   name: "leads.status",
   perm: "leads.edit",
@@ -701,12 +984,19 @@ export const setLeadStatus = action({
     status: z.enum(["new", "contacted", "qualified"]),
   }),
   audit: "lead.status_changed",
-  async run({ input, tx, actor }) {
-    const l = await loadLead(tx, input.leadId);
-    if (l.status === "booked")
-      throw new ConflictError("booked", "This lead is already booked.");
-    await changeStatus(tx, l, input.status, actor, { lostReason: null });
-    return { ok: true };
+  async run({ input, tx, actor }): Promise<LeadChangeResult> {
+    const l = await lockLead(tx, input.leadId);
+    if (!isOpenStatus(l.status))
+      throw new ConflictError(
+        l.status,
+        l.status === "booked"
+          ? "This lead is already booked."
+          : "Reopen this lead first.",
+      );
+    const eventId = await changeStatus(tx, l, input.status, actor, {
+      lostReason: null,
+    });
+    return changed(l, input.status, eventId);
   },
   auditEntity: ({ input }) => ({ type: "lead", id: input.leadId }),
   revalidate: ({ input }) => LEADS_PATHS(input.leadId),
@@ -722,14 +1012,14 @@ export const markLeadLost = action({
     note: optText(1000),
   }),
   audit: "lead.lost",
-  async run({ input, tx, actor }) {
+  async run({ input, tx, actor }): Promise<LeadChangeResult> {
     const s = await getSettings();
     if (!s.leads.lost_reasons.includes(input.reason))
       throw new ValidationError({ reason: ["Pick a reason."] });
-    const l = await loadLead(tx, input.leadId);
+    const l = await lockLead(tx, input.leadId);
     if (l.status === "booked")
       throw new ConflictError("booked", "This lead is already booked.");
-    await changeStatus(
+    const eventId = await changeStatus(
       tx,
       l,
       "lost",
@@ -737,7 +1027,7 @@ export const markLeadLost = action({
       { lostReason: input.reason },
       `Marked lost: ${lostReasonLabel(input.reason)}${input.note ? ` — ${input.note}` : ""}`,
     );
-    return { ok: true };
+    return changed(l, "lost", eventId);
   },
   auditEntity: ({ input }) => ({ type: "lead", id: input.leadId }),
   revalidate: ({ input }) => LEADS_PATHS(input.leadId),
@@ -749,11 +1039,11 @@ export const markLeadSpam = action({
   feature: "leads",
   input: z.object({ leadId: uuid }),
   audit: "lead.spam",
-  async run({ input, tx, actor }) {
-    const l = await loadLead(tx, input.leadId);
+  async run({ input, tx, actor }): Promise<LeadChangeResult> {
+    const l = await lockLead(tx, input.leadId);
     if (l.status === "booked")
       throw new ConflictError("booked", "This lead is already booked.");
-    await changeStatus(
+    const eventId = await changeStatus(
       tx,
       l,
       "spam",
@@ -764,13 +1054,17 @@ export const markLeadSpam = action({
       },
       "Marked as spam",
     );
-    return { ok: true };
+    return changed(l, "spam", eventId);
   },
   auditEntity: ({ input }) => ({ type: "lead", id: input.leadId }),
   revalidate: ({ input }) => LEADS_PATHS(input.leadId),
 });
 
-/** "Looks legit": restores a spam/"Check" lead, creates its customer and consent rows. */
+/**
+ * "Looks legit" (a "Check" lead) and "Not spam" (spam's way back): creates the
+ * customer and consent rows, clears the score, and a spam lead goes back to the
+ * open status it had before (New when it came in as spam).
+ */
 export const markLeadNotSpam = action({
   name: "leads.not_spam",
   perm: "leads.edit",
@@ -778,13 +1072,23 @@ export const markLeadNotSpam = action({
   input: z.object({ leadId: uuid }),
   audit: "lead.not_spam",
   async run({ input, tx, actor }) {
-    const l = await loadLead(tx, input.leadId);
+    const l = await lockLead(tx, input.leadId);
+    if (l.status === "booked" || l.status === "lost")
+      throw new ConflictError(l.status, "This lead isn't spam.");
     const c = await ensureLeadCustomer(tx, l, actor);
     const fresh = { ...l, customerId: c.customerId, propertyId: c.propertyId };
-    await changeStatus(
+    const to: LeadStatus =
+      l.status === "spam"
+        ? previousOpenStatus(
+            await leadStatusHistory(l.id),
+            "spam",
+            !!l.firstResponseAt,
+          )
+        : (l.status as LeadStatus);
+    const eventId = await changeStatus(
       tx,
       fresh,
-      l.status === "spam" ? "new" : (l.status as LeadStatus),
+      to,
       actor,
       {
         spamScore: 0,
@@ -797,9 +1101,134 @@ export const markLeadNotSpam = action({
           },
         },
       },
-      "Marked as not spam",
+      l.status === "spam" ? "Marked as not spam" : "Looks legit",
+      { record: true, raw: { review: "legit" } },
     );
-    return { customerId: c.customerId };
+    return {
+      customerId: c.customerId,
+      leadId: l.id,
+      status: to,
+      eventId,
+    };
+  },
+  auditEntity: ({ input }) => ({ type: "lead", id: input.leadId }),
+  revalidate: ({ input }) => LEADS_PATHS(input.leadId),
+});
+
+/**
+ * Reopen (Lost's way back, and a booked lead whose job was cancelled): back to
+ * the open status it had before, from the status history (rules.ts
+ * previousOpenStatus), not always Contacted. A spam lead goes through Not spam.
+ */
+export const reopenLead = action({
+  name: "leads.reopen",
+  perm: "leads.edit",
+  feature: "leads",
+  input: z.object({ leadId: uuid }),
+  audit: "lead.reopened",
+  async run({ input, tx, actor }): Promise<LeadChangeResult> {
+    const l = await lockLead(tx, input.leadId);
+    if (l.status === "spam")
+      throw new ConflictError("spam", "Use Not spam for a spam lead.");
+    const [job] = l.convertedJobId
+      ? await tx
+          .select({ status: jobs.status })
+          .from(jobs)
+          .where(eq(jobs.id, l.convertedJobId))
+          .limit(1)
+      : [];
+    const rule = reopenRule({
+      status: l.status,
+      jobStatus: job?.status ?? null,
+    });
+    if (!rule) throw new ConflictError("open", "This lead is already open.");
+    if (!rule.ok) throw new ConflictError("not_reopenable", rule.reason);
+    const to = previousOpenStatus(
+      await leadStatusHistory(l.id),
+      l.status,
+      !!l.firstResponseAt,
+    );
+    const extra: Partial<LeadRow> = { lostReason: null };
+    if (l.status === "booked") extra.convertedJobId = null;
+    const eventId = await changeStatus(
+      tx,
+      l,
+      to,
+      actor,
+      extra,
+      `Reopened: back to ${STATUS_WORD[to]}`,
+      l.status === "booked"
+        ? { raw: { cancelled_job_id: l.convertedJobId } }
+        : {},
+    );
+    return changed(l, to, eventId);
+  },
+  auditEntity: ({ input }) => ({ type: "lead", id: input.leadId }),
+  revalidate: ({ input }) => LEADS_PATHS(input.leadId),
+});
+
+/**
+ * Undo for every status toast: reverts one recorded change (`eventId` from the
+ * action's result) while it is still the lead's latest, restoring what it
+ * overwrote (status, lost reason, spam score, the booked job).
+ */
+export const undoLeadChange = action({
+  name: "leads.undo",
+  perm: "leads.edit",
+  feature: "leads",
+  input: z.object({ leadId: uuid, eventId: uuid }),
+  audit: "lead.change_undone",
+  async run({ input, tx, actor }): Promise<LeadChangeResult> {
+    const l = await lockLead(tx, input.leadId);
+    const [ev] = await tx
+      .select({
+        id: leadEvents.id,
+        raw: leadEvents.raw,
+        createdAt: leadEvents.createdAt,
+      })
+      .from(leadEvents)
+      .where(
+        and(
+          eq(leadEvents.id, input.eventId),
+          eq(leadEvents.leadId, l.id),
+          eq(leadEvents.kind, "status"),
+        ),
+      )
+      .limit(1);
+    if (!ev) throw new NotFoundError("Change");
+    const [later] = await tx
+      .select({ id: leadEvents.id })
+      .from(leadEvents)
+      .where(
+        and(
+          eq(leadEvents.leadId, l.id),
+          eq(leadEvents.kind, "status"),
+          gt(leadEvents.createdAt, ev.createdAt),
+        ),
+      )
+      .limit(1);
+    const patch = later ? null : undoPatch(ev.raw as StatusEventRaw, l);
+    if (!patch)
+      throw new ConflictError(
+        "moved_on",
+        "This lead changed since, so there's nothing to undo.",
+      );
+    const extra: Partial<LeadRow> = { lostReason: patch.lostReason };
+    if (patch.spamScore !== undefined) extra.spamScore = patch.spamScore;
+    if (patch.spamReason !== undefined) extra.spamReason = patch.spamReason;
+    if (patch.convertedJobId !== undefined)
+      extra.convertedJobId = patch.convertedJobId;
+    const to = patch.status as LeadStatus;
+    const eventId = await changeStatus(
+      tx,
+      l,
+      to,
+      actor,
+      extra,
+      `Undone: back to ${STATUS_WORD[to] ?? to}`,
+      { record: true, raw: { undo_of: ev.id } },
+    );
+    return changed(l, to, eventId);
   },
   auditEntity: ({ input }) => ({ type: "lead", id: input.leadId }),
   revalidate: ({ input }) => LEADS_PATHS(input.leadId),
@@ -825,6 +1254,13 @@ export const prepareLeadConversion = action({
   revalidate: ({ input }) => LEADS_PATHS(input.leadId),
 });
 
+/**
+ * Edit lead: the request details and (build SPEC fix) the contact details:
+ * phone, email and address. A blank contact field keeps what's there. A fixed
+ * phone or email also fixes the lead's customer where it still holds the old
+ * (mistyped) value (`customerFields`); a new address is added to the customer's
+ * properties.
+ */
 export const updateLead = action({
   name: "leads.update",
   perm: "leads.edit",
@@ -832,6 +1268,13 @@ export const updateLead = action({
   input: z.object({
     leadId: uuid,
     name: optText(200),
+    phone: optText(40),
+    email: optText(200),
+    street: optText(200),
+    unit: optText(40),
+    city: optText(80),
+    state: optText(40),
+    zip: optText(12),
     serviceTypeId: optUuid,
     service: optText(120),
     price: optText(30),
@@ -841,35 +1284,95 @@ export const updateLead = action({
     sourceId: optUuid,
   }),
   audit: "lead.updated",
-  async run({ input, tx, activity }) {
-    const l = await loadLead(tx, input.leadId);
+  async run({ input, tx, actor, activity }) {
+    const l = await lockLead(tx, input.leadId);
     const { parseMoneyToCents } = await import("@/lib/money");
     const price = input.price ? parseMoneyToCents(input.price) : null;
     if (input.price && price == null)
       throw new ValidationError({ price: ["Enter a dollar amount."] });
     if (input.preferredDate && !/^\d{4}-\d{2}-\d{2}$/.test(input.preferredDate))
       throw new ValidationError({ preferredDate: ["Pick a date."] });
+    let phone = l.phone;
+    if (input.phone) {
+      const { normalizePhone } = await import("@/lib/phone");
+      phone = normalizePhone(input.phone);
+      if (!phone)
+        throw new ValidationError({ phone: ["Enter a valid phone number."] });
+    }
+    let email = l.email;
+    if (input.email) {
+      email = input.email.toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+        throw new ValidationError({ email: ["Enter a valid email."] });
+    }
+    if (!!input.street !== !!input.zip)
+      throw new ValidationError(
+        input.street
+          ? { zip: ["Enter the ZIP too."] }
+          : { street: ["Enter the street too."] },
+      );
+    const address =
+      input.street && input.zip
+        ? {
+            street: input.street,
+            ...(input.unit ? { unit: input.unit } : {}),
+            city: input.city ?? "",
+            state: (input.state ?? "").toUpperCase().slice(0, 2),
+            zip: input.zip,
+          }
+        : l.address;
+    const service = input.serviceTypeId ? null : (input.service ?? null);
+    const contactChanged =
+      phone !== l.phone ||
+      email !== l.email ||
+      JSON.stringify(address ?? null) !== JSON.stringify(l.address ?? null);
     await tx
       .update(leads)
       .set({
         name: input.name ?? l.name,
+        phone,
+        email,
+        address,
         serviceTypeId: input.serviceTypeId ?? null,
-        serviceText: input.service ?? null,
+        serviceText: service,
         quotedPriceCents: price,
         preferredDate: input.preferredDate ?? null,
         preferredWindow: input.preferredWindow ?? null,
         notes: input.notes ?? null,
         leadSourceId: input.sourceId ?? l.leadSourceId,
+        dedupeHash:
+          phone !== l.phone || email !== l.email
+            ? dedupeHashOf(phone, email, service)
+            : l.dedupeHash,
         updatedAt: new Date(),
       })
       .where(eq(leads.id, l.id));
+    if (address !== l.address) await linkProperty(tx, l, address, actor);
+    const customerFields =
+      l.customerId && (phone !== l.phone || email !== l.email)
+        ? (
+            await updateContactFromLead(
+              tx,
+              l.customerId,
+              {
+                oldPhone: l.phone,
+                newPhone: phone,
+                oldEmail: l.email,
+                newEmail: email,
+              },
+              actor,
+            )
+          ).fields
+        : [];
     await activity({
       entity: { type: "lead", id: l.id },
       customerId: l.customerId,
       kind: "lead.updated",
-      summary: "Lead details edited",
+      summary: contactChanged
+        ? "Lead details and contact info edited"
+        : "Lead details edited",
     });
-    return { ok: true };
+    return { ok: true, customerFields };
   },
   auditEntity: ({ input }) => ({ type: "lead", id: input.leadId }),
   revalidate: ({ input }) => LEADS_PATHS(input.leadId),
@@ -879,6 +1382,40 @@ export const updateLead = action({
 export async function loadMoreLeads(f: LeadFilter) {
   const user = await requireUser("leads.view");
   return listLeads(user, f);
+}
+
+/** The lead card's light loader (the sheet): one lead, no page around it. */
+export async function loadLeadCard(
+  leadId: string,
+): Promise<{ ok: true; data: LeadCardData } | { ok: false; error: string }> {
+  try {
+    const user = await requireUser("leads.view");
+    return { ok: true, data: await getLeadCard(user, leadId) };
+  } catch (err) {
+    if (err instanceof NotFoundError)
+      return { ok: false, error: "This lead isn't here anymore." };
+    if (err instanceof ForbiddenError)
+      return { ok: false, error: "You don't have access to leads." };
+    throw err;
+  }
+}
+
+/** Sources and service types for the Edit lead sheet (loaded when it opens). */
+export async function loadLeadEditOptions(): Promise<{
+  sources: { id: string; name: string }[];
+  services: { id: string; name: string }[];
+}> {
+  await requireUser("leads.edit");
+  const { listActiveSources } = await import("./queries");
+  const { listServiceTypes } = await import("@/features/settings/api");
+  const [sources, services] = await Promise.all([
+    listActiveSources(),
+    listServiceTypes().catch(() => []),
+  ]);
+  return {
+    sources,
+    services: services.map((s) => ({ id: s.id, name: s.name })),
+  };
 }
 
 // ------------------------------------------------------------------ sources (settings)

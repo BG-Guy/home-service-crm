@@ -434,6 +434,19 @@
    Utilities from the spec (unlayered on purpose: they beat Tailwind utilities)
    ========================================================================== */
 
+/* A tap target as big as its box (LeadBox): the button's ::after covers the
+   nearest positioned ancestor, and the focus ring follows the box. */
+.box-hit::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-card);
+}
+.box-hit:focus-visible::after {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* Glass (DESIGN.md §3). Callers add their own hairline. */
 .material {
   background: var(--bar);

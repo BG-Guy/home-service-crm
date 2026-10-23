@@ -47,6 +47,8 @@ Scripts that touch the DB run with `tsx --conditions=react-server` (so `server-o
 - Domain events: transactional outbox (`events` table) → `processEvents()` in `after()` and the cron tick → handlers in each module's `events.ts`.
 - Scheduler: `/api/cron/tick` (Bearer `CRON_SECRET`, advisory lock 42) plus a throttled piggy-back (`maybeTickSoon()` in the `(app)` layout, ≤ once a minute).
 - Assign hub `/dispatch` (`jobs.assign`; `?date=&tech=&job=`): reads in `src/features/jobs/dispatch/queries.ts`, pure ranking in `dispatch/recommend.ts` (golden-tested), assigning through the existing `scheduleJob`. Tech selection is client state mirrored with `history.pushState` (no server round trip); the map is `src/features/map/components/RouteMap.tsx` (lazy Leaflet).
+- Leads inbox `/leads`: a grid of `LeadBox`es (phones 1 or 2 columns, `leads-cols` cookie) plus the lead map (`leads/map-queries.ts`); a tap opens the lead card sheet (`LeadCardProvider` / `useLeadCard()`, mirrored in `?lead=`). Status steps and their reverses are pure in `src/features/leads/rules.ts`; Undo is `undoLeadChange` (each status `lead_events` row keeps what it overwrote).
+- Booking (any lead): Who → What → When (`/leads/new` → `/leads/new/schedule?leadId=`) → `bookLead` (`leads/booking-actions.ts` → jobs `createBookedJob`): a 2-hour arrival window and no tech, so the job waits in the Assign hub's Needs a tech queue (`dispatch/needs-tech.ts`). Windows come from the pure, golden-tested `src/features/jobs/availability/engine.ts` via `getAvailability`.
 
 **Folders**
 ```
@@ -95,9 +97,10 @@ BUILD_PLAN §5).
 - Animations: CSS spring tokens first (`--ease-spring*` in `globals.css`), `motion/react-m` second — wrap only the component that uses `m.*` in `<MotionProvider>` (`src/ui/motion/MotionProvider.tsx`; it is **not** mounted globally, to keep ~30 KB out of the shell), preferably inside a lazily loaded chunk; never the full `motion` bundle. `<ViewTransition>` (stable in React 19.3) via `PageTransition`/`PushLink`/`BackLink`.
 - ⚖️ features default OFF or conservative. Never remove compliance warnings.
 - No AI on the money path. No PII to free-tier AI (`src/adapters/ai/policy.ts`).
-- ⚖️ Team members' date of birth / age: shown only with `users.manage` (or on your own record), never on public pages, never to AI, never in audit payloads, and never an input to dispatch ranking (`recommend.ts` has no such field; a golden test checks it).
+- ⚖️ Team members' date of birth / age: shown only with `users.manage` (or on your own record), never on public pages, never to AI, never in audit payloads, and never an input to dispatch ranking or booking availability (`recommend.ts` and `availability/engine.ts` have no such field; golden tests check both).
+- ⚖️ The lockout proof-of-ownership check (`requiresOwnershipCheck` on trade jobs such as Lockout, plus its "Ownership check" checklist) is a legal safeguard: never remove it.
 - Don't run `drizzle-kit push/studio` against PGlite while `next dev` is running.
-- Never edit an applied migration (`drizzle/0000_*` … `0003_*`); generate a new one. Views/triggers: `npx drizzle-kit generate --custom --name <x>` (e.g. `0003_invoice_balances_tip_cap.sql` replaces the `invoice_balances` view).
+- Never edit an applied migration (`drizzle/0000_*` … `0006_*`); generate a new one. Views/triggers: `npx drizzle-kit generate --custom --name <x>` (e.g. `0003_invoice_balances_tip_cap.sql` replaces the `invoice_balances` view).
 - Schema files use relative imports only and never import `server-only` (drizzle-kit loads them).
 - A `"use client"` file exports components only. Helpers that server pages also call live in a plain module (e.g. `src/features/time/format.ts`); calling a client export from the server throws at render time.
 - `api.ts`, `events.ts`, `cron.ts`, `seed.ts` and anything they import must not import `@/lib/auth/current` (it pulls `next/navigation`, which breaks `npm run seed:demo` under tsx). Use `can`/`canAny` from `@/lib/permissions` with an explicit viewer.
@@ -111,16 +114,21 @@ BUILD_PLAN §5).
 ## 5. How to add things
 
 - **Module:** copy `src/features/_template/` and follow its README (SPEC §15.2): schema → `npm run db:generate` → permissions/flags → settings → manifest + one registry line → aggregators → routes → tests → docs.
-- **Route:** `src/app/(app)/<path>/page.tsx` with `requireUser(perm)` at the top, `<PageTransition>`, `LargeTitleHeader` (top level, `trailing={<HeaderActions />}` for the + menu and bell) or `NavBar` with `back` (pushed screens), content in `<Page>`. Add `loading.tsx` with `ListLoading`/`DetailLoading` from `src/app/(app)/_components/ListLoading`.
+- **Route:** `src/app/(app)/<path>/page.tsx` with `requireUser(perm)` at the top, `<PageTransition>`, `LargeTitleHeader` (top level, `trailing={<HeaderActions />}` for the named create buttons, search and bell; `own="estimate"` etc. puts the page's own create action first) or `NavBar` with `back` (pushed screens), content in `<Page>`. Add `loading.tsx` with `ListLoading`/`DetailLoading` from `src/app/(app)/_components/ListLoading`.
 - **Nav item / settings page:** add to the module's `nav.ts`; the tab bar, sidebar, More list and `/settings` index pick it up (filtered by perm + flag).
 - **Adapter/driver:** implement the frozen interface in `src/adapters/<kind>/`, select it by env var (SPEC §9.7).
 - **Automation / template:** `src/features/automations/builtin/index.ts` (`builtinAutomations`, `builtinTemplates`), seeded by the base seed. On every start the base seed also brings built-in rows nobody has edited (`updated_by` null) to the catalog, so any action that edits or toggles an automation or template must set `updatedBy`. Template syntax: `{{path}}`, `{{path|fallback}}`, `{{path:money}}`.
 - **Event:** add the type to `EventMap` (`src/lib/event-types.ts`), `emit()` it inside the action's transaction, handle it in a module's `events.ts` (idempotent; each handler runs in its own transaction).
 - **Custom field:** a row in `custom_field_defs` (Settings → Custom fields); render with the `CustomFieldsFields` slot.
+- **Job type:** two levels. The kinds (Free estimate, Service call, Project) are fixed in `src/features/jobs/kinds.ts`
+  (`zJobKind` in `@/db/enums`); a trade job is a `service_types` row with a `kind`, edited in Settings → Job types
+  (`/settings/services`). Pickers use `JobTypePicker` with `listServiceTypeOptions()`. `maintenance_interval_months` is
+  retired: never write it.
 - **Preset (trade):** data only (`generic` ships; the signup trade picker lists presets in `src/app/(auth)/signup/options.ts`).
 - **Feature flag:** declare in the module's `permissions.ts` `flags`; check with `isEnabled()` (server) or `action({ feature })`; it appears on `/settings/features`.
 - **Demo trade profile:** copy `src/db/seed/profiles/handyman.ts` (company, metro + ZIP areas, staff, price book, job
-  recipes, fleet, tools and every bit of fragment copy; types in `profiles/types.ts`), register it in
+  recipes, trade jobs with their kinds in `settings.tradeJobs`, fleet, tools and every bit of fragment copy; types in
+  `profiles/types.ts`; every job type a recipe uses needs a tech with that skill), register it in
   `profiles/index.ts`, then run `npx vitest run tests/db/seed-profiles.test.ts` (add the key to its `TRADES`/`DOMAINS`).
   Recipe order matters: `partScenarios[0]` and `[3]` land on the past deposit jobs, `[9]` on J79's sent estimate,
   `laborScenarios[0]` on the J30 deposit and `[1]` on J41's change order. `buildPlan(profile)` is pure; DEMO is chosen
@@ -177,6 +185,9 @@ MapView, FullscreenHub (M19 full-screen hub for phone/tablet and wall mode: top 
 hubs stack; usage blocks in DESIGN.md "Fullscreen hub (M19)"; reuse it, never hand-roll a full-screen view),
 FullscreenButton, PeriodStepper, InstallPrompt, lazy (Lazy* wrappers). Gallery: `/dev/ui` and `/dev/ui/shell`
 (dev only). Maps share `src/features/map/route-draw.ts` (route lines and arrows) and `src/lib/declutter.ts` (marker overlap).
+Feature pieces to reuse: `JobTypePicker` (`src/features/jobs/components/`: job type cards + "What's the job?" chips),
+`HeaderActions own="…"` (named create buttons), `LeadCardProvider` / `useLeadCard()` and `LeadBox`
+(`src/features/leads/components/`; the whole-box tap target is the `.box-hit` utility). Patterns: DESIGN.md §6.
 
 **Use existing components before creating new ones.** Status labels and tones: `src/ui/status.ts`. Icons by name: `src/ui/icons.ts`.
 
@@ -214,6 +225,10 @@ Shell and motion (v2, DESIGN.md §4–§6):
 - **Readiness score** (post-job, §11.2): how dispute-proof the job's evidence is (photos, signatures, receipts).
 - **Outbox (messages):** link-mode SMS cards a person taps to send. **Outbox (offline):** queued client actions replayed when online.
 - **Slot:** a cross-module UI component with a frozen props contract (BUILD_PLAN §5).
+- **Job type (kind):** Free estimate, Service call, Project (`service_types.kind`); the trade's jobs (Lockout, Rekey…) sit under one.
+- **Arrival window:** the 2-hour span a booking promises ("Arrives 8–10 AM"); booking offers only open ones.
+- **Needs a tech:** a booked job (arrival window today or later; not cancelled, closed or completed) with nobody assigned; the Assign badge and queue.
+- **Working hours / time off:** `users.work_hours` (null = business hours) and `time_off` rows; booking and the Assign hub read both.
 
 ## 10. Lead-engineer amendments (override SPEC.md)
 

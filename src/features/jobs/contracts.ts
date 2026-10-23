@@ -115,6 +115,29 @@ export interface TechDayJob {
   completedAt: Date | null;
 }
 
+/**
+ * A job type for pickers (booking, New job, caller form): `listServiceTypeOptions()`
+ * in ./service-types.ts. `kind` groups it under Free estimate / Service call /
+ * Project (labels and defaults in ./kinds.ts); `primary` marks the kind's own row,
+ * which a booking uses when no trade job ("What's the job?" chip) is picked.
+ */
+export interface ServiceTypeOption {
+  id: string;
+  name: string;
+  kind: "estimate" | "service" | "project";
+  /** Icon name from src/ui/icons.ts (resolve with `iconFor`), or null. */
+  icon: string | null;
+  /** Hex color, or null. */
+  color: string | null;
+  defaultDurationMin: number;
+  defaultPriceCents: number | null;
+  /** ⚖️ Lockout-style jobs: ID + proof of address before opening (checklist enforced). */
+  requiresOwnershipCheck: boolean;
+  active: boolean;
+  /** The kind's own row (see `KindGroup.primary` in ./kinds.ts). */
+  primary: boolean;
+}
+
 export interface HistoricalJobRow {
   customerId: string;
   propertyId: string;

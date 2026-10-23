@@ -10,12 +10,17 @@ import {
   StatusSection,
 } from "@/features/team/components/MemberControls";
 import {
+  TimeOffSection,
+  WorkHoursSection,
+} from "@/features/team/components/MemberSchedule";
+import {
   getOffboardingState,
   getTeamMember,
   listRoleOptions,
   listSkillOptions,
 } from "@/features/team/queries";
 import { workerTypeLabel } from "@/features/team/rules";
+import { getMemberSchedule } from "@/features/team/schedule-queries";
 import { TimeEntriesSection } from "@/features/time/slots";
 import { ToolCustodyRow } from "@/features/tools/slots";
 import { AssignedVehicleRow } from "@/features/vehicles/slots";
@@ -49,11 +54,12 @@ export default async function TeamMemberPage({
   const viewer = await requireUser("users.manage");
   const { id } = await params;
   if (!UUID.test(id)) notFound();
-  const [m, roles, skills, tz] = await Promise.all([
+  const [m, roles, skills, tz, schedule] = await Promise.all([
     getTeamMember(id),
     listRoleOptions(),
     listSkillOptions(),
     getCompanyTimezone(),
+    getMemberSchedule(id),
   ]);
   if (!m) notFound();
   const deactivated = m.status === "deactivated";
@@ -326,6 +332,30 @@ export default async function TeamMemberPage({
                 ]}
               />
             </ListSection>
+          )}
+
+          {/* Booking availability: when this tech takes jobs (leads-flow item 8). */}
+          {tech && !deactivated && (
+            <WorkHoursSection
+              userId={m.id}
+              firstName={m.name.split(" ")[0] || m.name}
+              workHours={schedule.workHours}
+              business={schedule.business}
+            />
+          )}
+          {tech && !deactivated && (
+            <TimeOffSection
+              userId={m.id}
+              firstName={m.name.split(" ")[0] || m.name}
+              today={today}
+              entries={schedule.timeOff.map((t) => ({
+                id: t.id,
+                label: t.label,
+                note: t.note,
+                allDay: t.allDay,
+                current: t.current,
+              }))}
+            />
           )}
 
           <AccessSection

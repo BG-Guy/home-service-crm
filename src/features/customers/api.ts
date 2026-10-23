@@ -9,7 +9,7 @@ import { writeAudit } from "@/lib/audit";
 import { decryptOrNull } from "@/lib/crypto";
 import { ForbiddenError, NotFoundError } from "@/lib/errors";
 import { emit } from "@/lib/events";
-import { normalizePhone } from "@/lib/phone";
+import { normalizePhone, normalizePhoneLenient } from "@/lib/phone";
 import { enqueueJob } from "@/lib/queue";
 import type { Actor, SessionUser } from "@/lib/types";
 import { timezoneForZip } from "@/lib/zip-tz";
@@ -594,6 +594,75 @@ export async function setCustomerFlags(
     data: { flags: clean, reason: reason ?? null },
     actorUserId: actor.userId,
   });
+}
+
+/**
+ * Edit lead fixed a typo in the phone or email. When the customer made from that lead
+ * still carries the old value, apply the same fix there: the change an office user could
+ * make on the customer page, with the same audit, event and activity (consent rows are
+ * untouched, as with updateCustomer). A customer value that differs from the lead's old
+ * one is left alone.
+ */
+export async function updateContactFromLead(
+  tx: Tx,
+  customerId: string,
+  change: {
+    oldPhone?: string | null;
+    newPhone?: string | null;
+    oldEmail?: string | null;
+    newEmail?: string | null;
+  },
+  actor: Actor,
+): Promise<{ fields: ("phone" | "email")[] }> {
+  const [c] = await tx
+    .select({
+      phone: customers.phone,
+      email: customers.email,
+      anonymizedAt: customers.anonymizedAt,
+    })
+    .from(customers)
+    .where(eq(customers.id, customerId))
+    .limit(1);
+  if (!c || c.anonymizedAt) return { fields: [] };
+  // The old value may be the typo itself, so match it leniently; the new one must be valid.
+  const oldPhone =
+    normalizePhone(change.oldPhone) ?? normalizePhoneLenient(change.oldPhone);
+  const newPhone = normalizePhone(change.newPhone);
+  const oldEmail = normEmail(change.oldEmail);
+  const newEmail = normEmail(change.newEmail);
+  const next: { phone?: string; email?: string } = {};
+  if (oldPhone && newPhone && newPhone !== oldPhone && c.phone === oldPhone)
+    next.phone = newPhone;
+  if (oldEmail && newEmail && newEmail !== oldEmail && c.email === oldEmail)
+    next.email = newEmail;
+  const fields = Object.keys(next) as ("phone" | "email")[];
+  if (fields.length === 0) return { fields };
+  await tx
+    .update(customers)
+    .set({ ...next, updatedAt: new Date() })
+    .where(eq(customers.id, customerId));
+  await writeAudit(tx, {
+    actor,
+    action: "customer.updated",
+    entity: { type: "customer", id: customerId },
+    before: Object.fromEntries(fields.map((k) => [k, c[k]])),
+    after: next,
+  });
+  await emit(
+    tx,
+    "customer.updated",
+    { type: "customer", id: customerId },
+    { customer_id: customerId, fields },
+    { actor },
+  );
+  await writeActivity(tx, {
+    entity: { type: "customer", id: customerId },
+    kind: "customer.updated",
+    summary: `Fixed the ${fields.join(" and ")} from the lead`,
+    data: { fields, source: "lead_edit" },
+    actorUserId: actor.userId,
+  });
+  return { fields };
 }
 
 /** Stripe card fingerprint for risk matching (B4). Idempotent. */

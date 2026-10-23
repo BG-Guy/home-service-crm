@@ -34,23 +34,40 @@ import { ToggleRow } from "@/ui/components/Toggle";
 import { cx } from "@/ui/cx";
 import { haptic } from "@/ui/motion/haptics";
 import { createJobAction } from "../actions";
+import { type JobKind, KIND_LABEL } from "../kinds";
 import { CALLBACK_REASON_LABEL } from "../machine";
+import { JobTypePicker } from "./JobTypePicker";
+import {
+  type JobTypeRow,
+  type JobTypeValue,
+  serviceTypeFor,
+  typeFor,
+  valueFromType,
+} from "./job-type-choice";
 import { newClientId } from "./offline-client";
 import { splitFor } from "./split";
 
-// /jobs/new (SPEC M05 create): S3 customer picker, service type, title, priority,
-// window (1/2/4 h), assignees with split, after-hours, recurrence, callback-of,
-// lead prefill, S56 custom fields. Autosaves a draft; idempotent on clientId.
+// /jobs/new (SPEC M05 create): S3 customer picker, the job type cards with the
+// trade's jobs as "What's the job?" chips (leads-flow redesign, item 6), title,
+// priority, window (1/2/4 h), assignees with split, after-hours, recurrence,
+// callback-of, lead prefill, S56 custom fields. A job from a lead gets no tech here
+// (the Assign hub picks one), so Technicians is hidden for it. Autosaves a draft;
+// idempotent on clientId.
 
 export interface NewJobDefaults {
   customerId: string | null;
   propertyId: string | null;
   serviceTypeId: string | null;
+  /** The job type when no service type is set yet (a lead's card pick). */
+  kind?: JobKind | null;
   title: string;
   description: string;
   customerNotes: string;
   date: string;
   start: string;
+  /** Kept from the lead (or the booking's "Book by hand" link). */
+  priority?: "normal" | "urgent" | "emergency";
+  afterHours?: boolean;
   leadId: string | null;
   /** Price quoted on the lead (added to the invoice as the first line). */
   quotedPriceCents?: number | null;
@@ -61,6 +78,9 @@ type Draft = {
   customerId: string | null;
   propertyId: string | null;
   serviceTypeId: string;
+  /** Card + chip (older drafts lack them: derived from serviceTypeId). */
+  kind?: JobKind | null;
+  job?: string | null;
   title: string;
   description: string;
   customerNotes: string;
@@ -94,7 +114,8 @@ export function NewJobForm({
   cancellationSummary,
 }: {
   defaults: NewJobDefaults;
-  serviceTypes: { id: string; name: string; defaultDurationMin: number }[];
+  /** Live job types (`listServiceTypeOptions()`). */
+  serviceTypes: JobTypeRow[];
   techs: { id: string; name: string; clockedIn: boolean }[];
   canAssign: boolean;
   viewerId: string;
@@ -108,15 +129,22 @@ export function NewJobForm({
   const formRef = useRef<HTMLFormElement>(null);
   const clientId = useRef(newClientId());
   const draftKey = `job:new:${defaults.leadId ?? defaults.callbackOf?.id ?? defaults.customerId ?? "blank"}`;
+  const initialType = valueFromType(
+    serviceTypes,
+    defaults.serviceTypeId,
+    defaults.kind,
+  );
   const initial: Draft = {
     customerId: defaults.customerId,
     propertyId: defaults.propertyId,
-    serviceTypeId: defaults.serviceTypeId ?? "",
+    serviceTypeId: serviceTypeFor(serviceTypes, initialType) ?? "",
+    kind: initialType.kind,
+    job: initialType.job,
     title: defaults.title,
     description: defaults.description,
     customerNotes: defaults.customerNotes,
-    priority: "normal",
-    afterHours: false,
+    priority: defaults.priority ?? "normal",
+    afterHours: defaults.afterHours ?? false,
     schedule: !!defaults.date,
     date: defaults.date,
     start: defaults.start,
@@ -139,16 +167,31 @@ export function NewJobForm({
   );
   const err = (k: string) => errors[k]?.[0];
 
-  const pickService = (id: string) => {
-    const st = serviceTypes.find((s) => s.id === id);
+  // Lead jobs get their tech in the Assign hub, never here.
+  const fromLead = !!defaults.leadId;
+  const showTechs = canAssign && !fromLead;
+  const typeValue: JobTypeValue =
+    d.kind !== undefined
+      ? { kind: d.kind ?? null, job: d.job ?? null }
+      : valueFromType(serviceTypes, d.serviceTypeId || null);
+
+  const pickType = (v: JobTypeValue) => {
+    const st = typeFor(serviceTypes, v);
+    const names = new Set([
+      ...serviceTypes.map((s) => s.name),
+      ...Object.values(KIND_LABEL),
+    ]);
     setD({
       ...d,
-      serviceTypeId: id,
+      kind: v.kind,
+      job: v.job,
+      serviceTypeId: st?.id ?? "",
       title:
-        !d.title || serviceTypes.some((s) => s.name === d.title)
-          ? (st?.name ?? d.title)
+        !d.title.trim() || names.has(d.title.trim())
+          ? (st?.name ?? (v.kind ? KIND_LABEL[v.kind] : d.title))
           : d.title,
       minutes: st && !d.schedule ? st.defaultDurationMin : d.minutes,
+      afterHours: st && /after[\s-]?hours/i.test(st.name) ? true : d.afterHours,
     });
   };
 
@@ -198,7 +241,7 @@ export function NewJobForm({
         date: d.schedule ? d.date || null : null,
         start: d.schedule ? d.start || null : null,
         minutes: d.minutes,
-        assignees: splitFor(d.picks, d.primaryPct),
+        assignees: fromLead && canAssign ? [] : splitFor(d.picks, d.primaryPct),
         recurrence: d.repeat ? { every: d.every, n: d.n } : null,
         callbackOfJobId: defaults.callbackOf?.id ?? null,
         callbackReason: defaults.callbackOf ? d.callbackReason : null,
@@ -278,15 +321,24 @@ export function NewJobForm({
         )}
       </div>
 
+      <section aria-labelledby="job-type-h" className="flex flex-col gap-2">
+        <h2
+          id="job-type-h"
+          className="px-4 text-subhead font-semibold text-label-2"
+        >
+          Job type
+        </h2>
+        <JobTypePicker
+          types={serviceTypes}
+          value={typeValue}
+          onChange={pickType}
+          other={false}
+          error={err("serviceTypeId")}
+        />
+      </section>
+
       <ListSection header="Job">
         <div className="flex flex-col gap-3 px-4 py-3">
-          <Select
-            label="Service type"
-            value={d.serviceTypeId}
-            placeholder="Choose a service"
-            options={serviceTypes.map((s) => ({ value: s.id, label: s.name }))}
-            onChange={(e) => pickService(e.target.value)}
-          />
           <TextField
             label="Title"
             value={d.title}
@@ -347,7 +399,14 @@ export function NewJobForm({
         />
       </ListSection>
 
-      <ListSection header="When">
+      <ListSection
+        header="When"
+        footer={
+          fromLead
+            ? "No tech here: the job waits in Assign, and the customer's confirmation goes out when a tech is set."
+            : undefined
+        }
+      >
         <ToggleRow
           title="Schedule now"
           subtitle={
@@ -417,7 +476,7 @@ export function NewJobForm({
         )}
       </ListSection>
 
-      {canAssign && (
+      {showTechs && (
         <ListSection
           header="Technicians"
           footer={
@@ -563,7 +622,7 @@ export function NewJobForm({
             title={d.title.trim() || "New job"}
             subtitle={
               d.schedule && d.date
-                ? `${formatDateKey(d.date, "en-US", { weekday: "short", month: "short", day: "numeric" })}${d.start ? ` · ${d.start}` : ""}${d.picks.length ? ` · ${d.picks.length} tech${d.picks.length === 1 ? "" : "s"}` : " · no tech yet"}`
+                ? `${formatDateKey(d.date, "en-US", { weekday: "short", month: "short", day: "numeric" })}${d.start ? ` · ${d.start}` : ""}${!fromLead && d.picks.length ? ` · ${d.picks.length} tech${d.picks.length === 1 ? "" : "s"}` : " · no tech yet"}`
                 : "Not scheduled yet"
             }
           />
@@ -575,7 +634,9 @@ export function NewJobForm({
             loading={pending}
             disabled={!d.title.trim()}
           >
-            {d.schedule && d.date && d.picks.length ? "Book job" : "Create job"}
+            {d.schedule && d.date && (fromLead || d.picks.length)
+              ? "Book job"
+              : "Create job"}
           </Button>
         }
       />

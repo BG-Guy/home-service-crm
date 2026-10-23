@@ -1,7 +1,7 @@
 import { Inbox, Truck } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
-import { createItemsFor } from "@/app/(app)/_components/create-items";
+import { canCreate } from "@/app/(app)/_components/create-items";
 import { HeaderActions } from "@/app/(app)/_components/HeaderActions";
 import { getCustomFieldDefs } from "@/features/settings/api";
 import { getFleetSummary } from "@/features/vehicles/api";
@@ -88,11 +88,9 @@ export default async function VehiclesPage({
     users: users.map((u) => ({ id: u.id, name: u.name })),
     customDefs: defs,
   };
-  // One "+" in the header (QA T4-11): when the global "+" menu offers New Vehicle
-  // (`/vehicles?new=vehicle`), the page keeps only the deep link, not a 2nd "+".
-  const inPlusMenu = createItemsFor(user.perms, await getFeatureFlags()).some(
-    (i) => i.href.startsWith("/vehicles?new="),
-  );
+  // The header shows a named "New vehicle" button (`/vehicles?new=vehicle`), so the
+  // form keeps only the deep link, not a second trigger.
+  const headerNew = canCreate("vehicle", user.perms, await getFeatureFlags());
 
   return (
     <PageTransition>
@@ -103,11 +101,11 @@ export default async function VehiclesPage({
             {manage && (
               <VehicleFormButton
                 mode="new"
-                hideTrigger={inPlusMenu}
+                hideTrigger={headerNew}
                 {...formProps}
               />
             )}
-            <HeaderActions />
+            <HeaderActions own="vehicle" />
           </div>
         }
       />

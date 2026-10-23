@@ -3,32 +3,45 @@ import { Page } from "@/ui/components/AppShell";
 import { NavBar } from "@/ui/components/NavBar";
 import { PageTransition } from "@/ui/motion/PageTransition";
 
-/** Calendar-shaped skeleton for step 2 (same size as the month grid). */
+/** The When step's shape: steps, the lead line, the job type row, the week strip and the windows. */
 export default function Loading() {
   return (
     <PageTransition>
-      <NavBar title="Schedule" back={{ href: "/leads/new", label: "Caller" }} />
-      <Page className="pt-2" wide>
-        <div aria-busy className="mx-auto w-full max-w-[1160px]">
-          <BookingSteps current={2} className="mb-5 max-w-[640px]" />
-          <span className="skeleton mb-5 block h-11 w-64 rounded-control" />
-          <div className="grid gap-8 md:grid-cols-2 min-[1200px]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_380px]">
-            {[0, 1].map((m) => (
-              <div key={m} className={m ? "hidden md:block" : undefined}>
-                <span className="skeleton mx-auto mb-4 block h-5 w-36 rounded-full" />
-                <div className="grid grid-cols-7 gap-y-4">
-                  {Array.from({ length: 35 }, (_, i) => (
-                    <span
-                      // biome-ignore lint/suspicious/noArrayIndexKey: static placeholder grid
-                      key={i}
-                      className="skeleton mx-auto block size-10 rounded-full"
-                    />
-                  ))}
-                </div>
-              </div>
-            ))}
-            <span className="skeleton hidden h-[420px] rounded-card min-[1200px]:block" />
+      <NavBar title="Book" back={{ href: "/leads", label: "Leads" }} />
+      <Page className="pt-2">
+        <div
+          aria-busy
+          className="mx-auto w-full max-w-[1160px] min-[1200px]:grid min-[1200px]:grid-cols-[minmax(0,1fr)_360px] min-[1200px]:gap-8"
+        >
+          <div className="flex flex-col gap-5">
+            <BookingSteps current={3} />
+            <div className="flex items-center gap-3">
+              <span className="skeleton size-9 shrink-0 rounded-full" />
+              <span className="flex flex-col gap-1.5">
+                <span className="skeleton block h-4 w-40 rounded-full" />
+                <span className="skeleton block h-3 w-56 rounded-full" />
+              </span>
+            </div>
+            <span className="skeleton block h-[64px] rounded-card" />
+            <div className="flex gap-2 overflow-hidden">
+              {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => (
+                <span
+                  key={i}
+                  className="skeleton block h-[76px] w-[54px] shrink-0 rounded-tile"
+                />
+              ))}
+            </div>
+            <span className="skeleton block h-4 w-28 rounded-full" />
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {[0, 1, 2, 3].map((i) => (
+                <span
+                  key={i}
+                  className="skeleton block h-[86px] rounded-tile"
+                />
+              ))}
+            </div>
           </div>
+          <span className="skeleton hidden h-[220px] rounded-card min-[1200px]:block" />
         </div>
       </Page>
     </PageTransition>

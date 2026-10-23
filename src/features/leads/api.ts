@@ -1,13 +1,14 @@
 import "server-only";
 import { and, asc, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import { db, type Tx } from "@/db";
-import { leadSources, leads, properties } from "@/db/schema";
+import { leadEvents, leadSources, leads, properties } from "@/db/schema";
+import { isJobKind } from "@/features/jobs/kinds";
 import { writeActivity } from "@/lib/activity";
 import { appUrl } from "@/lib/env";
 import { emit } from "@/lib/events";
 import { getSettings } from "@/lib/settings";
 import type { Actor, SessionUser } from "@/lib/types";
-import type { LeadPrefill } from "./contracts";
+import type { LeadPrefill, LeadPriority } from "./contracts";
 
 // B1 leads API (BUILD_PLAN §6.1). Writes take `tx` first and `actor` last.
 
@@ -42,6 +43,18 @@ export async function getLeadPrefill(
       .limit(1);
     propertyId = p?.id ?? null;
   }
+  // Booking prefs the office typed on the call (actions.ts saveBookingPrefs).
+  const b = (l.extra?._booking ?? {}) as {
+    kind?: unknown;
+    priority?: unknown;
+    after_hours?: unknown;
+  };
+  const priority =
+    b.priority === "normal" ||
+    b.priority === "urgent" ||
+    b.priority === "emergency"
+      ? (b.priority as LeadPriority)
+      : null;
   return {
     leadId: l.id,
     customerId: l.customerId,
@@ -53,10 +66,17 @@ export async function getLeadPrefill(
     preferredWindow: l.preferredWindow,
     notes: l.notes,
     leadSourceId: l.leadSourceId,
+    kind: isJobKind(b.kind) ? b.kind : null,
+    priority,
+    afterHours: b.after_hours === true,
   };
 }
 
-/** status → booked + converted ids; emits lead.converted + lead.status_changed. Idempotent. */
+/**
+ * status → booked + converted ids; emits lead.converted + lead.status_changed.
+ * Idempotent. The status lead_event (with what it overwrote) lets Reopen go back
+ * to the status the lead had before, once the job is cancelled.
+ */
 export async function markLeadConverted(
   tx: Tx,
   leadId: string,
@@ -96,6 +116,25 @@ export async function markLeadConverted(
     { actor },
   );
   if (l.status !== "booked") {
+    await tx.insert(leadEvents).values({
+      leadId,
+      kind: "status",
+      outcome: "booked",
+      actorUserId: actor.userId,
+      raw: {
+        from: l.status,
+        to: "booked",
+        lost_reason: null,
+        prev: {
+          lost_reason: l.lostReason,
+          spam_score: l.spamScore,
+          spam_reason: l.spamReason,
+          converted_job_id: l.convertedJobId,
+        },
+        job_id: to.jobId ?? null,
+        estimate_id: to.estimateId ?? null,
+      },
+    });
     await emit(
       tx,
       "lead.status_changed",

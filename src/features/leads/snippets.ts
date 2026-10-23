@@ -34,7 +34,11 @@ export interface Snippets {
 export function buildSnippets(i: SnippetInput): Snippets {
   const base = i.appUrl.replace(/\/+$/, "");
   const pk = i.publicKey;
-  const services = (i.services.length ? i.services : ["Repair", "Installation"])
+  const services = (
+    i.services.length
+      ? i.services
+      : ["Free estimate", "Service call", "Project"]
+  )
     .slice(0, 12)
     .concat("Other");
   const consent = esc(consentWithCompany(i.consentText, i.companyName));

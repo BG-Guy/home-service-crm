@@ -18,6 +18,8 @@ export const SERVICE_ICONS = [
   { value: "toolbox", label: "Toolbox" },
   { value: "key", label: "Key" },
   { value: "lock", label: "Lock" },
+  { value: "car", label: "Car" },
+  { value: "camera", label: "Camera" },
   { value: "clipboard", label: "Clipboard" },
   { value: "checklist", label: "Checklist" },
   { value: "estimates", label: "Document" },

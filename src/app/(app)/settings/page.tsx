@@ -97,7 +97,7 @@ export default async function SettingsIndexPage() {
             <div className="grid grid-cols-4 gap-3">
               <StatCard label="Active team" value={counts.users} href="/team" />
               <StatCard
-                label="Service types"
+                label="Job types"
                 value={counts.services}
                 href="/settings/services"
               />

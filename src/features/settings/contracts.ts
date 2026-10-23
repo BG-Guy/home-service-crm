@@ -34,6 +34,8 @@ export type CustomFieldDef = {
 export interface ServiceTypeRow {
   id: string;
   name: string;
+  /** Job type it sits under (src/features/jobs/kinds.ts). */
+  kind: "estimate" | "service" | "project";
   color: string | null;
   icon: string | null;
   aliases: string[];
@@ -48,6 +50,7 @@ export interface ServiceTypeRow {
   requiresOwnershipCheck: boolean;
   upsellCovered: boolean;
   warrantyDays: number;
+  /** Retired (no maintenance reminders); always null since migration 0006. */
   maintenanceIntervalMonths: number | null;
   active: boolean;
 }

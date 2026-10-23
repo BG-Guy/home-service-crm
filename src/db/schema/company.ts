@@ -72,6 +72,16 @@ export interface LicenseNumber {
   expires_on?: string;
 }
 
+/**
+ * One working day in `users.work_hours` (company time zone; day 0 = Sunday,
+ * "HH:MM" 24 h, end after start). A day missing from the list is a day off.
+ */
+export interface WorkHoursRow {
+  day: number;
+  start: string;
+  end: string;
+}
+
 export const users = pgTable(
   "users",
   {
@@ -97,6 +107,10 @@ export const users = pgTable(
     skills: uuidArray("skills"), // service_type ids
     serviceZips: textArray("service_zips"),
     homeBase: jsonb("home_base").$type<AddressJson>(),
+    // Booking availability (leads-flow redesign): the weekly hours this person takes
+    // jobs. null = the company's business hours (settings.company.business_hours);
+    // [] = no regular days. Time off lives in `time_off`.
+    workHours: jsonb("work_hours").$type<WorkHoursRow[]>(),
     hireDate: day("hire_date"),
     // Assign hub (team profile). Shown to dispatchers; never an input to the
     // dispatch recommendation (src/features/jobs/dispatch/recommend.ts).
@@ -298,9 +312,38 @@ export const timeEntries = pgTable(
   ],
 );
 
+/**
+ * Time off for a team member (vacation, appointment…): no jobs are offered in this
+ * range (booking availability). Times are absolute; the UI enters them in the
+ * company time zone. Deleting a row is how "remove" works (not an audit table).
+ */
+export const timeOff = pgTable(
+  "time_off",
+  {
+    id: id(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    startsAt: tz("starts_at").notNull(),
+    endsAt: tz("ends_at").notNull(),
+    note: text("note"),
+    createdBy: uuid("created_by").references(() => users.id),
+    ...timestamps(),
+  },
+  (t) => [
+    index("time_off_user_idx").on(t.userId, t.startsAt),
+    check("time_off_range_ck", sql`${t.endsAt} > ${t.startsAt}`),
+  ],
+);
+
+/**
+ * A job type row. `kind` is one of the three job types (estimate|service|project,
+ * zJobKind); the trade's own jobs (Lockout, Rekey…) are rows of one of those kinds.
+ */
 export const serviceTypes = pgTable("service_types", {
   id: id(),
   name: text("name").notNull(),
+  kind: text("kind").notNull().default("service"), // estimate|service|project
   color: text("color"),
   icon: text("icon"),
   aliases: textArray("aliases"), // lead fuzzy matching
@@ -319,6 +362,8 @@ export const serviceTypes = pgTable("service_types", {
     .default(false),
   upsellCovered: boolean("upsell_covered").notNull().default(false), // ⚖️ FTC cooling-off
   warrantyDays: integer("warranty_days").notNull().default(30),
+  // Retired (leads-flow redesign: no maintenance reminders). Kept for history; the
+  // 0006 migration set it to NULL and nothing writes it any more.
   maintenanceIntervalMonths: integer("maintenance_interval_months"),
   sort: integer("sort").notNull().default(0),
   active: boolean("active").notNull().default(true),

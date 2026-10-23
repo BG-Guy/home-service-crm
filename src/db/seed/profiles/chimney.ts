@@ -565,7 +565,7 @@ export const CHIMNEY_PROFILE: DemoProfile = {
   partScenarios: [
     {
       key: "liner",
-      service: "installation",
+      service: "liner",
       title: "Install stainless liner (furnace flue)",
       lines: [
         ["liner_install", 1],
@@ -575,7 +575,7 @@ export const CHIMNEY_PROFILE: DemoProfile = {
     },
     {
       key: "sweep_cap",
-      service: "maintenance",
+      service: "sweep",
       title: "Fall sweep + stainless cap",
       lines: [
         ["sweep_masonry", 1],
@@ -585,7 +585,7 @@ export const CHIMNEY_PROFILE: DemoProfile = {
     },
     {
       key: "fall_sweep",
-      service: "maintenance",
+      service: "sweep",
       title: "Fall sweep + Level 1 inspection",
       lines: [
         ["sweep_masonry", 1],
@@ -595,7 +595,7 @@ export const CHIMNEY_PROFILE: DemoProfile = {
     },
     {
       key: "crown",
-      service: "repair",
+      service: "masonry",
       title: "Rebuild and seal a cracked crown",
       lines: [
         ["crown_repair", 1],
@@ -605,7 +605,7 @@ export const CHIMNEY_PROFILE: DemoProfile = {
     },
     {
       key: "damper",
-      service: "installation",
+      service: "cap_damper",
       title: "Install top-sealing damper",
       lines: [
         ["damper_install", 1],
@@ -614,7 +614,7 @@ export const CHIMNEY_PROFILE: DemoProfile = {
     },
     {
       key: "flashing",
-      service: "repair",
+      service: "leak",
       title: "Leaking chimney: repair flashing",
       lines: [
         ["flashing_repair", 1],
@@ -624,7 +624,7 @@ export const CHIMNEY_PROFILE: DemoProfile = {
     },
     {
       key: "creosote",
-      service: "repair",
+      service: "sweep",
       title: "Stage 3 creosote removal",
       lines: [
         ["creosote_removal", 1],
@@ -633,7 +633,7 @@ export const CHIMNEY_PROFILE: DemoProfile = {
     },
     {
       key: "prefab_sweep",
-      service: "maintenance",
+      service: "sweep",
       title: "Prefab fireplace sweep + new cap",
       lines: [
         ["sweep_prefab", 1],
@@ -643,7 +643,7 @@ export const CHIMNEY_PROFILE: DemoProfile = {
     },
     {
       key: "firebox",
-      service: "repair",
+      service: "masonry",
       title: "Rebuild firebox with new firebrick",
       lines: [
         ["firebox_repair", 1],
@@ -653,7 +653,7 @@ export const CHIMNEY_PROFILE: DemoProfile = {
     },
     {
       key: "two_flues",
-      service: "maintenance",
+      service: "sweep",
       title: "Sweep two flues + Level 1 inspection",
       lines: [
         ["sweep_masonry", 2],
@@ -666,7 +666,7 @@ export const CHIMNEY_PROFILE: DemoProfile = {
   laborScenarios: [
     {
       key: "tuckpoint",
-      service: "repair",
+      service: "masonry",
       title: "Tuckpoint chimney (40 sq ft)",
       lines: [
         ["tuckpoint", 40],
@@ -675,7 +675,7 @@ export const CHIMNEY_PROFILE: DemoProfile = {
     },
     {
       key: "sweep_l1",
-      service: "maintenance",
+      service: "sweep",
       title: "Chimney sweep + Level 1 inspection",
       lines: [
         ["sweep_masonry", 1],
@@ -692,7 +692,7 @@ export const CHIMNEY_PROFILE: DemoProfile = {
     },
     {
       key: "fireplace_furnace",
-      service: "maintenance",
+      service: "sweep",
       title: "Sweep fireplace + furnace flues",
       lines: [
         ["sweep_masonry", 2],
@@ -701,7 +701,7 @@ export const CHIMNEY_PROFILE: DemoProfile = {
     },
     {
       key: "dryer_vent",
-      service: "maintenance",
+      service: "dryer_vent",
       title: "Dryer vent cleaning",
       singleOption: true,
       lines: [
@@ -713,6 +713,7 @@ export const CHIMNEY_PROFILE: DemoProfile = {
   specialJobs: {
     dispute: {
       title: "Sweep and smoke-chamber cleaning",
+      service: "sweep",
       lines: [
         ["sweep_masonry", 1],
         ["sweep_hour", 2],
@@ -722,6 +723,7 @@ export const CHIMNEY_PROFILE: DemoProfile = {
     },
     specialOrder: {
       title: "Custom multi-flue cap (waiting on special order)",
+      service: "cap_damper",
       lines: [
         ["service_call", 1],
         ["custom_cap", 1, "company_po"],
@@ -734,6 +736,7 @@ export const CHIMNEY_PROFILE: DemoProfile = {
     },
     todayCash: {
       title: "Dryer vent cleaning + bird nest removal",
+      service: "dryer_vent",
       lines: [
         ["dryer_vent", 1],
         ["sweep_hour", 1],
@@ -996,9 +999,112 @@ export const CHIMNEY_PROFILE: DemoProfile = {
     landingUrl: "https://emberflue.test/",
   },
   settings: {
+    tradeJobs: [
+      {
+        key: "sweep",
+        name: "Chimney sweep",
+        kind: "service",
+        color: "#A2845E",
+        icon: "home",
+        aliases: ["chimney sweep", "sweep", "chimney cleaning", "creosote"],
+        defaultDurationMin: 90,
+        defaultPriceCents: 24_900,
+        contractKind: "repair",
+        warrantyDays: 30,
+      },
+      {
+        key: "inspection",
+        name: "Level 1 inspection",
+        kind: "service",
+        color: "#5856D6",
+        icon: "checklist",
+        aliases: ["inspection", "level 1", "annual inspection"],
+        defaultDurationMin: 45,
+        defaultPriceCents: 9900,
+        contractKind: "repair",
+        warrantyDays: 0,
+      },
+      {
+        key: "leak",
+        name: "Leak repair",
+        kind: "service",
+        color: "#007AFF",
+        icon: "flag",
+        aliases: [
+          "leak",
+          "leaking chimney",
+          "water in the fireplace",
+          "flashing",
+        ],
+        defaultDurationMin: 180,
+        defaultPriceCents: null,
+        contractKind: "repair",
+        warrantyDays: 365,
+      },
+      {
+        key: "cap_damper",
+        name: "Cap or damper",
+        kind: "service",
+        color: "#34C759",
+        icon: "home",
+        aliases: [
+          "chimney cap",
+          "damper",
+          "animals in the chimney",
+          "rain cap",
+        ],
+        defaultDurationMin: 90,
+        defaultPriceCents: null,
+        contractKind: "repair",
+        warrantyDays: 365,
+      },
+      {
+        key: "dryer_vent",
+        name: "Dryer vent cleaning",
+        kind: "service",
+        color: "#FF9500",
+        icon: "timer",
+        aliases: ["dryer vent", "dryer vent cleaning", "lint"],
+        defaultDurationMin: 60,
+        defaultPriceCents: 15_900,
+        contractKind: "repair",
+        warrantyDays: 30,
+      },
+      {
+        key: "liner",
+        name: "Chimney relining",
+        kind: "project",
+        color: "#FF2D55",
+        icon: "tools",
+        aliases: ["liner", "relining", "flue liner", "stainless liner"],
+        defaultDurationMin: 480,
+        defaultPriceCents: null,
+        contractKind: "improvement",
+        warrantyDays: 365,
+      },
+      {
+        key: "masonry",
+        name: "Masonry rebuild",
+        kind: "project",
+        color: "#AF52DE",
+        icon: "hammer",
+        aliases: [
+          "crown",
+          "tuckpointing",
+          "masonry",
+          "firebox",
+          "chimney rebuild",
+        ],
+        defaultDurationMin: 480,
+        defaultPriceCents: null,
+        contractKind: "improvement",
+        warrantyDays: 365,
+      },
+    ],
     extraServiceType: {
       key: "level2_inspection",
       name: "Level 2 inspection (home sale)",
+      kind: "service",
       color: "#AF52DE",
       icon: "camera",
       aliases: [
@@ -1115,7 +1221,16 @@ export const CHIMNEY_PROFILE: DemoProfile = {
             expires_on: "2027-02-28",
           },
         ],
-        skills: ["service_call", "maintenance", "repair", "level2_inspection"],
+        skills: [
+          "service_call",
+          "level2_inspection",
+          "sweep",
+          "inspection",
+          "leak",
+          "cap_damper",
+          "dryer_vent",
+          "masonry",
+        ],
         zips: [43201, 43215],
         home: home("3355 Indianola Ave", "43214", 40.0405, -83.012),
       },
@@ -1131,7 +1246,14 @@ export const CHIMNEY_PROFILE: DemoProfile = {
             expires_on: "2026-12-31",
           },
         ],
-        skills: ["service_call", "repair", "maintenance", "installation"],
+        skills: [
+          "service_call",
+          "installation",
+          "sweep",
+          "cap_damper",
+          "liner",
+          "masonry",
+        ],
         zips: [43201, 43229],
         home: home("6120 Linworth Rd", "43085", 40.096, -83.036, "Worthington"),
       },
@@ -1149,9 +1271,12 @@ export const CHIMNEY_PROFILE: DemoProfile = {
         ],
         skills: [
           "service_call",
-          "maintenance",
           "estimate_visit",
           "level2_inspection",
+          "sweep",
+          "inspection",
+          "dryer_vent",
+          "leak",
         ],
         zips: [43204, 43232],
         home: home("1985 Bryden Rd", "43205", 39.962, -82.953),

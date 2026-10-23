@@ -21,6 +21,14 @@
 //         + TIGHT_PENALTY     when the drive is longer than the gap around the slot
 // extraMiles = d(prev, job) + d(job, next) − d(prev, next) at the cheapest
 // feasible slot (haversine, straight lines; no routing API, free by default).
+//
+// `arrivalFit` (bottom of the file) is the booking calendar's timing check for a
+// 2-hour arrival window (src/features/jobs/availability/engine.ts): the job's
+// length plus the drive from the previous stop must start inside the window,
+// inside the tech's working hours and around time off, without pushing a later
+// job past its own window. The calendar runs it next to `recommendTechs` (same
+// stops, haversine and speed), which still supplies the score and the overlap and
+// cap rules, so the calendar and the Assign hub agree.
 
 export const NO_ROUTE_MILES = 10;
 export const OVERLAP_PENALTY = 25;
@@ -363,4 +371,154 @@ export function recommendTechs(
     r.rank = i + 1;
   });
   return recs;
+}
+
+// ── Arrival windows (booking availability) ──────────────────────────────────
+
+/** A stop on a tech's day with its time on site, for arrival planning. */
+export interface ArrivalStop extends RecStop {
+  /** Minutes on site; default: end − start, else 60. */
+  minutes?: number | null;
+}
+
+/** A span of time (epoch ms, end exclusive). */
+export interface TimeSpan {
+  start: number;
+  end: number;
+}
+
+/** What `arrivalFit` knows about a tech's day. Nothing else is read. */
+export interface ArrivalTech {
+  /**
+   * Working spans that day: the job must start and finish inside one. null = on
+   * call (an after-hours window): bounded by the context's day instead.
+   */
+  shifts: readonly TimeSpan[] | null;
+  /** Time off that day: the job may not overlap it. */
+  blocks?: readonly TimeSpan[];
+  stops: readonly ArrivalStop[];
+}
+
+export interface ArrivalJob {
+  lat: number | null;
+  lng: number | null;
+  /**
+   * The arrival window (epoch ms): the job must start in [from, to), before the
+   * window ends; a fixed time (to = from) must start right then.
+   */
+  from: number;
+  to: number;
+  /** Time on site. */
+  durationMin: number;
+}
+
+export interface ArrivalContext {
+  /** Day bounds for an on-call tech (shifts null). */
+  dayStart: number;
+  dayEnd: number;
+  /** Not before this instant (now plus a little lead time, on today). */
+  notBefore?: number;
+  mph?: number;
+}
+
+/**
+ * Why a job doesn't fit: not working in the window ("off"), time off in the way,
+ * no room in the window after the previous stop or before the shift ends
+ * ("no_time"), or it would push a later job past its own window ("bumps").
+ */
+export type ArrivalMiss = "off" | "time_off" | "no_time" | "bumps";
+
+export interface ArrivalFit {
+  fits: boolean;
+  /** Earliest arrival inside the window (epoch ms) when it fits. */
+  arrival: number | null;
+  miss: ArrivalMiss | null;
+}
+
+/**
+ * Can `tech` start `job` inside its arrival window? Plans the day as booked
+ * (each stop at max(its start, previous done + drive)), puts the job after the
+ * stops that start no later than the window (where `recommendTechs` puts a timed
+ * job), takes the earliest start in the window after the previous stop's work and
+ * drive, inside a working span and clear of time off, then checks every later stop
+ * can still be reached by the end of its own window.
+ */
+export function arrivalFit(
+  job: ArrivalJob,
+  tech: ArrivalTech,
+  ctx: ArrivalContext,
+): ArrivalFit {
+  const mph = ctx.mph ?? DEFAULT_MPH;
+  const drive = (a: LatLng | null, b: LatLng | null) =>
+    a && b ? (milesBetween(a, b) / mph) * 60 * MIN : 0;
+  const onSite = (s: ArrivalStop, start: number) =>
+    s.minutes != null && s.minutes > 0
+      ? s.minutes * MIN
+      : s.end != null && s.end > start
+        ? s.end - start
+        : 60 * MIN;
+  const stops = tech.stops
+    .filter((s): s is ArrivalStop & { start: number } => s.start != null)
+    .slice()
+    .sort((a, b) => a.start - b.start || a.id.localeCompare(b.id));
+  // The day as booked: earliest arrival at each stop.
+  const plan: { at: number; done: number }[] = [];
+  stops.forEach((s, i) => {
+    const prev = i > 0 ? (stops[i - 1] as ArrivalStop) : null;
+    const before = plan[i - 1];
+    const at = Math.max(
+      s.start,
+      prev && before ? before.done + drive(pt(prev), pt(s)) : s.start,
+    );
+    plan.push({ at, done: at + onSite(s, s.start) });
+  });
+  let k = stops.findIndex((s) => s.start > job.from);
+  if (k < 0) k = stops.length;
+  const jp = pt(job);
+  const dur = Math.max(15, job.durationMin) * MIN;
+  let earliest = Math.max(job.from, ctx.notBefore ?? job.from);
+  const prevStop = k > 0 ? (stops[k - 1] as ArrivalStop) : null;
+  const prevPlan = k > 0 ? plan[k - 1] : undefined;
+  if (prevStop && prevPlan)
+    earliest = Math.max(earliest, prevPlan.done + drive(pt(prevStop), jp));
+  const spans = (tech.shifts ?? [{ start: ctx.dayStart, end: ctx.dayEnd }])
+    .filter((s) => s.end > s.start)
+    .slice()
+    .sort((a, b) => a.start - b.start);
+  const blocks = tech.blocks ?? [];
+  const lastStart = job.to > job.from ? job.to - 1 : job.to;
+  // Earliest start ≥ `from` inside a span (start and finish), optionally clear of time off.
+  const firstStart = (from: number, avoid: readonly TimeSpan[]) => {
+    let at = from;
+    for (let guard = 0; guard < 64; guard++) {
+      const span = spans.find((s) => Math.max(at, s.start) + dur <= s.end);
+      if (!span) return null;
+      const start = Math.max(at, span.start);
+      if (start > lastStart) return null;
+      const hit = avoid.filter((b) => b.start < start + dur && b.end > start);
+      if (hit.length === 0) return start;
+      at = Math.max(...hit.map((b) => b.end));
+    }
+    return null;
+  };
+  const worksThen = spans.some((s) => s.start < job.to && s.end > job.from);
+  if (firstStart(earliest, []) == null)
+    return { fits: false, arrival: null, miss: worksThen ? "no_time" : "off" };
+  const at = firstStart(earliest, blocks);
+  if (at == null) return { fits: false, arrival: null, miss: "time_off" };
+  // Later stops: each must still be reachable by the end of its window (or by the
+  // time it was already planned for, when that was later).
+  let done = at + dur;
+  let from = jp;
+  for (let j = k; j < stops.length; j++) {
+    const s = stops[j] as ArrivalStop & { start: number };
+    const was = plan[j] as { at: number; done: number };
+    const arrive = Math.max(s.start, done + drive(from, pt(s)));
+    if (arrive <= was.at) break;
+    if (arrive > Math.max(s.end ?? s.start, was.at))
+      return { fits: false, arrival: null, miss: "bumps" };
+    done = arrive + onSite(s, s.start);
+    from = pt(s);
+  }
+  return { fits: true, arrival: at, miss: null };
 }

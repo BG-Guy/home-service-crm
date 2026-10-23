@@ -47,14 +47,34 @@ pipeline runs honeypot, signed timestamps, rate limits, dedupe and a soft spam s
 missing or expired timestamp sends the lead to "Check"; only a tampered or too-fast one is
 spam. Outside a job's contact window techs see masked phone, email and street
 (`src/lib/mask.ts`), and calls are blocked.
-Leads land in an inbox sorted by response-time urgency with a live SLA timer.
+Leads land in an inbox of lead boxes (`LeadBox`; a grid of 1 or 2 columns on phones, kept in
+the `leads-cols` cookie, as many as fit on wider screens), longest wait first, with a live SLA
+timer, status chips with counts and a filter sheet. The Leads badge is the New chip's count
+(`newLeadsWhere` in `queries.ts`, `countsAsNew` in `rules.ts`). Tapping a box opens the lead
+card sheet (`LeadCardProvider` / `useLeadCard()` in `components/lead-env.ts`, mirrored in
+`?lead=`; `/leads/[id]` renders the same card). The card's actions come in four groups (Reach,
+Move forward, Manage, Close), each with its way back: the pure `rules.ts` (golden-tested) holds
+the reverse rules, and `undoLeadChange` reverts a change from its `lead_events` status row.
+Phone-entered leads count as answered, and a repeat caller with an open lead is asked "update it
+or start a new one?" first. The lead map (`map-queries.ts` → `components/map/`, lazy Leaflet)
+shows open leads as pins beside today's jobs; the `leads.map_backfill` cron hook
+(`map-backfill.ts`, `map-geocode.ts`) gives open leads with an address a property and its
+geocode. Contracts for other screens (`contracts.ts`): `LeadBoxData` (one box: name, status,
+job type, street, arrival or asked-for day, SLA start, source, quote, flags, position),
+`LeadCardData` (the box plus the card's details), `LeadMapPoint` (a pin), `LeadMapJob` and
+`CallerLookup`; `<LeadBox lead layout="grid1" | "grid2" | "drawer" selected? onOpen />` and
+`useLeadCard()` → `{ open(id), close(), prefetch(id), seed(boxes) }` inside `LeadCardProvider`.
+Booking is one flow for every lead, Who → What → When: `/leads/new` (New lead, the caller form;
+`createLeadAndCustomer` creates lead, customer and property in one action) →
+`/leads/new/schedule?leadId=` (job type cards and "What's the job?" chips, then a week strip of
+2-hour arrival windows from `jobs/availability`) → `bookLead` (`booking-actions.ts`: books the
+window with no tech, so the job waits in the Assign hub) → `/leads/new/done` (Assign a tech,
+Next lead; the confirmation goes out when a tech is assigned). `ensureLeadCustomer` lives in
+`ensure-customer.ts` (a plain server module). Removed in the leads flow redesign: `LeadsPane`,
+`LeadCard`, `LeadActions`, `LeadActionsSheets`, `LeadLoadMore`, `LeadEditForm` (merged into
+`LeadEditSheet`), and the booking's `ScheduleFlow`, `WindowPicker` and `WindowSheet`.
 `/settings/lead-sources` generates paste-ready snippets with the real key and has a test
-console. Lead custom-field values live in `leads.custom`. The "+" on Leads is the
-call-to-booking flow: `/leads/new` (caller; `createLeadAndCustomer` creates lead, customer and
-property in one action) → `/leads/new/schedule` (availability calendar, 2-hour arrival windows,
-suggested tech; books through `createJobAction`) → `/leads/new/done` (confirmation status from
-the `booking_confirm` automation). Availability comes from `jobs/availability`
-(`getAvailability`, a deterministic mock until the real engine lands). Data exports everything as a
+console. Lead custom-field values live in `leads.custom`. Data exports everything as a
 zip, imports CSV customers, price book and past jobs with a dry run, backs up nightly, and
 restores with `npm run restore`.
 
@@ -63,7 +83,9 @@ live in `jobs/machine.ts`. Every status change goes through `jobs/transition.ts`
 writes a geostamped status history and emits the specific event plus
 `job.status_changed`. The modules also cover:
 - the schedule board (tech columns with desktop drag-and-drop; 3-day and week views; queues; conflict and travel hints) and the S9 assign sheet
-- the Assign hub `/dispatch` (`jobs/dispatch/`): every tech's day on a route map, the tech's profile and day, and a ranked "who should take it" for `?job=` from the pure `recommend.ts` (extra route miles + load, clock and skill penalties; never age). Assigning reuses `scheduleJob`
+- job types in two levels: the three kinds (Free estimate, Service call, Project) in the client-safe `jobs/kinds.ts` (`JOB_KINDS`, `KIND_LABEL`, `KIND_HINT`, `KIND_ICON`, `KIND_COLOR`, `KIND_DEFAULTS`, `splitByKind`, `primaryTypeId`), and the trade's jobs as `service_types` rows with a `kind`. `jobs/service-types.ts` `listServiceTypeOptions()` → `ServiceTypeOption` (`contracts.ts`) feeds `components/JobTypePicker.tsx` (cards and "What's the job?" chips) on the caller form, in booking and on New job. ⚖️ Trade jobs keep `requiresOwnershipCheck`
+- booking availability (`jobs/availability/`): the pure `engine.ts` (`computeAvailability`, golden-tested; ⚖️ never age) behind the loader `index.ts` (`getAvailability`, `getDayAvailability`, and `getTechWorkDays` for the hub), the client reads in `actions.ts`, the 2-hour grid in `windows.ts` and the contract in `types.ts` (the mock and its test are gone). A window is open when a tech works then (hours minus time off), has the skill, is under the daily cap, fits the route and isn't far. `api.ts` `createBookedJob` books a lead's job with a window and no tech
+- the Assign hub `/dispatch` (`jobs/dispatch/`): every tech's day on a route map, the tech's profile and day, and a ranked "who should take it" for `?job=` from the pure `recommend.ts` (extra route miles + load, clock and skill penalties; never age; `arrivalFit` times a window against hours, time off and the route). Assigning reuses `scheduleJob`. Also `needs-tech.ts` (the Needs a tech count: the `jobs.needs_tech` badge and the hub's queue across all days), `work-fit.ts` (techs who are off or on time off ranked last, with the reason), `format.ts` (the queue's day and window labels) and the client-safe `colors.ts` (`colorFor`)
 - the schedule's Map view `/schedule?view=map` (`jobs/schedule-map/`): one day of routes in the board's tech colors with direction chevrons, window boxes that fold to numbered dots, a per-tech timeline strip and the job's details (call, text, directions, Open job, Reassign → the hub, Reschedule → the assign sheet). Built on the hub's day loaders; same permission and contact window as the board; Leaflet in a lazy chunk
 - `/jobs/[id]`: tabs for the office; a single scroll with a sticky action bar for techs, which enforces photos, signature, checklist and risk controls (admin override with a reason)
 - the tech's My Day and Finish my day
@@ -123,15 +145,16 @@ Cash custody nets 1099 cash or tracks W-2 hand-ins. `/approvals` collects every 
 - **Map:** consent-gated location pings, a live Leaflet map (lazy, `/map` only), and customer tracking at `/t/[token]`. Settings → Map holds the street map for every map: a one-click "OpenStreetMap (free)" preset (`map.tile_url` / `map.tile_attribution`; `NEXT_PUBLIC_TILE_URL` still wins; off in production until chosen). The page shows without the live map flag; its ping and breadcrumb settings only with it.
 
 **Team, settings, insights (B8).**
-- **Team:** invites through `enqueueMessage`, role changes, deactivation (last-admin protected; revokes sessions and push devices).
-- **Settings:** the shell derived from module nav entries, the permission grid and per-user overrides (audited), and integrations with write-only secrets.
+- **Team:** invites through `enqueueMessage`, role changes, deactivation (last-admin protected; revokes sessions and push devices). A tech's working hours (`users.work_hours`, null = business hours) and time off (`time_off`) on the member page: actions in `team/schedule-actions.ts` (audited), reads in `team/schedule-queries.ts`, pure helpers in `src/lib/work-hours.ts`.
+- **Settings:** the shell derived from module nav entries, the permission grid and per-user overrides (audited), and integrations with write-only secrets. Job types (`/settings/services`, `components/ServiceTypes.tsx`): the three kind cards with the trade's jobs under each.
 - **Insights:** SQL KPIs for admins, office (Ops board, also on `/today`) and techs, with server-rendered SVG charts, a weekly anomaly report and CSV export.
 
 ## Shared infrastructure (F, live)
 
-- **Shell:** `src/app/(app)/layout.tsx`: role tab bar (§13.1), desktop sidebar (§13.2), badges, offline banner, install prompt, outbox flush, cron piggy-back. `/more` (grouped list, Appearance, Install, Sign out), `/settings` index, the global "+" menu and the notification bell (`HeaderActions`).
+- **Shell:** `src/app/(app)/layout.tsx`: role tab bar (§13.1), desktop sidebar (§13.2), badges, offline banner, install prompt, outbox flush, cron piggy-back. `/more` (grouped list, Appearance, Install, Sign out), `/settings` index, the named create buttons (New lead, New job, New customer; a page's own create action first with `HeaderActions own="…"`), search and the notification bell (`HeaderActions`).
 - **Offline:** `src/client/offline-registry.ts` statically spreads every module's `offlineActions` (jobs, time, payments, parts, payroll, vehicles, tools), so queued actions replay after a reload on any page.
 - **Shared helpers added at integration:** `src/lib/qr.ts` (QR SVG encoder, used by invoices, tool labels and the collect sheet).
 - **Added in QA round 2:** `forbidden()`-backed access denial (`(app)/forbidden.tsx`, 403 from route handlers), `src/lib/client-ip.ts` (`TRUST_PROXY`), `src/lib/phone-display.ts`, `src/lib/mask.ts`, `src/lib/zod-messages.ts`, `mintOrReusePublicToken` in `src/lib/tokens.ts`, the ⌘K search palette, `useConfirm` that works inside transitions, nav-derived loading titles, and `ctx.atPast` / `ctx.past` for demo seeds.
+- **Added in the leads flow redesign:** `src/lib/work-hours.ts` (working hours: `effectiveWorkHours`, `hoursOn`, `workHoursSummary`), the `jobs.needs_tech` badge (the More tab carries Assign's badge), and the `.box-hit` utility in `globals.css` (a whole-box tap target).
 - **PWA:** `manifest.ts`, generated icons (`/icon`, `/apple-icon`, `/icons/*.png`), `public/sw.js`, `/offline`.
 - **Template:** `src/features/_template/` is a reference module (not registered).

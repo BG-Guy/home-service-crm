@@ -8,7 +8,7 @@ import {
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { aiProviderName } from "@/adapters/ai";
-import { createItemsFor } from "@/app/(app)/_components/create-items";
+import { canCreate } from "@/app/(app)/_components/create-items";
 import { HeaderActions } from "@/app/(app)/_components/HeaderActions";
 import { getCustomFieldDefs } from "@/features/settings/api";
 import { hasSignature } from "@/features/signatures/api";
@@ -146,11 +146,9 @@ export default async function ToolsPage({
     aiEnabled: aiProviderName() !== "none",
     categories,
   };
-  // One "+" in the header (QA T4-11): when the global "+" menu offers New Tool
-  // (`/tools?new=tool`), the page keeps only the deep link, not a 2nd "+".
-  const inPlusMenu = createItemsFor(user.perms, await getFeatureFlags()).some(
-    (i) => i.href.startsWith("/tools?new="),
-  );
+  // The header's named "New tool" (`/tools?new=tool`, leads flow item 5) opens
+  // the form; the form keeps its own "+" only when that button isn't offered.
+  const headerNew = canCreate("tool", user.perms, await getFeatureFlags());
   const byCategory = new Map<string, typeof list>();
   for (const t of list) {
     const k = t.category ?? "Other";
@@ -163,12 +161,8 @@ export default async function ToolsPage({
         title={scope === "all" ? "Tools" : "My tools"}
         trailing={
           <div className="flex items-center gap-1">
-            <ToolFormButton
-              mode="new"
-              hideTrigger={inPlusMenu}
-              {...formProps}
-            />
-            <HeaderActions />
+            <ToolFormButton mode="new" hideTrigger={headerNew} {...formProps} />
+            <HeaderActions own="tool" />
           </div>
         }
       />

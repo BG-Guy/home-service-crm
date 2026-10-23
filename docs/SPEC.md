@@ -439,7 +439,7 @@ Each module lives in `src/features/<key>/` (§15.1). The feature-flag key is lis
 - **Setup checklist** (dismissible card on Today until complete). It targets "under an hour" setup:
   1. Logo and brand color
   2. Business hours and service area ZIPs
-  3. Service types and prices (or import a CSV price book)
+  3. Job types and prices (or import a CSV price book)
   4. Tax rate
   5. Payment methods (manual on; Stripe optional)
   6. Google review link
@@ -480,6 +480,9 @@ Each module lives in `src/features/<key>/` (§15.1). The feature-flag key is lis
 - **Team list:** avatar, role, status (active/invited/deactivated), worker type, clocked-in state, cash held.
 - **User profile:**
   - Name, photo (shown on the customer "tech card"), phone, email, license # (printed on documents where required), color (calendar), skills/service types, service ZIPs, `worker_type` (`w2` | `1099`), comp plan assignment, `uses_company_tools`, `uses_company_vehicle`, home base address (for distance), and hire date.
+- **Working hours and time off** (techs, on the team member page, `users.manage`): booking availability (M05) and the Assign hub read them.
+  - **Working hours** (`users.work_hours`): the company's business hours (the default), or each weekday on or off with a start and end time, in the company time zone.
+  - **Time off** (`time_off` rows): whole days or part of a day, with an optional note. Removing one asks first. Every change is audited.
 - **Role change, deactivate, reset password, and per-user permission overrides** (link to M21).
 - **Time clock:**
   - `time_entries`: clock in/out with geostamp, plus optional odometer photo when vehicles are enabled and `require_odometer_on_clock` is on.
@@ -488,7 +491,7 @@ Each module lives in `src/features/<key>/` (§15.1). The feature-flag key is lis
 - **Compensation agreement status:** signed or unsigned per plan version (M16).
 
 **Later**
-- Availability and time-off calendar
+- A team calendar view of working hours and time off (the hours and time off themselves are MVP, above)
 - Skills-based auto-dispatch
 - Subcontractor role with a job link and no login
 
@@ -523,20 +526,35 @@ Each module lives in `src/features/<key>/` (§15.1). The feature-flag key is lis
 ### M04 Leads & intake API
 
 **MVP**
-- **Leads inbox:** cards sorted by SLA urgency. Each card shows:
-  - a **speed-to-lead timer** (green < 5 min, amber < 15, red beyond, from `created_at` to `first_response_at`)
-  - source badge, service, quoted price, preferred date, distance from service area
-  - a "returning customer" badge if matched
+- **Leads inbox** (`/leads`): a grid of lead boxes, longest wait first.
+  - Phones start with 2 columns. A 1 / 2 switch is remembered on the device (cookie `leads-cols`, read by the server, so the grid never flashes). Tablets and desktop fit as many columns as there's room for.
+  - A count line ("11 open leads · Longest wait first"), status chips with counts (New, Contacted, Qualified, Check while there are any, Booked, Lost, Spam; tapping the picked chip again goes back to all open leads) and a Filter chip whose sheet holds Mine, Overdue and the sources. An empty inbox shows a big **New lead** button.
+  - **One count everywhere:** the Leads badge (tab and sidebar) is the New chip's number: status `new` with `spam_score` under `settings.leads.spam_review_threshold`. Everyone sees the same number.
+  - A **Grid / Map** switch on phones and tablets; desktop (≥ 1024 px) shows the grid and the lead map side by side (below).
+- **Lead box:** the initials inside a **speed-to-lead timer** ring (green < 5 min, amber < 15, red beyond, from `created_at` to `first_response_at`; 2-column boxes show a new lead's wait under it), the name, the job and status, the street (not just the ZIP), and returning-customer and outside-the-area marks; 1-column boxes also show the day they asked for. Its buttons follow the state, and a closed lead keeps its way back:
+  - open: Call, Text, Directions, Open card
+  - "Check": Looks legit and Spam (Book stays available on the card)
+  - lost: Reopen; spam: Not spam; booked: Open job (and Reopen once its job is cancelled)
+  - Tapping the box opens the lead card. Swiping left on an open lead offers Lost and Spam, each with Undo.
+- **Lead card:** slides up over the inbox instead of opening a page: a bottom sheet on phones (drag down or ✕ to close, back where you were), a centered sheet on tablet and desktop. `?lead=<id>` mirrors it, so Back closes it and a link opens it again.
+  - A TL;DR on top (name, status, job type, street, the arrival window or the day they asked for), then boxes: Phone (call, text, copy), Address (mini map, directions, copy), Wants or Arrives, Quote & source, Last contact, Notes, Photos. Then the action groups, and a booking bar with **Book** as the one primary button.
+  - `/leads/[id]` stays for links and printing: the same layout, plus source and attribution, the intake log, the activity and (for admins) the raw payload.
 - **Lead statuses:** `new` → `contacted` → `qualified` → `booked` (converted) | `lost{reason}` | `spam`. Lost reasons are configurable: price, timing, out of area, no answer, went with competitor, other.
-- **Actions:**
-  - **Claim** (first-to-claim, or round-robin when `settings.leads.assignment = 'round_robin'`)
-  - **Call** (`tel:`, then an outcome sheet: connected / no answer / voicemail / wrong number; "no answer" creates a `tasks` row (kind `lead_retry`, due +15 min) and an auto-drafted text)
-  - **Text** (outbox)
-  - **Convert** to job or estimate (pre-fills customer, property, service, price, window)
-  - **Mark lost**
-  - **Mark spam**
+- **Actions** (on the lead card, in four groups with no "…" menu; every action has its way back):
+  - **Reach:** Call, Text (outbox), Email. Call is `tel:`, then an outcome sheet: connected / no answer / voicemail / wrong number. Any attempt answers the timer and moves `new` → `contacted`. "No answer" creates a `tasks` row (kind `lead_retry`, due +15 min) and an auto-drafted text. "Wrong number" cancels the lead's queued follow-up texts and open call-back tasks. A started call is kept on the device until its outcome is saved; after a reload or a Skip the app asks again (up to 3 times, within 2 hours).
+  - **Move forward:** Contacted ↔ Not contacted, Qualify ↔ Unqualify (back to Contacted), Looks legit on a "Check" lead (clears the score and creates the customer), **Book** (the booking flow below), and Open job once booked. Book replaces Convert; the `/jobs/new?leadId=` and `/estimates/new?leadId=` links still prefill from a lead.
+  - **Manage:** Claim ↔ Release (first-to-claim, or round-robin when `settings.leads.assignment = 'round_robin'`). **Take over** of someone else's lead asks first and notifies the previous owner. Edit (name, phone, email, address, service, price, notes; a customer that still has the old phone or email is fixed too) and Tags.
+  - **Close:** Lost (with a reason) ↔ Reopen, Spam ↔ Not spam.
+  - **Reverse rules:** Reopen (a lost lead, or a booked one once its job is cancelled) and Not spam return the lead to the open status it had before, read from its status history (without history: Contacted when someone already answered, else New). A booked lead whose job isn't cancelled stays booked.
+  - **Undo:** every change shows Undo for 5 seconds. Each status change writes a `lead_events` row (kind `status`) with what it overwrote (lost reason, spam score and reason, converted job). Undo restores it while that row is still the lead's latest status change ("This lead changed since…" otherwise). Inside the card the Undo shows in a bar above the booking bar.
+- **Booking: one flow for every lead (Who → What → When).** Book on any lead (phone, website, Google, Thumbtack…) opens `/leads/new/schedule?leadId=<id>`. A phone caller starts at Who, the New lead form (manual lead entry, below).
+  - **What:** the job type cards (Free estimate, Service call, Project; M05) with the trade's jobs as "What's the job?" chips under the picked card; urgency (normal / urgent / emergency), after-hours and the customer's notes (prefilled from the lead). A lockout-style job says it keeps the ID and ownership check.
+  - **When:** a week strip from today (28 days; up to 60 when they asked for a later day). The day they asked for is preselected and tagged "Asked" (else the best day, else the first open one). The day shows its 2-hour arrival windows ("Arrives 8–10 AM"), open or full by the availability rules (M05); the open window with the least extra driving says "Best · adds N mi". A day with nothing open says why (closed, outside the service area, too far, fully booked), with the soonest open day and "Book by hand on New job".
+  - **No tech is picked.** Book creates the job with the window, job type, priority, after-hours, the customer's notes and the day they asked for (`jobs.custom.requested_date` / `requested_window`), marks the lead booked and assigns nobody, so the job waits in the Assign hub (M05 "Needs a tech"). The lead's quoted price becomes the draft invoice's first line. Booking refuses a spam or already booked lead, a lead with no address (or no name, phone and email), a day or window already past, and a chip that isn't under its card. A "Check" lead gets its customer when it is booked.
+  - **Done** shows at once: "Booked: arrives Fri, Oct 23 · 8–10 AM", the customer, job and number, and "Confirmation goes out when a tech is assigned" (the message status fills in after). Buttons: **Assign a tech** (the hub with this job picked; `jobs.assign`), **Next lead** and Open job.
 - **Auto-acknowledge:** automation `lead.created` → instant customer text/email: "Got it, we'll call within {{company.lead_response_minutes}} min." In link mode this lands as a high-priority outbox card plus an email to the customer if an email exists (email is automatic). Allowed outside quiet hours because the customer just asked.
 - **Escalation:** no `first_response_at` after 5 min → push to admin. After 15 min → push to all `leads.receive_alerts` users. After hours → auto-reply with the emergency line if configured.
+- **Phone leads count as answered:** a lead typed in while talking to the caller stamps `first_response_at/by` (the office user, channel call), moves to `contacted` and is claimed by them. The missed-lead automations (auto-reply, the 5/15-min alerts, "we tried to reach you") run only while `lead.status = new`, so they skip it.
 - **Intake endpoints** (§8):
   - JSON (`X-Site-Key` public key + allowed origins, or `Authorization: Bearer sk_…`)
   - form-encoded POST with 303 redirect
@@ -577,6 +595,7 @@ Each module lives in `src/features/<key>/` (§15.1). The feature-flag key is lis
   - A 10-min hash of phone+service catches double-submits.
   - Customer match by phone, then email.
   - An open lead for the same customer + service within 14 days receives a "touch" (`lead_events`) instead of creating a new lead, and is marked `returning`.
+  - Manual entry never merges silently: when the phone already has an open lead, the office chooses first (Repeat callers, below).
 - **Consent capture:** if `sms_consent=true`, write a `consent_events` row with the text shown, page URL, IP and UA. Never pre-check consent, and **never make the consent box required to submit** (10DLC rejection 30931). Marketing consent (`marketing_consent`) is a **separate**, optional, unchecked box; `embed.js` renders both when missing.
 - **`embed.js`** (< 3 KB gz, no dependencies, built by `scripts/build-embed.ts`):
   - `<script src="{APP_URL}/embed.js" data-key="pk_live_…" defer></script>`
@@ -584,7 +603,13 @@ Each module lives in `src/features/<key>/` (§15.1). The feature-flag key is lis
 - **Hosted form** `/f/[publicKey]` for sites that can't run scripts. Copy-paste plain HTML and WordPress/Webflow instructions live in `/settings/lead-sources`. Ready-to-paste snippets for all three integration levels (plain HTML form, JS snippet, JSON API) are specified in §8.5 and generated with the source's real key.
 - **Three integration levels, all MVP:** (1) plain `<form method="post">` on any static site, no JS needed; (2) the same form plus `embed.js` for attribution, inline success and stronger spam defense; (3) JSON `POST /api/v1/leads` from any backend, Zapier/Make, or a marketplace preset.
 - **Lead-source ROI:** `source_cost_cents` per lead (from payload, e.g. Thumbtack `leadPrice`) plus monthly `source_spend` entries.
-- **Manual lead entry** requires a source ("How did you hear about us?").
+- **Manual lead entry** requires a source ("How did you hear about us?"). It is **New lead** (`/leads/new`), the Who step of the booking flow: phone and name, source and quoted price, the verbal text consent and the address fit the first phone screen, then the job type tiles, urgency, after-hours and notes; the field being typed in stays clear of the sticky bars and the keyboard. **Save & book** goes on to What and When; **Save lead only** stops there.
+  - **Repeat callers:** when the phone already has an open lead, the form asks "Update their open lead or start a new one?" and saves nothing until the office picks. Update puts what was typed on that lead (the new address replaces the old one, new notes go under the old ones, plus the job type, urgency and after-hours). Start a new one creates a second lead: the intake skips its 10-minute hash and same-service merges but still links the matched customer.
+- **Lead map:** open inbox leads ("Check" left out) as pins beside today's jobs.
+  - Phones and tablets: the inbox's Grid / Map switch. The map fills the screen and the count line, chips and lead boxes ride in a draggable drawer (peek, half, full). Desktop (≥ 1024 px): the map sits beside the grid.
+  - Full screen through the app's full-screen hub (`?fs=leads-map`; Back exits): the corner button, or dragging the drawer all the way down. "Show N leads" brings the drawer back.
+  - Pins: the initials in the timer ring, colored like the box; the two newest unanswered leads still inside the 15-minute ring pulse; overlapping pins fold to dots; pins at one address fan out. Tapping a pin opens that lead's card. Today's jobs show as small markers (`jobs.view_all`, else your own; outside the contact window only with `customers.contact_view`).
+  - Positions come from the lead's property (`properties.lat/lng`, geocoded). Intake gives every lead it doesn't flag (with a phone or email) a customer and property. The `leads.map_backfill` cron hook (every 10 min) does the same for open leads with a street and ZIP but no property, and queues one more geocode a day for a property still waiting. A note says how many leads are on the map and why the rest aren't (no address, no property yet, still being placed, couldn't be placed).
 
 **Later**
 - Inbound-email parser (Cloudflare Email Worker + `postal-mime`) with Thumbtack/Angi/LSA/Yelp templates
@@ -626,22 +651,39 @@ unscheduled ─► scheduled ─► confirmed ─► en_route ─► arrived ─
 
 **MVP capabilities**
 - **Job fields:**
-  - Customer, property, service type, title/summary, description, priority (`normal` | `urgent` | `emergency`; emergency/after-hours applies a premium line if configured), and source/lead link.
-  - Scheduling: `scheduled_start`, `scheduled_end`, arrival window (configurable lengths: 1 h default, 2 h, 4 h; J.D. Power data favors 1 h).
+  - Customer, property, job type (a service type and its kind, below), title/summary, description, priority (`normal` | `urgent` | `emergency`; emergency/after-hours applies a premium line if configured), and source/lead link.
+  - Scheduling: `scheduled_start`, `scheduled_end`, arrival window (configurable lengths: 1 h default, 2 h, 4 h; J.D. Power data favors 1 h). A booking from a lead uses 2-hour arrival windows.
   - Assignees (primary + helpers with split %), tags, custom fields, checklist (from service-type template), internal notes, customer-visible notes.
   - `callback_of_job_id` + `callback_reason` (`workmanship` | `part` | `customer` | `other`), warranty expiry.
   - Risk score/band, readiness score.
   - Cancellation policy snapshot and service-call fee disclosure snapshot.
+- **Job types (two levels):** three kinds, picked as cards on the caller form, in booking and on New job.
+  - **Free estimate** (`estimate`): 45 min, no deposit, the visit ends with an estimate. **Service call** (`service`): 90 min, repair rules. **Project** (`project`): half a day (240 min), the deposit rules and `contract_kind = 'improvement'`.
+  - Each kind has its own row (named like the kind), which a booking uses when no trade job is picked. The trade's own jobs (Lockout, Rekey, Car key…) are `service_types` rows with a `kind`; they show as "What's the job?" chips under their card and keep their rules (price, length, photos, checklist, warranty). ⚖️ The lockout proof-of-ownership check (`requires_ownership_check` plus its checklist) stays on those jobs.
+  - The old generic types (Service call / diagnostic, Repair, Installation, Maintenance, Estimate visit) are retired: renamed into the three kinds or archived, and existing jobs keep their type and history. There are no maintenance reminders any more (M13).
+  - Labels, hints, icons and defaults live in `src/features/jobs/kinds.ts`.
 - **Calendar / schedule board:**
   - Day view: columns per tech on desktop, list per tech on mobile. Also week and 3-day views.
   - **Unscheduled queue** sidebar. Drag a job to a slot or tech (desktop: pointer drag; mobile: "Assign" sheet).
   - Conflict warnings: overlap, outside the tech's service ZIPs, tech not clocked in today.
   - Travel-gap hint: straight-line distance ÷ 30 mph.
   - Color by status or by tech.
+- **Booking availability** (the booking flow's When step, M04; `src/features/jobs/availability/`): each day is split into 2-hour arrival windows over the team's working hours. A window is **open** when at least one tech fits all of these:
+  - **Works then:** their working hours for that weekday (`users.work_hours`, else the business hours) minus their time off.
+  - **Has the skill:** a tech with a skill list must have the job's type; an empty list takes any job, and when nobody lists that type, skills don't block.
+  - **Is under the daily cap:** one cap for everyone, `settings.jobs.daily_job_cap` (default 6). Every job that day that isn't cancelled counts.
+  - **Fits the route:** the job's length plus the drive from their previous stop (straight line at 30 mph, the Assign hub's route math) gets them there before the window ends, inside their hours and clear of time off, without overlapping a booked window or pushing a later job past its own window.
+  - **Isn't far:** a window counts as full (hidden) when the job adds more than `settings.jobs.max_extra_miles` (default 25) of driving for every tech who fits. A ZIP outside the service-area ZIPs gets no windows at all. An unknown ZIP or location never blocks.
+  - Weekends and evenings stay closed unless a tech is set to work them. **After-hours booking** (`settings.jobs.after_hours_booking`) is off by default; when on, windows outside everyone's hours are offered to anyone not on time off, within the schedule board's hours. With it off, the office books emergencies by hand on New job.
+  - Booked jobs with no tech yet still take room (each is placed with the tech the hub would rank first). Today, windows that already started are full and the earliest arrival is 30 min from now. The job's length is the trade job's default, else the kind's own row, else the kind default (45 / 90 / 240 min).
+  - **Day status:** Open (2+ open windows), Limited (1), Full (0, with the reason: closed, far, full or outside the area). **Best** marks the top 3 open days nearest the day they asked for (else the soonest), then the least extra driving.
+  - ⚖️ Like the Assign hub's ranking, availability never takes age or date of birth.
 - **Dispatch:**
   - Assign/reassign pushes to the tech.
   - Reschedule sends the customer a reschedule text (automation).
   - The **"Unconfirmed tomorrow"** list is flagged to the office by 9:00.
+  - **Assign hub** (`/dispatch`, `jobs.assign`): every tech's day on a route map, and a ranked "who should take it" for a job: the extra route miles and the load, with penalties for overlaps, the daily cap, not being clocked in and a missing skill. For a booked window, a tech who is off that day, off then or on time off is listed last with that reason (still pickable). ⚖️ Age is never an input.
+  - **Needs a tech:** a booked job (an arrival window today or later; not cancelled, closed or completed) with nobody assigned. One definition for the count on Assign (sidebar and More list; on phones the More tab carries it) and the hub's queue, which lists them first, across all days, soonest first, each with its day and window. Undated jobs without a tech are listed apart and not counted. The customer's confirmation (`job.scheduled`) goes out when a tech is assigned. No auto-assign: the office picks the tech.
 - **Confirmations:**
   - Reminder 24 h before ("Reply C to confirm or R to reschedule"). With paid drivers, inbound replies auto-update `confirmed`. In link mode the office marks the reply manually; the customer's magic-link page also has **Confirm / Request reschedule** buttons, which work in free mode.
 - **Running late:**
@@ -659,7 +701,6 @@ unscheduled ─► scheduled ─► confirmed ─► en_route ─► arrived ─
 **Later**
 - Route optimization
 - Real routing ETAs
-- Capacity-based booking slots
 - Multi-day project jobs with phases
 - Subcontractor job link
 
@@ -980,7 +1021,7 @@ This expands the owner's truncated "* Tech" bullet. The tech app is the same PWA
   - On event, matching automations create `scheduled_messages` per step with `dedupe_key = automation_id:entity_id:step_idx` (unique), so re-emitted events don't double-send.
   - Rescheduling a job recomputes anchored sends (cancel + recreate).
 - **Send-time re-check:** consent, quiet hours, frequency caps, cancel conditions (e.g. invoice paid), entity still in a valid state, feature flag on. Otherwise → `canceled` / `suppressed_optout` / `deferred_quiet`.
-- **Built-in automations** (seeded, editable, can be disabled; §7.3 has the full table): lead ack, lead not reached, booking confirmation, deposit request, 24 h reminder with C/R, 2 h prep, on my way, running late, job completed → invoice, payment receipt (all methods), dunning 3/7/14, estimate follow-ups 2 h/2/5/10/30 d, review request + reminder, 7-day check-in, post-cancel verification, maintenance/seasonal (marketing consent only), and internal alerts.
+- **Built-in automations** (seeded, editable, can be disabled; §7.3 has the full table): lead ack, lead not reached, booking confirmation, deposit request, 24 h reminder with C/R, 2 h prep, on my way, running late, job completed → invoice, payment receipt (all methods), dunning 3/7/14, estimate follow-ups 2 h/2/5/10/30 d, review request + reminder, 7-day check-in, post-cancel verification, maintenance/seasonal (marketing consent only; the maintenance reminder is retired, see below), and internal alerts.
 - **Admin editor** (`/settings/automations`):
   - List with on/off toggles.
   - Edit timing, audience, channel, template and conditions via form controls (not raw JSON; a raw JSON view is available to admins).
@@ -996,7 +1037,7 @@ This expands the owner's truncated "* Tech" bullet. The tech app is the same PWA
   - Optional entity link (vehicle, tool, customer, property).
   - Channel (push / email / sms / in_app), template or free text.
   - Examples: "Every Monday 8:00 remind techs to upload fuel receipts"; "Remind customer every 12 months about dryer vent cleaning".
-- **Maintenance reminders for customers:** service type `maintenance_interval_months` → automation `job.completed` + N months (marketing consent required).
+- **Maintenance reminders for customers:** retired with the job types (M05). The maintenance interval is no longer a job type field and `service_types.maintenance_interval_months` stays null, so the built-in `maintenance` automation (`job.completed` + N months, marketing consent required) never fires.
 
 **Later**
 - Visual flow builder with branches
@@ -1322,7 +1363,8 @@ All settings live in `company.settings` (zod schema `CompanySettings`, versioned
 |---|---|---|
 | Company | Legal name, DBA/brand name, logo, phone, email, website, address, license #s (per state/trade), EIN (optional, for 10DLC later), time zone, business hours, after-hours definition, service-area ZIPs, currency (USD) | ✓ |
 | Branding | Accent color (overrides `--sys-blue` for brand; contrast-checked; auto-derives `--accent-text`), logo light/dark, app name/icon (manifest), invoice header style | ✓ |
-| Service types | Name, color, icon, default duration, default price/price-book items, `contract_kind` (`repair`/`improvement`), deposit rule, checklist template, required photos before/after, requires signed estimate, requires ownership check, warranty days, maintenance interval, `upsell_covered`, include photos on invoice, custom fields | ✓ |
+| Job types (`/settings/services`) | Two levels (M05): the three kind cards (Free estimate, Service call, Project) with their defaults row, and the trade's jobs under each. Per job: name, color, icon, default duration, default price/price-book items, `contract_kind` (`repair`/`improvement`), deposit rule, checklist template, required photos before/after, requires signed estimate, requires ownership check (⚖️), warranty days, `upsell_covered`, include photos on invoice, custom fields; a kind switch moves a job to another card; archive and restore. No maintenance interval | ✓ |
+| Jobs & scheduling | Booking (jobs per tech a day `daily_job_cap` 6, far jobs `max_extra_miles` 25, book after hours `after_hours_booking` off), arrival windows (default length, the unconfirmed flag time), arrival check radius, cancellation policy and fees, service-call fee, callbacks & warranty, schedule board hours, job number prefix | ✓ |
 | Price book | Items, categories, markup matrix, CSV import/export | ✓ |
 | Taxes | Rates (name, bps), default rate, per-service-type override, labor vs parts taxability defaults, tax-exempt customers | ✓ |
 | Invoices & estimates | Number prefixes/next number, due terms, footer, terms & policies (versioned: cancellation, refund, warranty, deposit, e-records consent text), estimate expiry, change-order threshold, auto-issue on complete, photos on invoice default, photos on receipt default, late-fee policy | ✓ |
@@ -1466,6 +1508,7 @@ create table users (
   skills uuid[] not null default '{}',       -- service_type ids
   service_zips text[] not null default '{}',
   home_base jsonb,
+  work_hours jsonb,                          -- [{day:0-6 (0 = Sunday), start:'HH:MM', end:'HH:MM'}], company zone; null = business hours, [] = no regular days
   hire_date date,
   monitoring_notice_ack_at timestamptz,      -- ⚖️ required before location.share works
   esign_consent_at timestamptz,
@@ -1479,6 +1522,15 @@ create table users (
 );
 create unique index users_email_uq on users (email);
 create index users_role_idx on users (role) where status = 'active';
+
+create table time_off (                      -- a tech's time off (booking availability, Assign hub); rows are deleted to remove
+  id uuid pk,
+  user_id uuid not null references users(id) on delete cascade,
+  starts_at timestamptz not null, ends_at timestamptz not null, -- check (ends_at > starts_at)
+  note text, created_by uuid references users(id),
+  …ts
+);
+create index time_off_user_idx on time_off (user_id, starts_at);
 
 create table sessions (
   id uuid pk,
@@ -1565,8 +1617,9 @@ create table time_entries (
 );
 create index time_entries_user_idx on time_entries (user_id, clock_in_at desc);
 
-create table service_types (
+create table service_types (                -- job types: the three kinds' own rows + the trade's jobs (M05)
   id uuid pk, name text not null, color text, icon text,
+  kind text not null default 'service',       -- estimate|service|project (Free estimate / Service call / Project)
   aliases text[] not null default '{}',       -- for lead fuzzy matching
   default_duration_min int not null default 60,
   default_price_cents bigint,
@@ -1579,7 +1632,7 @@ create table service_types (
   requires_ownership_check boolean not null default false, -- locksmith lockout/rekey
   upsell_covered boolean not null default false,          -- ⚖️ FTC cooling-off notice
   warranty_days int not null default 30,
-  maintenance_interval_months int,
+  maintenance_interval_months int,            -- retired: always null (no maintenance reminders)
   sort int not null default 0, active boolean not null default true,
   …ts, deleted_at timestamptz
 );
@@ -1763,7 +1816,7 @@ create table leads (
   quoted_price_cents bigint, preferred_date date, preferred_window text,
   notes text,
   attribution jsonb not null default '{}', -- utm_*, gclid, gbraid, wbraid, fbclid, msclkid, referrer, landing_url, page_url, first_touch, last_touch
-  extra jsonb not null default '{}',
+  extra jsonb not null default '{}',       -- unknown fields; _booking = {kind, priority, after_hours} typed on the call
   source_cost_cents bigint,
   sms_consent boolean not null default false,
   marketing_consent boolean not null default false,
@@ -1786,6 +1839,7 @@ create table lead_events (
   id uuid pk, lead_id uuid references leads(id), lead_source_id uuid references lead_sources(id),
   kind text not null,                      -- received|touch|call_attempt|status|note|spam|mapping_error
   raw jsonb, outcome text,                 -- call outcome: connected|no_answer|voicemail|wrong_number
+                                           -- status rows: raw = {from, to, prev:{lost_reason, spam_score, spam_reason, converted_job_id}} (Undo, Reopen)
   actor_user_id uuid references users(id), ip text, user_agent text,
   created_at timestamptz not null default now()
 );
@@ -2836,11 +2890,11 @@ Events are emitted with `emit(tx, type, entity, payload)` inside the mutating tr
 
 | Key | Trigger → timing | Audience / channel | Template key | Cancel on |
 |---|---|---|---|---|
-| `lead_ack` | lead.created → 0 | customer / preferred (outside quiet hours allowed ≤ 5 min) | `lead.ack` | lead.responded |
+| `lead_ack` | lead.created → 0, only while `lead.status = new` (phone-entered leads skip it) | customer / preferred (outside quiet hours allowed ≤ 5 min) | `lead.ack` | lead.responded |
 | `lead_alert` | lead.created → 0 | office / push | `staff.new_lead` | — |
-| `lead_escalate_5` | lead.created → +5 min | admins / push | `staff.lead_sla` | lead.responded |
-| `lead_escalate_15` | lead.created → +15 min | all leads.receive_alerts / push | `staff.lead_sla` | lead.responded |
-| `lead_not_reached` | lead.created → +1 h, next day 09:00, +3 d | customer / sms | `lead.not_reached` | lead.converted, lead.status_changed→lost/spam, message.received |
+| `lead_escalate_5` | lead.created → +5 min, only while `lead.status = new` | admins / push | `staff.lead_sla` | lead.responded |
+| `lead_escalate_15` | lead.created → +15 min, only while `lead.status = new` | all leads.receive_alerts / push | `staff.lead_sla` | lead.responded |
+| `lead_not_reached` | lead.created → +1 h, next day 09:00, +3 d, only while `lead.status = new` | customer / sms | `lead.not_reached` | lead.converted, lead.status_changed→lost/spam, message.received |
 | `booking_confirm` | job.scheduled → 0 | customer / preferred | `job.booked` (includes service-call fee & cancellation policy summary) | — |
 | `tech_assigned` | job.assigned → 0 | tech / push | `staff.job_assigned` | — |
 | `deposit_request` | deposit.required → 0, +24 h | customer / preferred | `deposit.request` | deposit.paid, job.cancelled |
@@ -2859,7 +2913,7 @@ Events are emitted with `emit(tx, type, entity, payload)` inside the mutating tr
 | `review_reminder` | review.requested → +3 d | customer / sms | `review.reminder` | review.clicked |
 | `checkin_7d` | job.completed → +7 d 10:00 | customer / preferred | `job.checkin` | job.cancelled |
 | `post_cancel_verify` | job.cancelled (after_arrival) → +2 h | customer / sms | `job.cancel_verify` ("Was your service completed today? Reply 1 yes / 2 no") | — |
-| `maintenance` | job.completed → + service_type.maintenance_interval_months | customer / sms+email (**marketing consent**) | `marketing.maintenance` | job.created for same customer & service |
+| `maintenance` | job.completed → + service_type.maintenance_interval_months (retired: the interval is always null, so it never fires) | customer / sms+email (**marketing consent**) | `marketing.maintenance` | job.created for same customer & service |
 | `refund_due` | refund.due → 0 | admins / push | `staff.refund_due` | refund.succeeded |
 | `dispute_alert` | dispute.created → 0, due_by −3 d, −1 d | admins / push+email | `staff.dispute` | dispute.closed, dispute.evidence_submitted |
 | `cash_over_limit` | cash.over_limit → 0 | admins + tech / push | `staff.cash_over_limit` | cash.received |
@@ -3007,7 +3061,7 @@ export const markEnRoute = action({
 3. Spam checks: honeypot, `_ts` HMAC age ≥ 3 s and ≤ 24 h (**only when `_ts` is present or `lead_sources.require_ts`**; a missing `_ts` on a plain-form source is not spam), Turnstile `siteverify` if required. On hard failure (honeypot filled, bad/too-fast `_ts`, Turnstile fail): store `status=spam` and return a fake success (`200` JSON, or `303` to the thank-you page for form posts). Soft signals only raise `spam_score` (§M04) and never drop the lead.
 4. Map the payload: apply the preset mapping, then the source JSON-path mapping, then aliases. Validate with zod. Normalize phone (libphonenumber-js, default region US), email, price and date.
 5. Idempotency: `(source_id, external_id)` → existing lead returns `200 {status:'merged'}`. A `dedupe_hash` within 10 min → merged.
-6. Match the customer by phone, then email. If an open lead exists for the same customer + service within 14 days → add a `touch` event, `is_returning=true`, return merged.
+6. Match the customer by phone, then email. If an open lead exists for the same customer + service within 14 days → add a `touch` event, `is_returning=true`, return merged. A manual entry where the office chose "Start a new one" (M04 Repeat callers) skips this touch and the step 5 hash, and still links the matched customer.
 7. Insert the lead, `lead_events(received, raw)`, and `consent_events` if consented. Emit `lead.created`. Respond in < 300 ms (all other work happens in `after()`).
 
 ### 8.4 Stripe webhook handling
@@ -3617,7 +3671,7 @@ Each is server-renderable unless marked (client).
 | **Admin** | **Home** (`/insights`): admin dashboard | **Schedule** | **Customers** | **Money** (`/payments`: invoices, payments, AR, disputes, payroll) | **More** |
 
 **More** is a grouped list. Each item is shown only when the user has the permission/flag:
-- **Work:** Leads (admin), Estimates, Invoices, Payments, Messages, Reviews, Approvals (badge), Tasks (badge)
+- **Work:** Leads (admin), Assign (badge: needs a tech; the More tab carries it), Estimates, Invoices, Payments, Messages, Reviews, Approvals (badge), Tasks (badge)
 - **Team:** Team, Map, Payroll, Time clock
 - **Fleet:** Vehicles, Tools, Parts & Receipts, Inventory
 - **Insights:** Insights (office/tech variants)
@@ -3625,27 +3679,29 @@ Each is server-renderable unless marked (client).
 - **Admin:** Settings, Audit log, Data
 
 **Global elements**
-- A **+ button** in the nav bar (context-aware: new job/lead/customer/estimate) as an ActionSheet.
+- **Named create buttons** in the nav bar instead of a "+" menu: **New lead, New job, New customer**, the page's own first. Phones: small labeled icons; tablet and desktop: pills, the page's main one in the accent (only on its own list page). A page with a create action of its own puts it first: New estimate (Estimates), Upload receipt (Parts, Pay), New tool (Tools), New vehicle (Vehicles).
 - **Global search** (customers, jobs, invoices, phone numbers) via the search field on list pages and ⌘K on desktop.
 - A notification bell in the nav bar.
 
 ### 13.2 Desktop sidebar (≥ 1024 px)
 Sections:
 - **Overview:** Home/Today, Insights
-- **Work:** Schedule, Leads, Jobs, Estimates, Invoices
+- **Work:** Schedule, Assign, Leads, Jobs, Estimates, Invoices
 - **Customers:** Customers, Messages, Reviews
 - **Money:** Payments, Disputes, Payroll
 - **Operations:** Map, Team, Vehicles, Tools, Parts, Inventory, Approvals
 - **Settings**
 
-Badge counts: new leads, outbox pending, approvals, overdue.
+Badge counts: new leads, needs a tech (Assign), outbox pending, approvals, overdue.
 
 ### 13.3 Route map (authenticated)
 | Route | Screen |
 |---|---|
 | `/today` | Role-specific Today (tech: My Day; office: Ops) |
 | `/schedule` | Calendar/board (day/3-day/week; tech filter) + unscheduled queue |
-| `/leads`, `/leads/[id]` | Inbox, detail (timer, actions, raw payload for admins) |
+| `/leads`, `/leads/[id]` | Inbox (grid of lead boxes, status chips, the lead map, the lead card sheet `?lead=`); the lead page (the same card for links and printing, intake log, raw payload for admins) |
+| `/leads/new`, `/leads/new/schedule`, `/leads/new/done` | Booking: Who (New lead, the caller form) → What (job type) → When (week strip, 2-hour arrival windows) → Done (Assign a tech, Next lead) |
+| `/dispatch` | Assign hub: the Needs a tech queue, every tech's route on a map, ranked techs for a job |
 | `/customers`, `/customers/[id]` | List/search; detail with timeline, properties, jobs, money, tags, flags |
 | `/jobs`, `/jobs/[id]` | List (filters); detail (tech action bar / office view tabs: Overview · Photos · Estimate · Invoice · Parts · Messages · History) |
 | `/jobs/[id]/evidence` | Evidence pack (print) |
@@ -3668,7 +3724,7 @@ Badge counts: new leads, outbox pending, approvals, overdue.
 | `/pay/bank` | Tech direct-deposit details (`payroll.bank_edit_own`) |
 | `/settings/audit` | Audit log viewer (`audit.view`) |
 | `/insights` | Dashboards (role variant) |
-| `/team`, `/team/[id]` | Team list, profile (comp, permissions overrides, time, agreements) |
+| `/team`, `/team/[id]` | Team list, profile (comp, permissions overrides, time, agreements; a tech's working hours and time off) |
 | `/notifications` | Notification center |
 | `/settings/*` | §M21 pages |
 | `/more` | More menu |
@@ -3764,7 +3820,7 @@ The permission union type, nav, settings schema, event handlers, seeds and the f
   - the default comp plan `partner_25`
   - a 2026 mileage rate
   - vehicle reminder templates
-  - generic service types ("Service call/diagnostic", "Repair", "Installation", "Maintenance", "Estimate visit")
+  - the three generic job types ("Free estimate", "Service call", "Project"; M05). "Repair" and "Maintenance" are retired: migration `0006_job_kinds_data` archives them on older databases.
   - default deposit rules (special-order parts → `parts_plus_percent` 10%; risk ≥ High → 25%)
   - a tax-rate placeholder
 - **Presets:** `src/presets/<vertical>.ts` exports `{ serviceTypes, checklists, customFields, pricebook, tags, automationsOverrides }`. MVP ships `generic`. Adding `locksmith`, `garage_door`, `hvac`, `plumbing`, `chimney` or `appliance` is **data only** (Later). Signup's trade picker lists available presets.

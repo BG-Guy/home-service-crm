@@ -47,6 +47,10 @@ costs a frame on tap, or a kilobyte of shell JS, is a bug.
   - Route JS must not grow on any route you touch. Move toward ≤ 30 KB by lazy-loading sheets and
     dialogs behind first open (`src/ui/components/lazy.tsx`).
   - The CSS total stays ≤ 25 KB gz, so the redesign may add about 4 KB gz.
+- **One-off values go in inline `style`.** A value a component computes per instance (a kind
+  color tint, a muted avatar, a pin shadow) goes in `style` (a property or a CSS variable), not an
+  arbitrary Tailwind class: every arbitrary class lands in the one global stylesheet and counts
+  against its ≤ 25 KB gz budget.
 - **No layout shift.** Entry animations use transform and opacity only. Skeletons reserve the
   final size.
 - **Never fade first-paint content in from opacity 0.** Chrome then records no FCP or LCP; this
@@ -169,7 +173,7 @@ Every named motion has a reduced-motion version (opacity ≤ 150 ms, no transfor
 | M3 | Shared-element morph | The list card's title, avatar or status morphs into the detail hero through `<ViewTransition name>`, 400 ms spring. Names must be unique on a page. |
 | M4 | Bottom sheet (phone) | Slides up 320 ms spring and the scrim fades in. At the large detent the page behind scales to .94 with rounded top corners and dims (iOS card stack). Drag to dismiss uses velocity. |
 | M4d | Modal / drawer (desktop) | Centered modal: scale .96 → 1 plus fade, 220 ms. The `drawer` presentation slides in from the right, 320 ms. |
-| M5 | Pop-up menu (context menu, + menu, action sheet on desktop) | Grows from the trigger (transform-origin at the trigger): scale .92 → 1 plus fade, 220 ms snappy. Items stagger 12 ms. Glass material. |
+| M5 | Pop-up menu (context menu, AddMenu, action sheet on desktop) | Grows from the trigger (transform-origin at the trigger): scale .92 → 1 plus fade, 220 ms snappy. Items stagger 12 ms. Glass material. |
 | M6 | Alert | Scale 1.08 → 1 plus fade, 220 ms; the scrim fades in. |
 | M7 | Toast | Phone: an "island" pill drops from the top (420 ms bouncy) and grows to its width; swipe up to dismiss. Desktop: slides in at the bottom right. Out: rise and fade, 200 ms. |
 | M8 | List / card entry | Fade up 8 px, 280 ms, stagger 30 ms (first 10 items only), on top-level pages after a tab switch or first load. Not on pushed pages (M1 already moves them). `.enter-stagger` on the container (children get `--i` 0–9 by position; an inline `--i` wins). It replays when a pop returns to the page (the page remounts), so keep it to tab roots. Not on the LCP element. |
@@ -281,13 +285,17 @@ Every named motion has a reduced-motion version (opacity ≤ 150 ms, no transfor
   - Phone, large detent: `<html data-sheet-stack>` scales `.shell-stage` (banner + main) to .94.
     Fixed elements inside a page move with that layer while it's scaled, so pages use `BottomBar`
     (sticky), not `position: fixed`, for their docks.
-- **ActionSheet, ContextMenu, AddMenu:** M5 glass pop-ups. The "+" menu pops from its button on
+- **ActionSheet, ContextMenu, AddMenu:** M5 glass pop-ups. AddMenu pops from its button on
   phones too (iOS pull-down menu); the ActionSheet pops from whatever opened it on desktop (no
-  anchor prop needed) and stays a bottom sheet on phone. APIs unchanged.
+  anchor prop needed) and stays a bottom sheet on phone. APIs unchanged. The app header no
+  longer has a "+" menu: it shows named create buttons (§6), and AddMenu stays in the kit.
 - **Alert:** M6. 300 wide, radius 20, glass, pill buttons: cancel neutral, the preferred action
   `--accent-fill`, destructive `--danger-fill` (only in confirms).
 - **Toast:** M7, with icon and text; an action link is optional. Phone: black island at the top;
-  desktop: glass card bottom right. `toast()` API unchanged.
+  desktop: glass card bottom right. `toast()` API unchanged. `undo` adds an Undo button and keeps
+  the toast up 5 s. A toast can't show over a modal Sheet: the sheet is a `<dialog>` in the top
+  layer, and the toast host joins the top layer only while a FullscreenHub is open. A change
+  made inside a modal sheet shows its Undo in the sheet instead (§6 "Action groups and Undo").
 - **Bottom action bar ("booking bar", Airbnb):** sticky at the bottom on phone. A summary on the
   left (amount, "3 to do"), the one primary action on the right, glass, safe-area aware. Used by
   the job dock, estimate approval, pay page and long forms. On desktop it becomes the sticky
@@ -306,7 +314,8 @@ Every named motion has a reduced-motion version (opacity ≤ 150 ms, no transfor
     bottom edge, safe-area aware. Server Component, no JS.
   - While one is on screen the root sets `--bottombar-h` (84 px; 0 in the desktop rail) so fixed
     overlays (sync capsule, FAB, desktop toasts) lift above it.
-- **Calendar** (`Calendar.tsx`, client; Airbnb-style availability picker):
+- **Calendar** (`Calendar.tsx`, client; Airbnb-style availability picker). No screen uses it since
+  the leads flow redesign (booking picks the day on a week strip, §6); it stays in the kit:
   ```tsx
   <Calendar from={today} to={addDays(today, 59)} today={today} selected={day} onSelect={setDay}
     getDay={(k) => ({ status: "best" | "open" | "limited" | "full", hint: "4 windows open" })}
@@ -342,8 +351,24 @@ Every named motion has a reduced-motion version (opacity ≤ 150 ms, no transfor
 
 ## 6. Layout patterns
 
-- **Phone header:** large title (greeting on Today), date or subtitle in `--label-2`, and trailing
-  icon buttons (search, +, bell) in the nav bar.
+- **Phone header:** large title (greeting on Today), date or subtitle in `--label-2`, and the
+  trailing actions in the nav bar: the named create buttons (below), search and the bell.
+- **Named create buttons** (`HeaderActions` → `CreateButtons`, `src/app/(app)/_components/`): no
+  "+" menu. Every top-level page gets **New lead, New job, New customer** (each by permission and
+  flag), then search and the bell.
+  - **Phones (< 768 px):** small labeled icons, 44 px targets: a 20 px icon over a 10/500 label in
+    the accent ink (9 px under 380 px).
+  - **Tablet and desktop:** named pills (`btn-sm`). The page's main one is `primary`, the others
+    are white pills (`bg-card shadow-card`). Inside a narrow list pane (`[data-pane]`, SplitView's
+    360 px column at ≥ 1024 px) they fall back to the labeled icons.
+  - **Order:** the page's own item first: New lead on /leads; New job on /jobs, /schedule and
+    /today; New customer on /customers and customer pages. A page with a create action of its
+    own passes it, and it goes before all of them: `<HeaderActions own="estimate" | "receipt" |
+    "tool" | "vehicle" />`. `create={false}` leaves the buttons out.
+  - **Accent pill** only on the item's own list page (`/leads`, `/jobs`, `/schedule`,
+    `/customers`, an `own` page), never on Today or a detail screen, so a view keeps one primary.
+  - A `?new=` link to the page you're on (Upload receipt on /parts, New tool on /tools) only sets
+    the param with `history.replaceState`, so the page's sheet opens with no server round trip.
 - **Hero card:** status pill (live dot), Title 2, two lines of key facts, then one primary button.
   Secondary actions are round icon buttons (call, text, navigate) in `--fill`.
 - **Summary strip:** horizontally scrolling stat tiles on phone; a four-column stat row on desktop.
@@ -357,6 +382,110 @@ Every named motion has a reduced-motion version (opacity ≤ 150 ms, no transfor
 - **Tabs inside a page:** a sticky segmented or underline tab row with a sliding indicator (M14).
 - **Empty, loading and error:** EmptyState, a Skeleton that mirrors the layout, and a Banner with
   a retry button.
+- **Lead box and grid** (`LeadBox`, `LeadsGrid` in `src/features/leads/components/`): the leads
+  inbox is a grid of boxes, not rows.
+  - **Columns:** phones show 1 or 2 columns, 2 by default. The 1 / 2 switch (kit
+    `SegmentedControl` with row and grid icons) sits on the count line, phones only, and is kept
+    in the `leads-cols` cookie (`components/inbox-prefs.ts`, the same pattern as
+    `src/lib/theme.ts`), so the server renders the picked grid with no flash. From 768 px:
+    `repeat(auto-fill, minmax(232px, 1fr))` (340 px boxes in 1-column mode). From 1024 px the
+    lead map takes a sticky right column (`minmax(340px, 40%)`) beside the grid.
+  - **The box:** a card surface (`--card`, radius 20, `.hover-lift`) that grows to its row. Top:
+    the avatar inside the SLA ring (`SlaAvatar`: 46 px in 1 column, 38 in 2, where a new lead's
+    wait shows in a tag under it), the name, then the job · status line and the street in
+    `--label-2` (the 1-column box adds "Wants <day>"). Bottom: the action row.
+  - **Actions by state:** open = Call (the accent circle), Text, Directions, Open card (tinted,
+    Maximize2): `RoundAction`s (44 px circle + label) in 1 column, 36 px icon buttons in 2.
+    Check = Looks legit and Spam; lost = Reopen; spam = Not spam; booked = Open job. A closed lead
+    always keeps its way back on the box.
+  - **Tap:** the whole box is one button, so a tap anywhere opens the lead card; the action
+    buttons sit above it. The box's main button (the name) carries the kit utility `.box-hit`
+    (globals.css): its `::after` covers the nearest positioned ancestor (radius
+    `--radius-card`), and its 2 px accent focus ring follows the box. Reuse it for any card that
+    is one big tap target. Selected (its card is open, or its pin
+    is picked on the map) = a 2 px accent ring. Swipe left on an open lead = Lost (gray) and Spam (red), each with Undo.
+  - **API:** `<LeadBox lead={LeadBoxData} layout="grid1" | "grid2" | "drawer" selected? onOpen />`.
+    Use it wherever leads show as boxes (the map drawer does).
+- **Lead card (sheet)** (`LeadCardProvider` / `useLeadCard()` from `components/lead-env.ts`, the
+  lazy `LeadCardSheet`): opening a lead slides its card up instead of pushing a page.
+  - The kit Sheet with only the large detent: a bottom sheet on phones (drag down or ✕; the page
+    steps back behind it, M4), the centered modal on tablet and desktop (M4d).
+  - `useLeadCard().open(id)` from a box or a pin pushes `?lead=<id>` (`history.pushState`), so
+    Back closes the card, and a link or a reload with `?lead=` opens it.
+    `prefetch(id)` warms it on press or after a 250 ms hover; `seed(boxes)` lets it show the box's
+    TL;DR at once while `loadLeadCard` fills in the rest.
+  - Layout: the TL;DR (name, status, job type, street, the arrival window or asked-for day), info
+    boxes (Phone, Address with a tile mini map, Wants or Arrives, Quote & source, Last contact,
+    Notes, Photos), the action groups, and the booking bar as the sheet's sticky `footer` with
+    Book as the one primary. `/leads/[id]` renders the same `LeadCardBody` with a `BottomBar`.
+- **Action groups and Undo** (`LeadActionGroups`; rules in `src/features/leads/rules.ts`):
+  - No "…" menu. Four labeled groups of round actions (`RoundAction`: a 48 px circle with its
+    label under it): Reach, Move forward, Manage, Close. Each button is paired with its way back
+    (Contacted ↔ Not contacted, Qualify ↔ Unqualify, Claim ↔ Release, Lost ↔ Reopen, Spam ↔ Not
+    spam). A step already taken shows its reverse drawn "on": the ink fill (`--label` with
+    `--bg` text), like a selected chip.
+  - Every change offers Undo. Outside a sheet it rides on the toast (`toast({ undo })`, 5 s).
+  - **Inside a modal Sheet, a toast can't show** (the sheet's `<dialog>` is in the top layer, and
+    the toast host joins it only while a FullscreenHub is open). So a change made in the sheet
+    shows its Undo in the sheet, above its footer: a dark island bar with an Undo pill (5 s with
+    Undo, 3 s without). If the sheet closes while it shows, it moves to a normal toast. Use the
+    same pattern in any modal sheet that needs Undo, until the kit raises the toast host over
+    sheets.
+- **Job type picker** (`JobTypePicker` in `src/features/jobs/components/`; values in
+  `job-type-choice.ts`, rows from `listServiceTypeOptions()`):
+  - The three kinds as radio cards (Free estimate, Service call, Project): a kind tile (the icon on
+    a 16% wash of the kind color), the label, a hint with the visit length, and the price on the
+    right ("Free", "From $125", "Quote"). Picked = a 2 px inset accent ring, no fill, so the page's
+    primary stays the only one.
+  - "What's the job?" chips (kit `Chip`, ink when selected) under the picked card: the trade's jobs
+    plus Other. A job with the ownership check adds a ⚖️ line, "<Job> keeps the ID and ownership
+    check".
+  - `variant="cards"`: phones stack full-width cards with the chips right under the picked one;
+    from 640 px the cards sit three across with the chips below. `variant="tiles"`: three small
+    84 px tiles across at every size (the caller form, which has to fit the first screen).
+  - Used by the caller form, the booking What step and New job.
+- **Booking: week strip and arrival windows** (`src/features/leads/components/booking/`):
+  - Steps Who · What · When at the top (`BookingSteps`; done steps link back).
+  - **Week strip** (`WeekStrip`): one row of 54 × 76 day cards from today that a thumb swipes
+    (scroll-snap), with the Calendar's dot language (best = accent dot, open = green, limited =
+    amber ring, full = struck through). Selected = the ink fill (`--label`, `--bg` text). The
+    asked-for day carries a small "Asked" tag. Closed days are left out, except today and the
+    asked-for day.
+  - **Windows** (`WindowGrid`): the day's 2-hour windows as radio cards, 2 across on phones and 4
+    from 640 px: "Arrives" over "8–10 AM"; the open window with the least extra driving says "Best
+    · adds 2 mi" in accent ink; after-hours windows say so; full ones are struck through. A day
+    with nothing open says why in plain words, with the soonest open day and "Book by hand on New
+    job".
+  - **Booking bar:** "Fri · arrives 8–10 AM" / "Service call · Rekey · no tech yet" + Book. Desktop:
+    `DetailLayout` with the booking bar as the first rail card and a lead card (phone, address,
+    asked for, Edit details) under it.
+  - The focused field never hides under the sticky bars: `keep-focus-visible.ts` scrolls it clear
+    of the bottom bar, tab bar and nav bar, also while the keyboard resizes the visual viewport.
+- **Lead map** (`src/features/leads/components/map/`: `LazyLeadsMap` loads `LeadsMap` as its own
+  chunk, and the Leaflet `LeadsMapCanvas` is a second one):
+  - `layout="panel"`: the desktop column beside the grid (≥ 1024 px, sticky, screen height).
+    `layout="phone"`: phones and tablets in Map mode. The map fills the screen under the header,
+    full bleed, down under the tab bar, and the page doesn't scroll.
+  - **Drawer (phone):** the count line, chips and boxes (`LeadBox layout="drawer"`) ride in a
+    drawer over the map with three detents, peek / half / full (`drawer.ts`: transform only, flick
+    projection, rubber band; the handle is a button: a tap cycles, arrow keys step). It opens at
+    half. The Grid / Map pill rides on the drawer's top edge (at full height it sits just above
+    the tab bar); in Grid mode the same dark pill floats above the tab bar.
+  - **Full screen:** the kit FullscreenHub (`historyKey="leads-map"`, `chrome="minimal"`, its own
+    corner button). Dragging the drawer down past peek opens it too: the drawer slides away and a
+    dark "Show N leads" pill (spring) brings it back; Back, Esc or ✕ exit. A pin tapped there
+    opens the lead card above the map, and Back closes the card first.
+  - **Pins** (40 px): the initials inside the SLA ring (green < 5 min, amber < 15, red after;
+    frozen at the first response) in the box's avatar color. The two newest unanswered leads still
+    inside the 15-minute ring pulse (M12). Overlapping pins fold to 22 px dots
+    (`src/lib/declutter.ts`), and below zoom 9 every pin is a dot. Pins at one address fan out
+    44 px. Selected (the open card, else the last pin tapped) = 1.2× with an accent halo and a
+    name tag on the first free side (`placeLabels`); hover shows the tag too.
+  - **Today's jobs:** 18 px dark squares with a briefcase under the pins (live = a green dot, done
+    = muted), the label in a tooltip. The map frames the leads, plus the jobs when there are fewer
+    than two leads.
+  - Notes on the map, in plain words: "4 of 6 leads on the map" (tap for why) and "Street map is
+    off. Set it up".
 - **Route map markers** (schedule map, `jobs/schedule-map/components/marker-css.ts`):
   - A stop is a **window box** in the tech's color: a card-colored box with a 2 px ring in the
     tech color and a tail to the point. Line 1 is "1 · 8–10" (stop number, compact window, 12/700
@@ -454,7 +583,10 @@ Every named motion has a reduced-motion version (opacity ≤ 150 ms, no transfor
     controls, a collapsible timeline strip at the bottom, the job in the kit Sheet with the
     stop kept in view), the techs timeline (`historyKey="timeline"`, `corner="top-left"`,
     `orientationHint="landscape"`, the Fit day / Zoom switch in the controls), the live
-    map's wall mode, the Assign hub map and the schedule board (blocks 1, 2 and 6 below).
+    map's wall mode, the Assign hub map and the schedule board (blocks 1, 2 and 6 below), and
+    the leads map (`historyKey="leads-map"`, minimal chrome and its own corner button; the
+    drawer slides away and "Show N leads" closes it; dragging the drawer below peek opens it;
+    §6 "Lead map").
   - **The next six uses** (apply as written):
     1. Operations live map, wall mode (an office TV or a tablet). **Shipped** in `LiveMap`:
        the header's "Wall mode" (`FullscreenButton hub="wall"`, tablet and up) or the map's
@@ -598,7 +730,8 @@ Every named motion has a reduced-motion version (opacity ≤ 150 ms, no transfor
    - Phone: the dock restyled as the bottom action bar.
 4. **Lists (jobs, leads, customers, estimates, invoices):**
    - A sticky search pill and filter chip row; rich rows; day grouping where dates matter.
-   - Leads show an SLA ring.
+   - Leads are a grid of boxes with the SLA ring that open the lead card sheet instead of a
+     pushed page (§6 "Lead box and grid", "Lead card").
    - M3 morph into the detail hero.
 5. **Schedule:**
    - A day view with tech lanes, soft job blocks with the tech-color edge, and a red now-line.

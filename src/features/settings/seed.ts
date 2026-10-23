@@ -1,7 +1,7 @@
 // Demo seed fragment for `settings` (BUILD_PLAN §10.3 #3). Owner: B8.
 // Tags (+ applied to customers and jobs), custom-field defs, checklist templates,
-// the profile's extra service type (`after_hours_lockout` in the default demo) and its
-// default tax rate (8.25% in Austin).
+// the profile's trade jobs (under the three job types) and extra service type
+// (`after_hours_lockout` in the default demo) and its default tax rate (8.25% in Austin).
 // Writes only B8 tables; deterministic ids + onConflictDoNothing (rerunnable).
 import { eq } from "drizzle-orm";
 import type { DB } from "@/db";
@@ -107,12 +107,49 @@ export async function seedDemo(db: DB, ctx: DemoSeedCtx): Promise<void> {
     ])
     .onConflictDoNothing();
 
-  // Extra service type + link the generic repair type to the repair checklist.
+  // The trade's jobs under the three job types (the base seed writes the generic
+  // Free estimate / Service call / Project rows). Plain service jobs use the repair
+  // checklist; ownership-check jobs get the ownership items from buildChecklist.
+  await db
+    .insert(serviceTypes)
+    .values(
+      prof.tradeJobs.map((t, i) => ({
+        id: seedId("service_type", t.key),
+        name: t.name,
+        kind: t.kind,
+        color: t.color,
+        icon: t.icon,
+        aliases: [...t.aliases],
+        defaultDurationMin: t.defaultDurationMin,
+        defaultPriceCents: t.defaultPriceCents,
+        contractKind: t.contractKind,
+        checklistTemplateId:
+          t.kind === "service" && !t.requiresOwnershipCheck
+            ? STANDARD_REPAIR
+            : null,
+        photosRequiredBefore: t.photosRequiredBefore ?? 0,
+        photosRequiredAfter: t.photosRequiredAfter ?? 0,
+        photosOnInvoice: true,
+        requiresSignedEstimate: t.requiresSignedEstimate ?? false,
+        requiresOwnershipCheck: t.requiresOwnershipCheck ?? false,
+        upsellCovered: false,
+        warrantyDays: t.warrantyDays,
+        sort: 10 + i,
+        active: true,
+        createdAt: created,
+        updatedAt: created,
+      })),
+    )
+    .onConflictDoNothing();
+
+  // Extra service type (⚖️ the locksmith's After-hours lockout: ownership check and
+  // its checklist).
   await db
     .insert(serviceTypes)
     .values({
       id: seedId("service_type", extra.key),
       name: extra.name,
+      kind: extra.kind,
       color: extra.color,
       icon: extra.icon,
       aliases: [...extra.aliases],
@@ -133,10 +170,12 @@ export async function seedDemo(db: DB, ctx: DemoSeedCtx): Promise<void> {
       updatedAt: created,
     })
     .onConflictDoNothing();
+  // The generic Service call (the base seed's "service_call" row) uses the repair
+  // checklist too ("Repair" was retired by the job types redesign).
   await db
     .update(serviceTypes)
     .set({ checklistTemplateId: STANDARD_REPAIR })
-    .where(eq(serviceTypes.id, seedId("service_type", "repair")));
+    .where(eq(serviceTypes.id, seedId("service_type", "service_call")));
 
   // Tax: the base seed's 0% placeholder becomes the profile's local rate (Austin's
   // 8.25% for the default demo); plus an alternate rate.
@@ -259,6 +298,6 @@ export async function seedDemo(db: DB, ctx: DemoSeedCtx): Promise<void> {
       .onConflictDoNothing();
 
   ctx.log(
-    `settings: ${TAGS.length} tags (${links.length} applied), 4 custom fields, 2 checklists, ${extra.name.toLowerCase()}, ${(p.taxBps / 100).toFixed(2).replace(/0$/, "")}% tax`,
+    `settings: ${TAGS.length} tags (${links.length} applied), 4 custom fields, 2 checklists, ${prof.tradeJobs.length} trade jobs + ${extra.name.toLowerCase()}, ${(p.taxBps / 100).toFixed(2).replace(/0$/, "")}% tax`,
   );
 }

@@ -2,14 +2,17 @@
 
 import { useState } from "react";
 import { Button } from "@/ui/components/Button";
+import { Chip } from "@/ui/components/Chip";
 import { TextArea } from "@/ui/components/Field";
-import { ListRow, ListSection } from "@/ui/components/List";
 import { Sheet } from "@/ui/components/Sheet";
-import { toast } from "@/ui/components/Toast";
 import { markLeadLost } from "../actions";
 import { lostReasonLabel } from "../labels";
+import { useLeadChanges } from "./use-lead-changes";
 
-/** "Mark lost" with a configurable reason (settings.leads.lost_reasons). */
+/**
+ * "Why was it lost?" with a configurable reason (settings.leads.lost_reasons).
+ * Saving shows "Marked lost" with Undo (and the lead keeps Reopen).
+ */
 export function LostSheet({
   leadId,
   reasons,
@@ -24,6 +27,17 @@ export function LostSheet({
   const [reason, setReason] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const changes = useLeadChanges();
+  const save = async () => {
+    if (!reason) return;
+    setSaving(true);
+    const r = await markLeadLost({ leadId, reason, note });
+    setSaving(false);
+    if (!r.ok) return void setError(r.error);
+    onOpenChange(false);
+    changes.announce(leadId, "Marked lost", r.data?.eventId ?? null);
+  };
   return (
     <Sheet
       open={open}
@@ -33,44 +47,44 @@ export function LostSheet({
       onClosed={() => {
         setReason(null);
         setNote("");
+        setError(null);
       }}
-      leading={
-        <Button variant="plain" size="sm" onClick={() => onOpenChange(false)}>
-          Cancel
-        </Button>
-      }
-      trailing={
-        <Button
-          variant="plain"
-          size="sm"
-          className="font-semibold"
-          disabled={!reason || saving}
-          loading={saving}
-          onClick={async () => {
-            if (!reason) return;
-            setSaving(true);
-            const r = await markLeadLost({ leadId, reason, note });
-            setSaving(false);
-            if (!r.ok) return void toast.error(r.error);
-            toast.success("Marked lost");
-            onOpenChange(false);
-          }}
-        >
-          Save
-        </Button>
+      footer={
+        <div className="flex flex-col gap-2">
+          <Button
+            variant="destructive"
+            size="lg"
+            block
+            disabled={!reason}
+            loading={saving}
+            onClick={save}
+          >
+            Mark lost
+          </Button>
+          <Button
+            variant="plain"
+            size="md"
+            block
+            className="text-label-2"
+            onClick={() => onOpenChange(false)}
+          >
+            Cancel
+          </Button>
+        </div>
       }
     >
-      <div className="flex flex-col gap-[var(--section-gap)] pb-4">
-        <ListSection>
+      <div className="flex flex-col gap-4 pb-2">
+        <p className="text-subhead text-label-2">
+          Kept for your reports. You can reopen it any time.
+        </p>
+        {/* biome-ignore lint/a11y/useSemanticElements: chip group, not a form fieldset */}
+        <div role="group" aria-label="Reason" className="flex flex-wrap gap-2">
           {reasons.map((r) => (
-            <ListRow
-              key={r}
-              title={lostReasonLabel(r)}
-              accessory={reason === r ? "check" : "none"}
-              onClick={() => setReason(r)}
-            />
+            <Chip key={r} selected={reason === r} onClick={() => setReason(r)}>
+              {lostReasonLabel(r)}
+            </Chip>
           ))}
-        </ListSection>
+        </div>
         <TextArea
           label="Note"
           placeholder="Optional"
@@ -78,6 +92,11 @@ export function LostSheet({
           value={note}
           onChange={(e) => setNote(e.currentTarget.value)}
         />
+        {error && (
+          <p role="alert" className="text-footnote text-danger">
+            {error}
+          </p>
+        )}
       </div>
     </Sheet>
   );

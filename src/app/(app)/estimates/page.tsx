@@ -87,7 +87,7 @@ export default async function EstimatesPage({
             </>
           ) : undefined
         }
-        trailing={<HeaderActions />}
+        trailing={<HeaderActions own="estimate" />}
         search={
           <SearchField
             param="q"

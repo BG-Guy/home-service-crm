@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { kindOf } from "@/features/jobs/kinds";
 import { ServiceTypesManager } from "@/features/settings/components/ServiceTypes";
 import { SettingsScreen } from "@/features/settings/components/SettingsScreen";
 import { SERVICE_ICONS } from "@/features/settings/options";
@@ -9,9 +10,11 @@ import {
 import { requireUser } from "@/lib/auth/current";
 import { iconFor } from "@/ui/icons";
 
-export const metadata: Metadata = { title: "Service types" };
+export const metadata: Metadata = { title: "Job types" };
 
-// Settings → Service types (SPEC M21): every service-type field, archive/restore.
+// Settings → Job types (SPEC M21; leads-flow redesign item 6): the three job types
+// (Free estimate, Service call, Project) and the trade's jobs under each, with every
+// rule; archive/restore. The route keeps its old /settings/services path.
 export default async function SettingsServicesPage() {
   await requireUser("settings.manage");
   const [rows, checklists] = await Promise.all([
@@ -31,8 +34,8 @@ export default async function SettingsServicesPage() {
   );
   return (
     <SettingsScreen
-      title="Service types"
-      intro="What you sell. Each type sets the default duration and price, required photos, checklist and paperwork for its jobs."
+      title="Job types"
+      intro="Every booking starts with one of three job types. Your trade's jobs sit under them, each with its own length, price, photos, checklist and paperwork."
     >
       <ServiceTypesManager
         icons={icons}
@@ -40,6 +43,7 @@ export default async function SettingsServicesPage() {
         items={rows.map((r) => ({
           id: r.id,
           name: r.name,
+          kind: kindOf(r.kind),
           color: r.color,
           icon: r.icon,
           aliases: r.aliases,
@@ -55,7 +59,6 @@ export default async function SettingsServicesPage() {
           requiresOwnershipCheck: r.requiresOwnershipCheck,
           upsellCovered: r.upsellCovered,
           warrantyDays: r.warrantyDays,
-          maintenanceIntervalMonths: r.maintenanceIntervalMonths,
           sort: r.sort,
           active: r.active,
         }))}

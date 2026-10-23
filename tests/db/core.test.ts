@@ -114,7 +114,8 @@ describe("base seed (boot hook)", () => {
     expect(await count("policy_versions")).toBe(13);
     expect(await count("comp_plans")).toBe(1);
     expect(await count("mileage_rates")).toBe(1);
-    expect(await count("service_types")).toBe(5);
+    // The three job types (Free estimate, Service call, Project).
+    expect(await count("service_types")).toBe(3);
     expect(await count("deposit_rules")).toBe(2);
     expect(await count("tax_rates")).toBe(1);
   });

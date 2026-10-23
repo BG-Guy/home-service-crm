@@ -6,6 +6,7 @@ import { formatDateKey, formatTime } from "@/lib/time";
 import { Avatar } from "@/ui/components/Avatar";
 import { Banner } from "@/ui/components/Banner";
 import { BarSummary, BottomBar } from "@/ui/components/BottomBar";
+import { buttonClass } from "@/ui/components/Button";
 import { Card } from "@/ui/components/Card";
 import { EmptyState } from "@/ui/components/EmptyState";
 import { IconButton } from "@/ui/components/IconButton";
@@ -16,15 +17,17 @@ import { type TripStep, TripTimeline } from "@/ui/components/Timeline";
 import { cx } from "@/ui/cx";
 import { Morph } from "@/ui/motion/Morph";
 import { PushLink } from "@/ui/motion/PageTransition";
-import { hubHref } from "../href";
+import { arrivalLabel } from "../format";
+import { hubHref, hubHrefForJob } from "../href";
 import type { Recommendation } from "../recommend";
 import type { HubData, HubJob, HubTech, HubTechState } from "../types";
-import { HubDateBar, SelectTech } from "./DispatchHub";
+import { HubDateBar, PhoneMorph, SelectTech } from "./DispatchHub";
 import { HubAssignButton } from "./HubAssignButton";
 
-// Server-rendered pieces of the Assign hub: the left column (day, job being
-// assigned, best matches, technicians, jobs that need a tech) and one panel per
-// technician (profile facts, the day as a trip timeline, the assign action).
+// Server-rendered pieces of the Assign hub: the left column (jobs that need a
+// tech across every day, the day, the job being assigned, best matches,
+// technicians) and one panel per technician (profile facts, the day as a trip
+// timeline, the assign action).
 
 const STATE: Record<
   HubTechState,
@@ -101,8 +104,13 @@ export function HubList({
   const top = data.recs.slice(0, 3);
   const byId = new Map(data.techs.map((t) => [t.id, t]));
   const onClock = data.techs.filter((t) => t.clockedIn).length;
+  // The queue is the office's to-do list: first while jobs wait (it spans every
+  // day, so it sits above the day switcher, which drives the routes below).
+  const waiting = !data.job && data.needsTech.length > 0;
   return (
     <>
+      {waiting && <NeedsTechQueue data={data} />}
+
       <HubDateBar date={data.date} todayKey={data.todayKey} />
 
       {data.job && <AssigningCard data={data} job={data.job} />}
@@ -229,51 +237,109 @@ export function HubList({
         )}
       </section>
 
-      {!data.job && (
+      {!data.job && !waiting && <NeedsTechQueue data={data} />}
+
+      {!data.job && data.undated.length > 0 && (
         <ListSection
           variant="title"
-          header="Needs a tech"
-          subtitle={
-            data.toAssign.length
-              ? "Pick a job to see who fits best"
-              : "Every job on this day has a technician"
-          }
+          header="No date yet"
+          subtitle="Pick one to give it a time with a tech"
         >
-          {data.toAssign.length === 0 ? (
-            <p className="px-4 py-4 text-subhead text-label-2">
-              Nothing waiting. New jobs without a tech show up here.
-            </p>
-          ) : (
-            data.toAssign.slice(0, 12).map((j) => (
-              <Link
-                key={j.id}
-                href={hubHref({ date: data.date, job: j.id }, null)}
-                className="row-press list-row flex min-h-[64px] items-center gap-3 px-4 py-3"
-              >
-                <span
-                  aria-hidden
-                  className="icon-tile size-9 shrink-0 items-center justify-center rounded-control bg-[color-mix(in_srgb,var(--accent)_var(--tint-a),transparent)] text-accent-text"
-                >
-                  <CalendarClock size={18} />
-                </span>
-                <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="truncate text-headline">
-                    {j.number} · {j.title}
-                  </span>
-                  <span className="truncate text-footnote text-label-2">
-                    {j.start ? windowText(j, data.tz) : "No date yet"} ·{" "}
-                    {j.address}
-                  </span>
-                </span>
-                <Pill tone="accent" size="sm" dot={false}>
-                  Assign
-                </Pill>
-              </Link>
-            ))
-          )}
+          {data.undated.map((j) => (
+            <QueueRow
+              key={j.id}
+              href={hubHref({ date: data.date, job: j.id }, null)}
+              number={j.number}
+              title={`${j.number} · ${j.serviceName ?? j.title}`}
+              detail={[j.customerName, j.street].filter(Boolean).join(" · ")}
+            />
+          ))}
         </ListSection>
       )}
     </>
+  );
+}
+
+/**
+ * Needs a tech (leads flow item 9): every booked job nobody is on yet, from
+ * today on, soonest first, with its day and window, service and street. The
+ * header count is the Assign badge's (./needs-tech.ts). A row opens the hub on
+ * that job's day with the job picked; the office then picks the tech (no
+ * auto-assign).
+ */
+function NeedsTechQueue({ data }: { data: HubData }) {
+  const n = data.needsTechCount;
+  const more = n - data.needsTech.length;
+  return (
+    <ListSection
+      variant="title"
+      id="needs-tech"
+      header={n ? `Needs a tech · ${n}` : "Needs a tech"}
+      subtitle={n ? "Soonest first, across all days" : undefined}
+      footer={
+        more > 0
+          ? `Showing the first ${data.needsTech.length}. Assign these and the rest move up.`
+          : undefined
+      }
+    >
+      {data.needsTech.length === 0 ? (
+        <p className="px-4 py-4 text-subhead text-label-2">
+          Nothing waiting. Booked jobs without a tech show up here.
+        </p>
+      ) : (
+        data.needsTech.map((j) => (
+          <QueueRow
+            key={j.id}
+            href={hubHrefForJob(j.id, j.dayKey)}
+            number={j.number}
+            title={
+              j.start
+                ? arrivalLabel(j.start, j.end, data.tz, data.todayKey)
+                : "No time yet"
+            }
+            detail={[j.serviceName ?? j.title, j.street]
+              .filter(Boolean)
+              .join(" · ")}
+          />
+        ))
+      )}
+    </ListSection>
+  );
+}
+
+/** A queue row: when (bold), what and where, and the Assign action. */
+function QueueRow({
+  href,
+  number,
+  title,
+  detail,
+}: {
+  href: string;
+  number: string;
+  title: string;
+  detail: string;
+}) {
+  return (
+    <Link
+      href={href}
+      aria-label={`Assign ${title.startsWith(number) ? title : `${number}: ${title}`}, ${detail}`}
+      className="row-press list-row flex min-h-[64px] items-center gap-3 px-4 py-3"
+    >
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="num truncate text-subhead font-semibold">{title}</span>
+        <span className="truncate text-footnote text-label-2">{detail}</span>
+      </span>
+      <span
+        aria-hidden
+        className={buttonClass({
+          variant: "tinted",
+          size: "sm",
+          className: "shrink-0 px-3",
+        })}
+      >
+        Assign
+      </span>
+    </Link>
   );
 }
 
@@ -543,9 +609,10 @@ export function TechPanel({
       <Card padding="lg" className="flex flex-col gap-4">
         <div className="flex items-center gap-4">
           {/* Phone: the list avatar morphs into this one (M3). Desktop shows both
-              at once, so only the phone copy carries the shared name. */}
+              at once, so only the phone copy carries the shared name, and only
+              on a phone (PhoneMorph). */}
           <span className="md:hidden">
-            <Morph name={`tech-${t.id}-avatar`}>
+            <PhoneMorph name={`tech-${t.id}-avatar`}>
               <span className="inline-block">
                 <Avatar
                   name={t.name}
@@ -555,7 +622,7 @@ export function TechPanel({
                   presence={t.clockedIn && data.isToday}
                 />
               </span>
-            </Morph>
+            </PhoneMorph>
           </span>
           <span className="hub-wide">
             <Avatar

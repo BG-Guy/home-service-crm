@@ -290,7 +290,8 @@ export default async function PartsPage({
                 vehicles={pickers.vehicles}
               />
             )}
-            <HeaderActions />
+            {/* "Upload receipt" (?new=receipt) opens the sheet above. */}
+            <HeaderActions own="receipt" />
           </div>
         }
       />

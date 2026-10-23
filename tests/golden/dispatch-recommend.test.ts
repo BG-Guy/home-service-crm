@@ -2,10 +2,15 @@
 // Score = extra straight-line miles at the cheapest feasible slot + penalties for an
 // overlap, the daily cap, not being clocked in today, a missing skill and a tight
 // drive, plus LOAD_PER_JOB per job already booked. Age is never an input.
+// `arrivalFit` (the booking calendar's timing check for an arrival window) is
+// pinned at the bottom.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  type ArrivalJob,
+  type ArrivalTech,
+  arrivalFit,
   LOAD_PER_JOB,
   milesBetween,
   NOT_CLOCKED_PENALTY,
@@ -280,5 +285,94 @@ describe("recommendTechs: age is never an input (age-discrimination guard)", () 
       .replace(/\/\*[\s\S]*?\*\//g, "")
       .replace(/\/\/.*$/gm, "");
     expect(src).not.toMatch(/birth|\bage\b|\bages?[A-Z_]|\bdob\b/i);
+  });
+});
+
+describe("arrivalFit: can the job start inside the arrival window?", () => {
+  const MIN = 60_000;
+  const shift = (from: number, to: number) => [
+    { start: at(from), end: at(to) },
+  ];
+  const day = { dayStart: at(7), dayEnd: at(20) };
+  const job = (from: number, to: number, durationMin = 90): ArrivalJob => ({
+    ...P.job,
+    from: at(from),
+    to: at(to),
+    durationMin,
+  });
+  const t = (over: Partial<ArrivalTech> = {}): ArrivalTech => ({
+    shifts: shift(8, 17),
+    stops: [],
+    ...over,
+  });
+  // ~1.4 mi from a to the job: 2.76 min at 30 mph.
+  const aToJob = (milesBetween(P.a, P.job) / 30) * 60 * MIN;
+
+  it("starts at the window when the day is free", () => {
+    expect(arrivalFit(job(10, 12), t(), day)).toEqual({
+      fits: true,
+      arrival: at(10),
+      miss: null,
+    });
+  });
+
+  it("starts after the previous stop's time on site plus the drive", () => {
+    const prev = { ...stop("p", P.a, 9), minutes: 75 };
+    const r = arrivalFit(job(10, 12), t({ stops: [prev] }), day);
+    expect(r.fits).toBe(true);
+    expect(r.arrival).toBeCloseTo(at(10, 15) + aToJob, -1);
+  });
+
+  it("waits for the shift and must finish inside it", () => {
+    expect(
+      arrivalFit(job(8, 10), t({ shifts: shift(9, 17) }), day).arrival,
+    ).toBe(at(9));
+    // Starting at 10 isn't inside an 8–10 window.
+    expect(arrivalFit(job(8, 10), t({ shifts: shift(10, 17) }), day)).toEqual({
+      fits: false,
+      arrival: null,
+      miss: "off",
+    });
+    // 90 minutes from 4 PM ends after a 5 PM close.
+    expect(arrivalFit(job(16, 18), t(), day).miss).toBe("no_time");
+    expect(arrivalFit(job(16, 18, 45), t(), day).fits).toBe(true);
+  });
+
+  it("works around time off, and says so when it fills the window", () => {
+    const blocks = [{ start: at(9), end: at(10, 30) }];
+    expect(arrivalFit(job(10, 12), t({ blocks }), day).arrival).toBe(
+      at(10, 30),
+    );
+    const allDay = [{ start: at(0), end: at(24) }];
+    expect(arrivalFit(job(10, 12), t({ blocks: allDay }), day).miss).toBe(
+      "time_off",
+    );
+  });
+
+  it("won't push a later job past its own window", () => {
+    // ~11 mi away (22 min): 2 h from 8:00 reaches it at 10:22, after 10:15.
+    const later = { ...stop("n", P.far, 10), end: at(10, 15), minutes: 60 };
+    expect(arrivalFit(job(8, 10, 120), t({ stops: [later] }), day).miss).toBe(
+      "bumps",
+    );
+    expect(arrivalFit(job(8, 10, 60), t({ stops: [later] }), day).fits).toBe(
+      true,
+    );
+  });
+
+  it("lets an on-call tech take the window inside the day's bounds", () => {
+    expect(arrivalFit(job(17, 19), t({ shifts: null }), day).arrival).toBe(
+      at(17),
+    );
+    expect(arrivalFit(job(19, 21), t({ shifts: null }), day).miss).toBe(
+      "no_time",
+    );
+  });
+
+  it("starts no sooner than allowed, and takes a fixed time exactly", () => {
+    expect(
+      arrivalFit(job(10, 12), t(), { ...day, notBefore: at(10, 40) }).arrival,
+    ).toBe(at(10, 40));
+    expect(arrivalFit(job(13, 13, 60), t(), day).arrival).toBe(at(13));
   });
 });

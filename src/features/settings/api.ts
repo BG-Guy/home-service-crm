@@ -19,6 +19,7 @@ import {
   tags,
   taxRates,
 } from "@/db/schema";
+import { kindOf } from "@/features/jobs/kinds";
 import { writeActivity } from "@/lib/activity";
 import { writeAudit } from "@/lib/audit";
 import { brandCss } from "@/lib/branding";
@@ -48,6 +49,7 @@ function toServiceType(r: typeof serviceTypes.$inferSelect): ServiceTypeRow {
   return {
     id: r.id,
     name: r.name,
+    kind: kindOf(r.kind),
     color: r.color,
     icon: r.icon,
     aliases: r.aliases,

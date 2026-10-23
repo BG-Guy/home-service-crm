@@ -7,6 +7,7 @@ import type { CronHook } from "@/lib/cron";
 import { emit } from "@/lib/events";
 import { getCompanyTimezone, getSettings } from "@/lib/settings";
 import { SYSTEM_ACTOR } from "@/lib/types";
+import { runMapBackfill } from "./map-backfill";
 import { SLA_THRESHOLDS, slaMinutes } from "./sla";
 
 /**
@@ -76,6 +77,15 @@ export const cronHooks: CronHook[] = [
     schedule: { everyMinutes: 1 },
     async run({ now }) {
       await runLeadSla(now);
+    },
+  },
+  {
+    // Open leads with an address get a property (and its geocode job), so they
+    // show on the lead map (map-backfill.ts).
+    key: "leads.map_backfill",
+    schedule: { everyMinutes: 10 },
+    async run({ now }) {
+      await runMapBackfill(now);
     },
   },
 ];

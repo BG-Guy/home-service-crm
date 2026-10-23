@@ -63,12 +63,12 @@ export const nav: readonly NavItem[] = [
   {
     key: "settings.services",
     href: "/settings/services",
-    label: "Service types",
+    label: "Job types",
     icon: "clipboard",
     perm: "settings.manage",
     section: "settings",
     settingsGroup: "work",
-    description: "Durations, prices, photos and requirements",
+    description: "Free estimate, service call, project and your jobs",
   },
   {
     key: "settings.checklists",

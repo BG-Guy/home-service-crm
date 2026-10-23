@@ -1,6 +1,7 @@
 // Demo seed fragment for `team` (BUILD_PLAN §10.3 #2). Owner: B8.
 // Fills the profile columns of F's five demo users (licenses, skills, service ZIPs,
-// home base), the plan's permission overrides (tech1 vehicles.log_trusted) and
+// home base, working hours: techs work the company's business hours), the plan's
+// permission overrides (tech1 vehicles.log_trusted) and
 // Jordan Blake's pending invite (via F createInvite, as the plan requires).
 // Writes only B8 tables/columns; rerunnable.
 import { and, eq, isNull } from "drizzle-orm";
@@ -9,7 +10,9 @@ import { invites, userPermissionOverrides, users } from "@/db/schema";
 import { seedId } from "@/db/seed/demo-ids";
 import type { DemoSeedCtx } from "@/db/seed/types";
 import { createInvite } from "@/features/auth/api";
+import { getSettings } from "@/lib/settings";
 import type { Actor } from "@/lib/types";
+import { businessAsWorkHours } from "@/lib/work-hours";
 
 const st = (k: string) => seedId("service_type", k);
 
@@ -19,6 +22,11 @@ export async function seedDemo(db: DB, ctx: DemoSeedCtx): Promise<void> {
   const PROFILES = ctx.profile.team.members;
   const admin = p.users.find((u) => u.key === "admin");
   const now = ctx.now;
+  // Booking availability: techs get explicit hours matching business hours (edit
+  // them on the member's page); office and admin keep null (business hours).
+  const techHours = businessAsWorkHours(
+    (await getSettings()).company.business_hours,
+  );
   let profiles = 0;
   for (const u of p.users) {
     const prof = PROFILES[u.key];
@@ -35,6 +43,7 @@ export async function seedDemo(db: DB, ctx: DemoSeedCtx): Promise<void> {
         hireDate: prof.hireDate ?? null,
         experienceYears: prof.experienceYears ?? null,
         birthDate: prof.birthDate ?? null,
+        workHours: u.role === "tech" ? techHours : null,
         lastLoginAt: new Date(
           now.getTime() - (u.role === "tech" ? 2 : 20) * 3600_000,
         ),

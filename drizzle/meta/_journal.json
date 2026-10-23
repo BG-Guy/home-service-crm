@@ -36,6 +36,20 @@
       "when": 1792585476913,
       "tag": "0004_team_profile_dispatch",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792720925051,
+      "tag": "0005_job_kinds_scheduling",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792720929263,
+      "tag": "0006_job_kinds_data",
+      "breakpoints": true
     }
   ]
 }

@@ -32,7 +32,8 @@ export default async function SettingsJobsPage() {
       <Page className="pt-4">
         <div className="mx-auto max-w-[680px]">
           <p className="mb-4 px-1 text-subhead text-label-2">
-            Arrival windows, confirmations, cancellation fees and job numbering.
+            Booking limits, arrival windows, confirmations, cancellation fees
+            and job numbering.
           </p>
           <JobSettingsForm
             initial={{
@@ -51,6 +52,9 @@ export default async function SettingsJobsPage() {
               board_start_hour: j.board_start_hour,
               board_end_hour: j.board_end_hour,
               job_prefix: (counter?.prefix ?? "J-").replace(/-$/, "") || "J",
+              daily_job_cap: j.daily_job_cap,
+              max_extra_miles: j.max_extra_miles,
+              after_hours_booking: j.after_hours_booking,
             }}
           />
         </div>

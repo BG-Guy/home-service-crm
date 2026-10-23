@@ -59,7 +59,17 @@ function shellNav(model: NavModel): ShellNav {
             : undefined;
     return toShellItem(t, extra ?? (path !== t.href ? [path] : undefined));
   });
-  tabs.push({ key: "more", href: "/more", label: "More", icon: "more" });
+  // Assign lives in More on phones, so More carries its Needs a tech count.
+  const assign = model.more
+    .flatMap((g) => g.items)
+    .find((i) => i.key === "dispatch");
+  tabs.push({
+    key: "more",
+    href: "/more",
+    label: "More",
+    icon: "more",
+    ...(assign?.badge ? { badgeKey: assign.badge } : {}),
+  });
   const sections = model.sidebar.map((s) => ({
     title: s.label,
     // The sidebar lists only the Settings index; its pages live on /settings.

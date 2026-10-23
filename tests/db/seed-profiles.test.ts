@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { GENERIC_SERVICE_TYPES } from "@/db/seed/base";
+import {
+  GENERIC_SERVICE_TYPES,
+  RETIRED_SERVICE_TYPE_KEYS,
+} from "@/db/seed/base";
 import { buildPlan, DEMO, totalsOf } from "@/db/seed/demo-plan";
 import {
   DEMO_PROFILE_KEYS,
@@ -8,6 +11,8 @@ import {
   resolveDemoProfile,
 } from "@/db/seed/profiles";
 import type { DemoProfile } from "@/db/seed/profiles/types";
+import { isJobKind } from "@/features/jobs/kinds";
+import { SERVICE_ICONS } from "@/features/settings/options";
 import { brandTokens } from "@/lib/branding";
 
 // Trade demo profiles (npm run seed:demo -- --profile=<key>): every profile must build
@@ -37,7 +42,12 @@ describe("default demo plan", () => {
     const sha = createHash("sha1").update(JSON.stringify(plan)).digest("hex");
     // Assign hub: J89 / J90 gained a booked window today / tomorrow (still
     // unscheduled, no tech) so /dispatch has a job to recommend for.
-    expect(sha).toBe("63608205abc23cea1eccbe80ec86f81db61541ec");
+    // Job types redesign (leads-flow item 6): recipes moved off the retired Repair /
+    // Maintenance types onto the trade's jobs (Lockout, Rekey, Garage door repair,
+    // Plumbing…) and the generic Service call / Project; J12, J67 and J69 take their
+    // type from the profile (J69 "Lockout + new lock" is a Lockout, with the ⚖️ ownership
+    // check). Service type keys only: same jobs, money and story.
+    expect(sha).toBe("722f59098d43db92043a8bbee231c673a7dbacaf");
   });
 
   it("rejects unknown profile keys", () => {
@@ -158,6 +168,7 @@ describe.each(TRADES)("%s profile", (key) => {
       expect(scenarioKeys.has(k)).toBe(true);
     const serviceTypes = new Set<string>([
       ...GENERIC_SERVICE_TYPES.map((s) => s.key),
+      ...profile.settings.tradeJobs.map((t) => t.key),
       profile.settings.extraServiceType.key,
     ]);
     for (const j of plan.jobs)
@@ -165,6 +176,76 @@ describe.each(TRADES)("%s profile", (key) => {
     for (const m of Object.values(profile.team.members))
       for (const s of m.skills ?? []) expect(serviceTypes.has(s)).toBe(true);
   });
+
+  it("puts the trade's jobs under the three job types", () => {
+    const { tradeJobs, extraServiceType } = profile.settings;
+    const all = [...tradeJobs, extraServiceType];
+    const keys = all.map((t) => t.key);
+    const generic = GENERIC_SERVICE_TYPES.map((s) => s.key as string);
+    expect(new Set(keys).size).toBe(keys.length);
+    for (const k of keys) expect(generic).not.toContain(k);
+    const names = [
+      ...GENERIC_SERVICE_TYPES.map((s) => s.name),
+      ...all.map((t) => t.name),
+    ];
+    expect(new Set(names).size).toBe(names.length);
+    const icons = new Set<string>(SERVICE_ICONS.map((i) => i.value));
+    for (const t of all) {
+      expect(isJobKind(t.kind), t.key).toBe(true);
+      expect(icons.has(t.icon), `${t.key} icon ${t.icon}`).toBe(true);
+      expect(t.defaultDurationMin).toBeGreaterThan(0);
+      if (t.kind === "project") expect(t.contractKind).toBe("improvement");
+    }
+    expect(
+      tradeJobs.filter((t) => t.kind === "service").length,
+    ).toBeGreaterThan(2);
+    expect(tradeJobs.some((t) => t.kind === "project")).toBe(true);
+    // Retired generic types are never booked in a fresh demo.
+    const retired = new Set<string>(RETIRED_SERVICE_TYPE_KEYS);
+    for (const j of plan.jobs)
+      expect(retired.has(j.serviceTypeKey)).toBe(false);
+    for (const m of Object.values(profile.team.members))
+      for (const s of m.skills ?? []) expect(retired.has(s)).toBe(false);
+    // Every booked job has a tech with the skill (booking availability needs one).
+    const techs = Object.entries(profile.team.members).filter(([k]) =>
+      k.startsWith("tech"),
+    );
+    for (const k of keys)
+      expect(
+        techs.some(([, m]) => (m.skills ?? []).includes(k)),
+        `a tech can do ${k}`,
+      ).toBe(true);
+  });
+
+  if (key === "locksmith")
+    it("⚖️ keeps the proof-of-ownership check on lockouts", () => {
+      const { tradeJobs, extraServiceType: x } = profile.settings;
+      expect(x).toMatchObject({
+        key: "after_hours_lockout",
+        name: "After-hours lockout",
+        kind: "service",
+        requiresOwnershipCheck: true,
+      });
+      expect(x.checklist.items.map((i) => [i.id, i.required])).toEqual([
+        ["id_photo", true],
+        ["address_proof", true],
+        ["authority_sig", true],
+        ["relationship", true],
+      ]);
+      for (const k of ["lockout", "car_key", "safe"])
+        expect(
+          tradeJobs.find((t) => t.key === k)?.requiresOwnershipCheck,
+          k,
+        ).toBe(true);
+      // Every lockout recipe lands on a type with the check.
+      const own = new Set([
+        x.key,
+        ...tradeJobs.filter((t) => t.requiresOwnershipCheck).map((t) => t.key),
+      ]);
+      for (const j of plan.jobs)
+        if (/lockout/i.test(j.title))
+          expect(own.has(j.serviceTypeKey), j.title).toBe(true);
+    });
 
   it("prices parts above cost and has the items the story needs", () => {
     for (const p of plan.pricebook) {

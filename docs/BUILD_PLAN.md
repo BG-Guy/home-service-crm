@@ -685,14 +685,24 @@ export function globalSearch(q: string, viewer: SessionUser, limit?: number): Pr
 // src/features/leads/api.ts
 export interface LeadPrefill { leadId: string; customerId: string|null; propertyId: string|null; serviceTypeId: string|null;
   serviceText: string|null; quotedPriceCents: number|null; preferredDate: string|null; preferredWindow: string|null;
-  notes: string|null; leadSourceId: string|null }
-export function getLeadPrefill(leadId: string, viewer: SessionUser): Promise<LeadPrefill|null>;        // stub M; B2 /jobs/new, B3 /estimates/new
-/** status → booked, converted_job_id / converted_estimate_id; emits lead.converted + lead.status_changed. Idempotent. */
+  notes: string|null; leadSourceId: string|null;
+  kind: JobKind|null; priority: 'normal'|'urgent'|'emergency'|null; afterHours: boolean } // leads flow: typed on the call (leads.extra._booking)
+export function getLeadPrefill(leadId: string, viewer: SessionUser): Promise<LeadPrefill|null>;        // stub M; B2 /jobs/new, B3 /estimates/new, booking
+/** status → booked, converted_job_id / converted_estimate_id; emits lead.converted + lead.status_changed. Idempotent.
+ *  Leads flow: also writes the status lead_event ({from, to, prev}), so Reopen and Undo can go back. */
 export function markLeadConverted(tx: Tx, leadId: string, to: { jobId?: string; estimateId?: string }, actor: Actor): Promise<void>; // stub M; B2, B3
 /** Sets first_response_at/by once; emits lead.responded. Idempotent. (B1 also calls it from its message.sent handler.) */
 export function markLeadResponded(tx: Tx, leadId: string, by: { userId: string; channel: 'call'|'sms'|'whatsapp'|'email' },
   actor: Actor): Promise<void>;                                                                           // stub M
 export function getDefaultBookingLink(): Promise<string|null>;  // `${APP_URL}/f/<pk>` of the default website source; stub F (null); B5 booking.link
+
+// src/features/leads/ensure-customer.ts (leads flow redesign; a plain server module, never a server action)
+/** The customer (+ property) for a lead that has none yet: Looks legit, Not spam, convert, bookLead. */
+export function ensureLeadCustomer(tx: Tx, lead: LeadRow|string, actor: Actor): Promise<{ customerId: string|null; propertyId: string|null }>;
+// src/features/customers/api.ts (leads flow redesign)
+/** Edit lead's phone/email fix: changes the customer only where it still has the lead's old value. */
+export function updateContactFromLead(tx: Tx, customerId: string, change: { oldPhone?: string|null; newPhone?: string|null;
+  oldEmail?: string|null; newEmail?: string|null }, actor: Actor): Promise<{ fields: ('phone'|'email')[] }>;
 ```
 
 ### 6.2 B2: jobs, tasks, time, notes
@@ -713,6 +723,19 @@ export interface CreateJobInput { customerId: string; propertyId: string; servic
  *  window + ≥1 assignee, else 'unscheduled'. Emits job.created (+ job.scheduled, job.assigned, job.callback_created).
  *  If leadId: calls B1 markLeadConverted. Consumers: B1 lead convert (via /jobs/new), B3 estimate approval w/o job. */
 export function createJob(tx: Tx, input: CreateJobInput, actor: Actor): Promise<{ jobId: string; number: string; status: JobStatus }>; // stub M
+/** Leads flow redesign (bookLead): one company-local arrival window, the job type (a trade job, else the kind's own row;
+ *  must match `kind`), priority, after-hours, customer notes, custom.requested_date/_window, and NO assignees: the job
+ *  stays 'unscheduled' with its window ("needs a tech") until the Assign hub sets a tech (job.scheduled). */
+export function createBookedJob(tx: Tx, input: { leadId: string; customerId: string; propertyId: string; kind: JobKind;
+  serviceTypeId: string|null; serviceText?: string|null; date: string; start: string; end: string;
+  priority: 'normal'|'urgent'|'emergency'; afterHours: boolean; customerNotes: string|null;
+  requestedDate?: string|null; requestedWindow?: string|null }, actor: Actor): Promise<{ jobId: string; number: string; status: JobStatus; title: string }>;
+// src/features/jobs/service-types.ts (re-exported from queries.ts): job types for pickers; no auth inside, callers check access
+export function listServiceTypeOptions(opts?: { includeInactive?: boolean; tx?: Tx }): Promise<ServiceTypeOption[]>;
+// src/features/jobs/availability/index.ts: booking availability (rules in SPEC M05 "Booking availability")
+export function getAvailability(input: AvailabilityInput): Promise<DayAvailability[]>;            // leads booking (week strip)
+export function getDayAvailability(input: Omit<AvailabilityInput, 'from'|'to'|'withWindows'>, date: string): Promise<DayAvailability|null>;
+export function getTechWorkDays(date: string): Promise<Record<string, { shifts: TimeSpan[]; blocks: TimeSpan[] }>>; // Assign hub ranking
 export interface JobView { id: string; number: string; status: JobStatus; paymentStatus: PaymentStatus; customerId: string;
   propertyId: string; serviceTypeId: string|null; serviceTypeName: string|null; leadId: string|null; estimateId: string|null;
   title: string; priority: 'normal'|'urgent'|'emergency'; afterHours: boolean;
@@ -1283,6 +1306,7 @@ Every `EventType` must have at least one handler or an explicit `ignore` entry (
 | F | `events.process`, `queue.run` | every 1 min (also `after()`) | Event processor; `job_queue` runner (SKIP LOCKED) |
 | F | `system.prune` | daily 03:00 | Prunes `rate_limits`, `action_receipts` older than 30 d, old `login_attempts`, expired sessions and tokens |
 | B1 | `leads.sla` | every 1 min | Emits `lead.sla_breached` (5 and 15 min) once per lead, idempotent via `lead_events` |
+| B1 | `leads.map_backfill` | every 10 min | Lead map (leads flow redesign): open leads with a street + ZIP and no property get a customer and property the way intake does (queues the geocode), 25 a run; re-queues a lead property's stuck geocode once a day |
 | B1 | `data.backup` | daily 02:00 | Queues `backup` (14 daily + 8 weekly retention) |
 | B1 | `data.exports_prune` | daily 03:30 | Expires exports and download links |
 | B2 | `tasks.due` | every 1 min | Emits `task.due` for open tasks with `due_at` in (lastRunAt, now] |
@@ -1954,7 +1978,8 @@ List pages must accept these params. Insights (B8), notifications and Ops Today 
 
 | Key | Owner | Count |
 |---|---|---|
-| `leads.new` | B1 | Leads `new`, not spam, unclaimed or mine |
+| `leads.new` | B1 | Leads `new` with `spam_score` under the review line (= the New chip; the same number for everyone since the leads flow redesign) |
+| `jobs.needs_tech` | B2 (`jobs/badges.ts`) | Booked jobs needing a tech: arrival start today or later (company zone), not cancelled/closed/completed, no `job_assignments` row (`dispatch/needs-tech.ts`, also the Assign hub's queue header); 0 without `jobs.assign`. Shown on Assign; the More tab carries it |
 | `messages.outbox` | B5 | `pending_tap` assigned to me (all, with `messages.outbox_all`, on the office's Today) |
 | `notifications.unread` | B5 | Unread notifications (bell) |
 | `approvals.pending` | B6 (`approvals/badges.ts`) | `countPendingApprovals(user)` |

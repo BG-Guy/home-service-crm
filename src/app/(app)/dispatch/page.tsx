@@ -103,7 +103,8 @@ export default async function DispatchPage({
     data.job && data.job.lat != null && data.job.lng != null
       ? { lat: data.job.lat, lng: data.job.lng, label: data.job.number }
       : null;
-  const unassigned = data.toAssign.length;
+  // Needs a tech: the badge's count (booked jobs with nobody on them, any day).
+  const unassigned = data.needsTechCount;
   const needs = unassigned
     ? `${unassigned} need${unassigned === 1 ? "s" : ""} a tech`
     : "all assigned";

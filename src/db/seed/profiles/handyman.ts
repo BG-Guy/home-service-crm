@@ -537,7 +537,7 @@ export const HANDYMAN_PROFILE: DemoProfile = {
   partScenarios: [
     {
       key: "deck",
-      service: "repair",
+      service: "deck",
       title: "Replace rotted deck boards",
       lines: [
         ["deck_repair", 12],
@@ -547,7 +547,7 @@ export const HANDYMAN_PROFILE: DemoProfile = {
     },
     {
       key: "tv",
-      service: "installation",
+      service: "tv_mount",
       title: 'Mount 65" TV and hide the cables',
       lines: [
         ["tv_mount", 1],
@@ -557,7 +557,7 @@ export const HANDYMAN_PROFILE: DemoProfile = {
     },
     {
       key: "fan",
-      service: "installation",
+      service: "fixtures",
       title: "Install bedroom ceiling fan",
       lines: [
         ["fan_install", 1],
@@ -566,7 +566,7 @@ export const HANDYMAN_PROFILE: DemoProfile = {
     },
     {
       key: "closet",
-      service: "installation",
+      service: "closet",
       title: "Install closet shelving system",
       lines: [
         ["shelving_install", 1],
@@ -576,7 +576,7 @@ export const HANDYMAN_PROFILE: DemoProfile = {
     },
     {
       key: "detectors",
-      service: "maintenance",
+      service: "service_call",
       title: "Replace smoke and CO detectors",
       lines: [
         ["detector_install", 4],
@@ -585,7 +585,7 @@ export const HANDYMAN_PROFILE: DemoProfile = {
     },
     {
       key: "faucet",
-      service: "repair",
+      service: "service_call",
       title: "Replace leaking kitchen faucet",
       lines: [
         ["faucet_install", 1],
@@ -595,7 +595,7 @@ export const HANDYMAN_PROFILE: DemoProfile = {
     },
     {
       key: "caulk",
-      service: "maintenance",
+      service: "service_call",
       title: "Re-caulk and refresh shower grout",
       lines: [
         ["caulk_grout", 1],
@@ -604,7 +604,7 @@ export const HANDYMAN_PROFILE: DemoProfile = {
     },
     {
       key: "fixture",
-      service: "installation",
+      service: "fixtures",
       title: "Swap dining room light fixtures",
       lines: [
         ["fixture_swap", 2],
@@ -613,7 +613,7 @@ export const HANDYMAN_PROFILE: DemoProfile = {
     },
     {
       key: "door",
-      service: "repair",
+      service: "doors",
       title: "Fix sticking interior doors",
       lines: [
         ["door_adjust", 2],
@@ -622,7 +622,7 @@ export const HANDYMAN_PROFILE: DemoProfile = {
     },
     {
       key: "drywall",
-      service: "repair",
+      service: "drywall",
       title: "Patch and texture drywall",
       lines: [
         ["drywall_patch", 2],
@@ -635,7 +635,7 @@ export const HANDYMAN_PROFILE: DemoProfile = {
   laborScenarios: [
     {
       key: "honeydo_half",
-      service: "repair",
+      service: "installation",
       title: "Honey-do list (half day)",
       lines: [
         ["handyman_hour", 4],
@@ -644,7 +644,7 @@ export const HANDYMAN_PROFILE: DemoProfile = {
     },
     {
       key: "honeydo",
-      service: "repair",
+      service: "service_call",
       title: "Honey-do list: doors, trim and touch-ups",
       lines: [
         ["handyman_hour", 2],
@@ -666,7 +666,7 @@ export const HANDYMAN_PROFILE: DemoProfile = {
     },
     {
       key: "furniture",
-      service: "repair",
+      service: "furniture",
       title: "Assemble furniture (dresser, bed frame, desk)",
       lines: [
         ["furniture_assembly", 3],
@@ -675,7 +675,7 @@ export const HANDYMAN_PROFILE: DemoProfile = {
     },
     {
       key: "gutters",
-      service: "maintenance",
+      service: "gutters",
       title: "Clean gutters and downspouts",
       lines: [["gutter_clean", 3]],
     },
@@ -683,6 +683,7 @@ export const HANDYMAN_PROFILE: DemoProfile = {
   specialJobs: {
     dispute: {
       title: "Drywall repair and paint touch-up",
+      service: "drywall",
       lines: [
         ["drywall_patch", 1],
         ["handyman_hour", 3],
@@ -692,6 +693,7 @@ export const HANDYMAN_PROFILE: DemoProfile = {
     },
     specialOrder: {
       title: "Custom-size interior door (waiting on special order)",
+      service: "doors",
       lines: [
         ["service_call", 1],
         ["custom_door", 1, "company_po"],
@@ -704,6 +706,7 @@ export const HANDYMAN_PROFILE: DemoProfile = {
     },
     todayCash: {
       title: "Hang mirrors and floating shelves",
+      service: "service_call",
       lines: [
         ["handyman_hour", 2],
         ["fasteners", 1],
@@ -959,9 +962,123 @@ export const HANDYMAN_PROFILE: DemoProfile = {
     landingUrl: "https://brightside.test/",
   },
   settings: {
+    tradeJobs: [
+      {
+        key: "tv_mount",
+        name: "TV mounting",
+        kind: "service",
+        color: "#5856D6",
+        icon: "home",
+        aliases: ["tv mount", "mount a tv", "tv wall mount", "hang a tv"],
+        defaultDurationMin: 90,
+        defaultPriceCents: 14_900,
+        contractKind: "repair",
+        warrantyDays: 90,
+      },
+      {
+        key: "furniture",
+        name: "Furniture assembly",
+        kind: "service",
+        color: "#A2845E",
+        icon: "toolbox",
+        aliases: [
+          "furniture assembly",
+          "assemble furniture",
+          "bed frame",
+          "flat pack",
+        ],
+        defaultDurationMin: 120,
+        defaultPriceCents: null,
+        contractKind: "repair",
+        warrantyDays: 30,
+      },
+      {
+        key: "fixtures",
+        name: "Fans and lights",
+        kind: "service",
+        color: "#FF9500",
+        icon: "tools",
+        aliases: [
+          "ceiling fan",
+          "light fixture",
+          "install a fan",
+          "replace a light",
+        ],
+        defaultDurationMin: 90,
+        defaultPriceCents: null,
+        contractKind: "repair",
+        warrantyDays: 90,
+      },
+      {
+        key: "drywall",
+        name: "Drywall repair",
+        kind: "service",
+        color: "#FF2D55",
+        icon: "hammer",
+        aliases: ["drywall", "hole in the wall", "patch a wall", "sheetrock"],
+        defaultDurationMin: 120,
+        defaultPriceCents: 18_500,
+        contractKind: "repair",
+        warrantyDays: 90,
+      },
+      {
+        key: "doors",
+        name: "Door repair",
+        kind: "service",
+        color: "#007AFF",
+        icon: "home",
+        aliases: [
+          "sticking door",
+          "door repair",
+          "door won't close",
+          "squeaky door",
+        ],
+        defaultDurationMin: 60,
+        defaultPriceCents: 12_500,
+        contractKind: "repair",
+        warrantyDays: 90,
+      },
+      {
+        key: "gutters",
+        name: "Gutter cleaning",
+        kind: "service",
+        color: "#34C759",
+        icon: "home",
+        aliases: ["gutters", "gutter cleaning", "clogged gutter", "downspout"],
+        defaultDurationMin: 90,
+        defaultPriceCents: null,
+        contractKind: "repair",
+        warrantyDays: 30,
+      },
+      {
+        key: "deck",
+        name: "Deck repair",
+        kind: "project",
+        color: "#5AC8FA",
+        icon: "hammer",
+        aliases: ["deck", "deck boards", "rotted deck", "deck repair"],
+        defaultDurationMin: 240,
+        defaultPriceCents: null,
+        contractKind: "improvement",
+        warrantyDays: 365,
+      },
+      {
+        key: "closet",
+        name: "Closets and shelving",
+        kind: "project",
+        color: "#AF52DE",
+        icon: "toolbox",
+        aliases: ["closet", "shelving", "closet system", "pantry shelves"],
+        defaultDurationMin: 240,
+        defaultPriceCents: null,
+        contractKind: "improvement",
+        warrantyDays: 365,
+      },
+    ],
     extraServiceType: {
       key: "after_hours_repair",
       name: "Emergency repair (after hours)",
+      kind: "service",
       color: "#FF3B30",
       icon: "hammer",
       aliases: ["emergency", "after hours", "board up", "storm damage", "leak"],
@@ -1063,9 +1180,16 @@ export const HANDYMAN_PROFILE: DemoProfile = {
         ],
         skills: [
           "service_call",
-          "repair",
           "installation",
           "after_hours_repair",
+          "tv_mount",
+          "furniture",
+          "fixtures",
+          "drywall",
+          "doors",
+          "gutters",
+          "deck",
+          "closet",
         ],
         zips: [78701, 78731],
         home: home("2307 Bluebonnet Ln", "78704", 30.251, -97.779),
@@ -1082,7 +1206,16 @@ export const HANDYMAN_PROFILE: DemoProfile = {
             expires_on: "2026-12-31",
           },
         ],
-        skills: ["service_call", "repair", "maintenance", "installation"],
+        skills: [
+          "service_call",
+          "installation",
+          "tv_mount",
+          "furniture",
+          "fixtures",
+          "doors",
+          "deck",
+          "closet",
+        ],
         zips: [78717, 78759],
         home: home("12404 Wycliff Ln", "78727", 30.4295, -97.7195),
       },
@@ -1100,9 +1233,12 @@ export const HANDYMAN_PROFILE: DemoProfile = {
         ],
         skills: [
           "service_call",
-          "repair",
           "estimate_visit",
           "after_hours_repair",
+          "drywall",
+          "doors",
+          "gutters",
+          "furniture",
         ],
         zips: [78741, 78759],
         home: home("5300 E Riverside Dr", "78741", 30.2312, -97.712),

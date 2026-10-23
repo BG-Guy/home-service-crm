@@ -82,7 +82,7 @@ export function ChecklistsManager({ lists }: { lists: ChecklistItem[] }) {
               New
             </Button>
           }
-          footer="Attach a checklist to a service type in Settings → Service types."
+          footer="Attach a checklist to a job type in Settings → Job types."
         >
           {lists.map((c) => (
             <SwipeActions

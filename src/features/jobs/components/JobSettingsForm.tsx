@@ -5,6 +5,7 @@ import { Button } from "@/ui/components/Button";
 import { Select, TextField, TimeField } from "@/ui/components/Field";
 import { ListSection } from "@/ui/components/List";
 import { MoneyField } from "@/ui/components/MoneyField";
+import { Stepper } from "@/ui/components/Stepper";
 import { toast } from "@/ui/components/Toast";
 import { ToggleRow } from "@/ui/components/Toggle";
 import { cx } from "@/ui/cx";
@@ -26,6 +27,10 @@ export interface JobSettingsValues {
   board_start_hour: number;
   board_end_hour: number;
   job_prefix: string;
+  /** Booking availability (leads-flow redesign). */
+  daily_job_cap: number;
+  max_extra_miles: number;
+  after_hours_booking: boolean;
 }
 
 const WINDOW_CHOICES = [30, 60, 90, 120, 180, 240, 360];
@@ -121,6 +126,56 @@ export function JobSettingsForm({ initial }: { initial: JobSettingsValues }) {
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)] pb-24">
+      <ListSection
+        header="Booking"
+        footer="A window is open when at least one tech works then, can do the job, is under the daily limit and can get there without bumping another job."
+      >
+        <div className="list-row flex min-h-[var(--row-min)] items-center gap-3 px-4 py-2">
+          <span className="flex min-w-0 flex-1 flex-col py-1">
+            <span className="text-body">Jobs per tech a day</span>
+            <span className="text-subhead text-label-2">
+              Same limit for everyone
+            </span>
+          </span>
+          <Stepper
+            label="Jobs per tech a day"
+            value={v.daily_job_cap}
+            onChange={(n) => set("daily_job_cap", n)}
+            min={1}
+            max={30}
+            className="shrink-0"
+          />
+        </div>
+        <div className="list-row flex min-h-[var(--row-min)] items-center gap-3 px-4 py-2">
+          <span className="flex min-w-0 flex-1 flex-col py-1">
+            <span className="text-body">Far jobs</span>
+            <span className="text-subhead text-label-2">
+              Hide a window past this much extra driving
+            </span>
+          </span>
+          <Stepper
+            label="Most extra miles for a job"
+            value={v.max_extra_miles}
+            onChange={(n) => set("max_extra_miles", n)}
+            min={5}
+            max={200}
+            step={5}
+            format={(n) => `${n} mi`}
+            className="shrink-0 whitespace-nowrap"
+          />
+        </div>
+        <ToggleRow
+          title="Book after hours"
+          subtitle={
+            v.after_hours_booking
+              ? "Evening and weekend windows are offered too, to techs on call, within the schedule board's hours."
+              : "Evenings and weekends open only when a tech works them. Book emergencies by hand on New job."
+          }
+          checked={v.after_hours_booking}
+          onChange={(e) => set("after_hours_booking", e.target.checked)}
+        />
+      </ListSection>
+
       <ListSection
         header="Arrival windows"
         footer="The windows offered when booking and dispatching."

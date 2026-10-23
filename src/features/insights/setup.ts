@@ -89,7 +89,7 @@ export async function getSetupChecklist(
     ),
     item(
       "services",
-      "Service types and prices",
+      "Job types and prices",
       "/settings/services",
       n("priced") > 0 || n("pricebook") > 0,
     ),

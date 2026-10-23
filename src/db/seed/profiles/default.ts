@@ -398,7 +398,7 @@ export const DEFAULT_PROFILE: DemoProfile = {
   partScenarios: [
     {
       key: "rekey",
-      service: "repair",
+      service: "rekey",
       title: "Rekey 3 locks",
       lines: [
         ["service_call", 1],
@@ -408,7 +408,7 @@ export const DEFAULT_PROFILE: DemoProfile = {
     },
     {
       key: "spring",
-      service: "repair",
+      service: "garage_door",
       title: "Replace garage door springs",
       lines: [
         ["spring_replace", 1],
@@ -428,7 +428,7 @@ export const DEFAULT_PROFILE: DemoProfile = {
     },
     {
       key: "ac_repair",
-      service: "repair",
+      service: "hvac",
       title: "AC not cooling",
       lines: [
         ["service_call", 1],
@@ -438,7 +438,7 @@ export const DEFAULT_PROFILE: DemoProfile = {
     },
     {
       key: "ac_tuneup",
-      service: "maintenance",
+      service: "hvac",
       title: "AC tune-up",
       lines: [
         ["ac_tuneup", 1],
@@ -447,7 +447,7 @@ export const DEFAULT_PROFILE: DemoProfile = {
     },
     {
       key: "wh_flush",
-      service: "maintenance",
+      service: "plumbing",
       title: "Water heater flush",
       lines: [
         ["wh_flush", 1],
@@ -456,7 +456,7 @@ export const DEFAULT_PROFILE: DemoProfile = {
     },
     {
       key: "toilet",
-      service: "repair",
+      service: "plumbing",
       title: "Running toilet",
       lines: [
         ["handyman_hour", 1],
@@ -476,7 +476,7 @@ export const DEFAULT_PROFILE: DemoProfile = {
     },
     {
       key: "thermostat",
-      service: "installation",
+      service: "hvac",
       title: "Replace thermostat",
       lines: [
         ["handyman_hour", 1],
@@ -487,19 +487,19 @@ export const DEFAULT_PROFILE: DemoProfile = {
   laborScenarios: [
     {
       key: "lockout",
-      service: "repair",
+      service: "lockout",
       title: "House lockout",
       lines: [["lockout", 1]],
     },
     {
       key: "drain",
-      service: "repair",
+      service: "plumbing",
       title: "Kitchen drain clog",
       lines: [["drain_clear", 1]],
     },
     {
       key: "handyman",
-      service: "repair",
+      service: "handyman",
       title: "Handyman: doors and trim",
       lines: [
         ["handyman_hour", 2],
@@ -510,6 +510,7 @@ export const DEFAULT_PROFILE: DemoProfile = {
   specialJobs: {
     dispute: {
       title: "Drain clearing and repairs",
+      service: "plumbing",
       lines: [
         ["drain_clear", 1],
         ["handyman_hour", 4],
@@ -519,6 +520,7 @@ export const DEFAULT_PROFILE: DemoProfile = {
     },
     specialOrder: {
       title: "Commercial door closer (waiting on special order)",
+      service: "service_call",
       lines: [
         ["service_call", 1],
         ["commercial_closer", 1, "company_po"],
@@ -531,6 +533,7 @@ export const DEFAULT_PROFILE: DemoProfile = {
     },
     todayCash: {
       title: "Lockout + new lock",
+      service: "lockout",
       lines: [
         ["lockout", 1],
         ["handyman_hour", 2],
@@ -785,9 +788,94 @@ export const DEFAULT_PROFILE: DemoProfile = {
     landingUrl: "https://acme-home.example/",
   },
   settings: {
+    tradeJobs: [
+      {
+        key: "lockout",
+        name: "Lockout",
+        kind: "service",
+        color: "#FF9500",
+        icon: "key",
+        aliases: ["house lockout", "locked out of the house", "car lockout"],
+        defaultDurationMin: 45,
+        defaultPriceCents: 12_500,
+        contractKind: "repair",
+        warrantyDays: 0,
+        photosRequiredBefore: 1,
+        photosRequiredAfter: 1,
+        requiresOwnershipCheck: true,
+      },
+      {
+        key: "rekey",
+        name: "Rekey",
+        kind: "service",
+        color: "#007AFF",
+        icon: "lock",
+        aliases: ["rekey", "change the locks", "new keys"],
+        defaultDurationMin: 60,
+        defaultPriceCents: null,
+        contractKind: "repair",
+        warrantyDays: 90,
+      },
+      {
+        key: "garage_door",
+        name: "Garage door repair",
+        kind: "service",
+        color: "#5856D6",
+        icon: "home",
+        aliases: ["garage door", "broken spring", "door off track", "opener"],
+        defaultDurationMin: 90,
+        defaultPriceCents: null,
+        contractKind: "repair",
+        warrantyDays: 90,
+      },
+      {
+        key: "hvac",
+        name: "Heating and cooling",
+        kind: "service",
+        color: "#5AC8FA",
+        icon: "timer",
+        aliases: [
+          "ac",
+          "air conditioning",
+          "heat",
+          "furnace",
+          "hvac",
+          "tune-up",
+        ],
+        defaultDurationMin: 90,
+        defaultPriceCents: null,
+        contractKind: "repair",
+        warrantyDays: 90,
+      },
+      {
+        key: "plumbing",
+        name: "Plumbing",
+        kind: "service",
+        color: "#34C759",
+        icon: "tools",
+        aliases: ["leak", "drain", "clog", "toilet", "water heater"],
+        defaultDurationMin: 60,
+        defaultPriceCents: null,
+        contractKind: "repair",
+        warrantyDays: 90,
+      },
+      {
+        key: "handyman",
+        name: "Handyman",
+        kind: "service",
+        color: "#A2845E",
+        icon: "toolbox",
+        aliases: ["handyman", "odd jobs", "doors", "trim"],
+        defaultDurationMin: 120,
+        defaultPriceCents: null,
+        contractKind: "repair",
+        warrantyDays: 30,
+      },
+    ],
     extraServiceType: {
       key: "after_hours_lockout",
       name: "After-hours lockout",
+      kind: "service",
       color: "#FF3B30",
       icon: "key",
       aliases: ["locked out", "lockout", "lost keys", "emergency lockout"],
@@ -882,9 +970,12 @@ export const DEFAULT_PROFILE: DemoProfile = {
         ],
         skills: [
           "service_call",
-          "repair",
           "installation",
           "after_hours_lockout",
+          "lockout",
+          "rekey",
+          "garage_door",
+          "handyman",
         ],
         zips: [78701, 78731],
         home: TEAM_HOME("2209 S 1st St", "78704", 30.2457, -97.7574),
@@ -907,7 +998,14 @@ export const DEFAULT_PROFILE: DemoProfile = {
             expires_on: "2027-02-28",
           },
         ],
-        skills: ["service_call", "repair", "maintenance", "installation"],
+        skills: [
+          "service_call",
+          "installation",
+          "garage_door",
+          "hvac",
+          "plumbing",
+          "handyman",
+        ],
         zips: [78717, 78759],
         home: TEAM_HOME("10401 Anderson Mill Rd", "78750", 30.4455, -97.7989),
       },
@@ -925,9 +1023,12 @@ export const DEFAULT_PROFILE: DemoProfile = {
         ],
         skills: [
           "service_call",
-          "repair",
           "estimate_visit",
           "after_hours_lockout",
+          "lockout",
+          "rekey",
+          "plumbing",
+          "hvac",
         ],
         zips: [78741, 78759],
         home: TEAM_HOME("6800 Burleson Rd", "78744", 30.2025, -97.7156),

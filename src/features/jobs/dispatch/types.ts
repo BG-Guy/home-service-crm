@@ -65,6 +65,8 @@ export interface HubJob {
   minutes: number;
   dayKey: string | null;
   address: string;
+  /** Street line only (masked like `address` when the viewer may not see it). */
+  street: string;
   customerName: string;
   lat: number | null;
   lng: number | null;
@@ -78,7 +80,14 @@ export interface HubData {
   tz: string;
   isToday: boolean;
   techs: HubTech[];
-  toAssign: HubJob[];
+  /**
+   * Needs a tech (build SPEC 3.6): booked jobs with nobody on them, every day from
+   * today, soonest first. Capped; `needsTechCount` is the full count (the badge).
+   */
+  needsTech: HubJob[];
+  needsTechCount: number;
+  /** Jobs with no date and no tech yet (not booked, so not in the count). */
+  undated: HubJob[];
   /** The `?job=` being assigned (null when none or not found). */
   job: HubJob | null;
   /** The job is fixed to another day than the one asked for. */

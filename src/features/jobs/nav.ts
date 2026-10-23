@@ -1,6 +1,13 @@
 // Nav items for module `jobs` (SPEC §13; BUILD_PLAN §3.3). Owner: B2.
 // The owner may edit labels/order; keep keys and perms consistent with permissions.ts.
-import type { NavItem } from "@/features/registry";
+import type { BadgeKey, NavItem } from "@/features/registry";
+
+/**
+ * Badge on Assign: booked jobs that still need a tech (leads flow item 9; counted
+ * in ./badges.ts). The shell shows it on the More tab too, where Assign lives on
+ * phones and tablets.
+ */
+export const NEEDS_TECH_BADGE = "jobs.needs_tech" satisfies BadgeKey;
 
 export const nav: readonly NavItem[] = [
   {
@@ -35,6 +42,8 @@ export const nav: readonly NavItem[] = [
     order: 1.5,
     more: "work",
     moreOrder: 1.5,
+    // Booked jobs without a tech (sidebar, More list; More tab via the shell).
+    badge: NEEDS_TECH_BADGE,
   },
   {
     key: "tasks",
@@ -68,6 +77,6 @@ export const nav: readonly NavItem[] = [
     perm: "settings.manage",
     section: "settings",
     settingsGroup: "work",
-    description: "Arrival windows, confirmations and cancellation policy",
+    description: "Booking limits, arrival windows and cancellation policy",
   },
 ];

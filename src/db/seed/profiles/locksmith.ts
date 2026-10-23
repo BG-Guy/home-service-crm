@@ -564,7 +564,7 @@ export const LOCKSMITH_PROFILE: DemoProfile = {
   partScenarios: [
     {
       key: "master_key",
-      service: "installation",
+      service: "master_key",
       title: "Master key system for an office suite",
       lines: [
         ["master_key", 8],
@@ -574,7 +574,7 @@ export const LOCKSMITH_PROFILE: DemoProfile = {
     },
     {
       key: "rekey",
-      service: "repair",
+      service: "rekey",
       title: "Rekey 4 locks (new homeowner)",
       lines: [
         ["service_call", 1],
@@ -584,7 +584,7 @@ export const LOCKSMITH_PROFILE: DemoProfile = {
     },
     {
       key: "smart_lock",
-      service: "installation",
+      service: "smart_lock",
       title: "Install smart lock on the front door",
       lines: [
         ["smart_lock_install", 1],
@@ -593,7 +593,7 @@ export const LOCKSMITH_PROFILE: DemoProfile = {
     },
     {
       key: "exit_device",
-      service: "installation",
+      service: "access_control",
       title: "Install panic bar on the rear exit",
       lines: [
         ["exit_device_install", 1],
@@ -602,7 +602,7 @@ export const LOCKSMITH_PROFILE: DemoProfile = {
     },
     {
       key: "lost_car_key",
-      service: "repair",
+      service: "car_key",
       title: "Lost car keys: cut and program a new key",
       priority: "urgent",
       lines: [
@@ -613,7 +613,7 @@ export const LOCKSMITH_PROFILE: DemoProfile = {
     },
     {
       key: "ignition",
-      service: "repair",
+      service: "car_key",
       title: "Stuck ignition: repair and rekey",
       priority: "urgent",
       lines: [
@@ -624,7 +624,7 @@ export const LOCKSMITH_PROFILE: DemoProfile = {
     },
     {
       key: "closer",
-      service: "repair",
+      service: "service_call",
       title: "Replace a failing door closer",
       lines: [
         ["closer_install", 1],
@@ -633,7 +633,7 @@ export const LOCKSMITH_PROFILE: DemoProfile = {
     },
     {
       key: "fob",
-      service: "repair",
+      service: "car_key",
       title: "Replace and program a key fob",
       lines: [
         ["fob_program", 1],
@@ -642,7 +642,7 @@ export const LOCKSMITH_PROFILE: DemoProfile = {
     },
     {
       key: "keypad",
-      service: "installation",
+      service: "access_control",
       title: "Install keypad entry on the side door",
       lines: [
         ["keypad_install", 1],
@@ -651,7 +651,7 @@ export const LOCKSMITH_PROFILE: DemoProfile = {
     },
     {
       key: "deadbolts",
-      service: "installation",
+      service: "lock_install",
       title: "Install Grade 1 deadbolts (front + back)",
       lines: [
         ["deadbolt_install", 2],
@@ -664,7 +664,7 @@ export const LOCKSMITH_PROFILE: DemoProfile = {
   laborScenarios: [
     {
       key: "commercial_service",
-      service: "repair",
+      service: "installation",
       title: "Commercial lock service (half day)",
       lines: [
         ["locksmith_hour", 4],
@@ -673,7 +673,7 @@ export const LOCKSMITH_PROFILE: DemoProfile = {
     },
     {
       key: "rekey_move_in",
-      service: "repair",
+      service: "rekey",
       title: "Rekey after move-in",
       lines: [
         ["rekey_cyl", 4],
@@ -706,7 +706,7 @@ export const LOCKSMITH_PROFILE: DemoProfile = {
     },
     {
       key: "safe_open",
-      service: "repair",
+      service: "safe",
       title: "Safe opening (lost combination)",
       singleOption: true,
       lines: [
@@ -718,6 +718,7 @@ export const LOCKSMITH_PROFILE: DemoProfile = {
   specialJobs: {
     dispute: {
       title: "Lockout: drilled lock and new deadbolt",
+      service: "lockout",
       lines: [
         ["lockout", 1],
         ["deadbolt_install", 1],
@@ -729,6 +730,7 @@ export const LOCKSMITH_PROFILE: DemoProfile = {
     },
     specialOrder: {
       title: "Storefront high-security cylinders (waiting on special order)",
+      service: "lock_install",
       lines: [
         ["service_call", 1],
         ["hs_cylinder", 3, "company_po"],
@@ -741,6 +743,7 @@ export const LOCKSMITH_PROFILE: DemoProfile = {
     },
     todayCash: {
       title: "Lockout + new deadbolt",
+      service: "lockout",
       lines: [
         ["lockout", 1],
         ["deadbolt_install", 1],
@@ -1000,9 +1003,131 @@ export const LOCKSMITH_PROFILE: DemoProfile = {
     landingUrl: "https://ironclad.test/",
   },
   settings: {
+    tradeJobs: [
+      {
+        key: "lockout",
+        name: "Lockout",
+        kind: "service",
+        color: "#FF9500",
+        icon: "key",
+        aliases: [
+          "house lockout",
+          "home lockout",
+          "locked out of the house",
+          "keys locked in car",
+          "car lockout",
+        ],
+        defaultDurationMin: 45,
+        defaultPriceCents: 12_500,
+        contractKind: "repair",
+        warrantyDays: 0,
+        photosRequiredBefore: 1,
+        photosRequiredAfter: 1,
+        requiresOwnershipCheck: true,
+      },
+      {
+        key: "rekey",
+        name: "Rekey",
+        kind: "service",
+        color: "#007AFF",
+        icon: "lock",
+        aliases: [
+          "rekey",
+          "re-key",
+          "change the locks",
+          "new keys",
+          "just moved in",
+        ],
+        defaultDurationMin: 60,
+        defaultPriceCents: null,
+        contractKind: "repair",
+        warrantyDays: 90,
+      },
+      {
+        key: "lock_install",
+        name: "Lock install",
+        kind: "service",
+        color: "#5AC8FA",
+        icon: "lock",
+        aliases: ["new lock", "deadbolt", "install a lock", "lock replacement"],
+        defaultDurationMin: 60,
+        defaultPriceCents: null,
+        contractKind: "repair",
+        warrantyDays: 365,
+      },
+      {
+        key: "car_key",
+        name: "Car key",
+        kind: "service",
+        color: "#5856D6",
+        icon: "car",
+        aliases: [
+          "car key",
+          "lost car key",
+          "key fob",
+          "transponder key",
+          "ignition",
+        ],
+        defaultDurationMin: 60,
+        defaultPriceCents: null,
+        contractKind: "repair",
+        warrantyDays: 90,
+        requiresOwnershipCheck: true,
+      },
+      {
+        key: "smart_lock",
+        name: "Smart lock",
+        kind: "service",
+        color: "#34C759",
+        icon: "lock",
+        aliases: ["smart lock", "keypad lock", "keyless entry"],
+        defaultDurationMin: 90,
+        defaultPriceCents: 12_500,
+        contractKind: "repair",
+        warrantyDays: 365,
+      },
+      {
+        key: "safe",
+        name: "Safe opening",
+        kind: "service",
+        color: "#A2845E",
+        icon: "security",
+        aliases: ["safe", "locked safe", "lost combination", "safe lockout"],
+        defaultDurationMin: 120,
+        defaultPriceCents: 27_500,
+        contractKind: "repair",
+        warrantyDays: 30,
+        requiresOwnershipCheck: true,
+      },
+      {
+        key: "master_key",
+        name: "Master key system",
+        kind: "project",
+        color: "#AF52DE",
+        icon: "key",
+        aliases: ["master key", "master key system", "keying system"],
+        defaultDurationMin: 480,
+        defaultPriceCents: null,
+        contractKind: "improvement",
+        warrantyDays: 365,
+      },
+      {
+        key: "access_control",
+        name: "Access control",
+        kind: "project",
+        color: "#FF2D55",
+        icon: "security",
+        aliases: ["access control", "keypad entry", "panic bar", "exit device"],
+        defaultDurationMin: 240,
+        defaultPriceCents: null,
+        contractKind: "improvement",
+        warrantyDays: 365,
+      },
+    ],
     extraServiceType: {
       key: "after_hours_lockout",
       name: "After-hours lockout",
+      kind: "service",
       color: "#FF3B30",
       icon: "key",
       aliases: [
@@ -1105,9 +1230,16 @@ export const LOCKSMITH_PROFILE: DemoProfile = {
         ],
         skills: [
           "service_call",
-          "repair",
           "installation",
           "after_hours_lockout",
+          "lockout",
+          "rekey",
+          "lock_install",
+          "car_key",
+          "smart_lock",
+          "safe",
+          "master_key",
+          "access_control",
         ],
         zips: [80202, 80212],
         home: home("3519 W 32nd Ave", "80211", 39.7621, -105.0336),
@@ -1130,7 +1262,16 @@ export const LOCKSMITH_PROFILE: DemoProfile = {
             expires_on: "2027-03-31",
           },
         ],
-        skills: ["service_call", "repair", "maintenance", "installation"],
+        skills: [
+          "service_call",
+          "installation",
+          "lockout",
+          "rekey",
+          "lock_install",
+          "smart_lock",
+          "master_key",
+          "access_control",
+        ],
         zips: [80203, 80224],
         home: home("1820 S Pennsylvania St", "80210", 39.6835, -104.981),
       },
@@ -1148,9 +1289,12 @@ export const LOCKSMITH_PROFILE: DemoProfile = {
         ],
         skills: [
           "service_call",
-          "repair",
           "estimate_visit",
           "after_hours_lockout",
+          "lockout",
+          "rekey",
+          "car_key",
+          "safe",
         ],
         zips: [80219, 80239],
         home: home("7200 E 1st Ave", "80230", 39.7176, -104.9047),

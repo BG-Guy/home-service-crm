@@ -278,6 +278,8 @@ export function SplitView({
   return (
     <div className="lg:grid lg:grid-cols-[360px_minmax(0,1fr)]">
       <div
+        // Narrow-pane marker: header create buttons switch to compact icons inside it.
+        data-pane
         className={cx(
           "lg:sticky lg:top-0 lg:block lg:h-dvh lg:overflow-y-auto lg:overscroll-contain lg:shadow-[inset_-0.5px_0_0_var(--sep)]",
           showDetail && "hidden",

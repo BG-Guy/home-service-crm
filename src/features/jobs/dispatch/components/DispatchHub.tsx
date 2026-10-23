@@ -30,6 +30,7 @@ import { FullscreenHub } from "@/ui/components/FullscreenHub";
 import { IconButton } from "@/ui/components/IconButton";
 import { PeriodStepper } from "@/ui/components/PeriodStepper";
 import { cx } from "@/ui/cx";
+import { Morph } from "@/ui/motion/Morph";
 import { type TechChipItem, TechChips } from "../../components/TechChips";
 import { type HubQuery, hubHref } from "../href";
 
@@ -65,6 +66,8 @@ const HUB_CSS = `.hub{container-type:inline-size}
 @media (max-width:767.98px){.hub-head[data-sel],.hub[data-sel] .hub-list,.hub:not([data-sel]):not([data-fs]) .hub-map,.hub:not([data-sel]) .hub-panel,.hub-wide{display:none}}`;
 
 interface Ctx {
+  /** Phone layout (list and tech view are two screens). */
+  phone: boolean;
   selected: string | null;
   /** The tech whose panel is showing (selected, or the default on wide screens). */
   current: string | null;
@@ -215,7 +218,7 @@ export function DispatchHub({
       });
 
   return (
-    <HubCtx value={{ selected, current: effective, select, query }}>
+    <HubCtx value={{ phone, selected, current: effective, select, query }}>
       <div className="hub-head contents" data-sel={selected ? "" : undefined}>
         {header}
       </div>
@@ -331,6 +334,20 @@ export function DispatchHub({
       </Page>
     </HubCtx>
   );
+}
+
+/**
+ * The tech avatar's M3 morph in the panel, on phones only: wide screens show the
+ * list and the panel at once, and a morph name may be mounted only once.
+ */
+export function PhoneMorph({
+  name,
+  children,
+}: {
+  name: string;
+  children: ReactNode;
+}) {
+  return use(HubCtx)?.phone ? <Morph name={name}>{children}</Morph> : children;
 }
 
 /** A tech list row that selects the tech in place (a real link without JS). */

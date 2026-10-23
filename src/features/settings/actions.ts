@@ -3,7 +3,7 @@
 import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { Tx } from "@/db";
-import { TAG_TARGETS } from "@/db/enums";
+import { TAG_TARGETS, zJobKind } from "@/db/enums";
 import {
   checklistTemplates,
   company,
@@ -309,7 +309,8 @@ const serviceTypeInput = z.object({
   requiresOwnershipCheck: zf.checkbox(),
   upsellCovered: zf.checkbox(),
   warrantyDays: z.coerce.number().int().min(0).max(3650),
-  maintenanceIntervalMonths: zf.optionalInt(),
+  // Job type card it sits under (Free estimate / Service call / Project).
+  kind: zJobKind.default("service"),
   sort: z.coerce.number().int().min(0).max(999).default(0),
   active: zf.checkbox(),
 });
@@ -343,7 +344,9 @@ export const saveServiceTypeAction = action({
       requiresOwnershipCheck: input.requiresOwnershipCheck,
       upsellCovered: input.upsellCovered,
       warrantyDays: input.warrantyDays,
-      maintenanceIntervalMonths: input.maintenanceIntervalMonths ?? null,
+      kind: input.kind,
+      // Maintenance reminders are retired (job types redesign): never set again.
+      maintenanceIntervalMonths: null,
       sort: input.sort,
       active: input.active,
     };

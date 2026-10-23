@@ -18,6 +18,7 @@ import { findCompany, getCompanyTimezone, getSettings } from "@/lib/settings";
 import type { Actor } from "@/lib/types";
 import { consentWithCompany, pageUrlFromReferer } from "../consent-text";
 import { hashKey, tsSecret, verifyTurnstile } from "../keys";
+import { requeueGeocode } from "../map-geocode";
 import {
   applyMapping,
   type NormalizedLead,
@@ -168,7 +169,9 @@ async function nextRoundRobin(tx: Tx): Promise<string | null> {
 export async function processLead(
   input: IntakeInput,
   debug?: IntakeDebug,
-  opts?: { tx?: Tx },
+  // merge: false = the office chose "Start a new one" for a repeat caller: skip the
+  // double-submit and same-service merges, but still link the existing customer.
+  opts?: { tx?: Tx; merge?: boolean },
 ): Promise<IntakeOutcome> {
   const now = input.now ?? new Date();
   const source = input.auth.source;
@@ -392,7 +395,7 @@ export async function processLead(
         .limit(1);
       if (ex) return touch(ex.id, "external_id");
     }
-    if (dedupeHash && !hardSpam) {
+    if (dedupeHash && !hardSpam && opts?.merge !== false) {
       const since = new Date(now.getTime() - ls.dedupe_window_minutes * 60_000);
       const [dup] = await tx
         .select({ id: leads.id })
@@ -448,7 +451,7 @@ export async function processLead(
             : (o.text ?? "").trim().toLowerCase() ===
               (n.service ?? "").trim().toLowerCase(),
         );
-        if (same) return touch(same.id, "returning");
+        if (same && opts?.merge !== false) return touch(same.id, "returning");
       }
     }
 
@@ -478,6 +481,10 @@ export async function processLead(
       );
       customerId = fc.customerId;
       propertyId = fc.propertyId;
+      // A property the lead matched may never have been placed on the map (saved
+      // before a geocoder was set up, or its job ran out of tries): one more try.
+      if (fc.propertyId && !fc.propertyCreated)
+        await requeueGeocode(tx, fc.propertyId, now);
     }
     const assignedUserId =
       !hardSpam && ls.assignment === "round_robin"

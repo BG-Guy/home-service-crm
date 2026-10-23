@@ -2,9 +2,20 @@
 
 import { Archive, ArchiveRestore, Plus } from "lucide-react";
 import { type ReactNode, useState, useTransition } from "react";
+import {
+  durationLabel,
+  JOB_KINDS,
+  type JobKind,
+  KIND_COLOR,
+  KIND_DEFAULTS,
+  KIND_HINT,
+  KIND_ICON,
+  KIND_LABEL,
+  type KindGroup,
+  splitByKind,
+} from "@/features/jobs/kinds";
 import { formatMoney } from "@/lib/money";
 import { Button } from "@/ui/components/Button";
-import { EmptyState } from "@/ui/components/EmptyState";
 import { ListRow, ListSection } from "@/ui/components/List";
 import { SegmentedControl } from "@/ui/components/SegmentedControl";
 import { Sheet } from "@/ui/components/Sheet";
@@ -25,9 +36,15 @@ import {
   useActionForm,
 } from "./form";
 
+// Settings → Job types (leads-flow redesign, item 6). Two levels: the three job
+// types every booking starts from (Free estimate, Service call, Project), each with
+// its own defaults row, and the trade's jobs under each ("What's the job?" chips),
+// each with its own rules. No maintenance interval (reminders are retired).
+
 export interface ServiceTypeItem {
   id: string;
   name: string;
+  kind: JobKind;
   color: string | null;
   icon: string | null;
   aliases: string[];
@@ -42,15 +59,40 @@ export interface ServiceTypeItem {
   requiresOwnershipCheck: boolean;
   upsellCovered: boolean;
   warrantyDays: number;
-  maintenanceIntervalMonths: number | null;
   sort: number;
   active: boolean;
 }
 
-function duration(min: number) {
-  const h = Math.floor(min / 60);
-  const m = min % 60;
-  return h ? (m ? `${h} h ${m} min` : `${h} h`) : `${m} min`;
+/** One line under each job type card. */
+const KIND_FOOTER: Record<JobKind, string> = {
+  estimate: "A visit to look and quote. It ends with an estimate.",
+  service:
+    "Booking shows these as “What's the job?” chips. Each keeps its own price, length, photos and checklist.",
+  project:
+    "Bigger work, booked with deposit and home-improvement contract rules.",
+};
+
+interface Editing {
+  item: ServiceTypeItem | null;
+  kind: JobKind;
+  /** The kind's own row (card defaults). */
+  primary: boolean;
+}
+
+/** "45 min · $125 · ID check · 1+1 photos" */
+function rules(it: ServiceTypeItem): string {
+  return [
+    durationLabel(it.defaultDurationMin),
+    it.defaultPriceCents != null ? formatMoney(it.defaultPriceCents) : null,
+    it.requiresOwnershipCheck ? "ID check" : null,
+    it.photosRequiredBefore + it.photosRequiredAfter > 0
+      ? `${it.photosRequiredBefore}+${it.photosRequiredAfter} photos`
+      : null,
+    it.requiresSignedEstimate ? "Signed estimate" : null,
+    it.contractKind === "improvement" ? "Home improvement" : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 export function ServiceTypesManager({
@@ -63,9 +105,9 @@ export function ServiceTypesManager({
   /** Pre-rendered icon nodes by key (server keeps the icon map out of the bundle). */
   icons: Record<string, ReactNode>;
 }) {
-  const [editing, setEditing] = useState<ServiceTypeItem | "new" | null>(null);
+  const [editing, setEditing] = useState<Editing | null>(null);
   const [, start] = useTransition();
-  const active = items.filter((i) => i.active);
+  const groups = splitByKind(items.filter((i) => i.active));
   const archived = items.filter((i) => !i.active);
 
   const setActive = (it: ServiceTypeItem, on: boolean) =>
@@ -80,72 +122,47 @@ export function ServiceTypesManager({
       else toast.error(r.error);
     });
 
-  const row = (it: ServiceTypeItem) => (
+  const tile = (it: { color: string | null; icon: string | null }) => (
+    <span
+      aria-hidden
+      className="flex size-[30px] shrink-0 items-center justify-center rounded-[8px] text-white"
+      style={{ background: it.color ?? "var(--sys-gray)" }}
+    >
+      {icons[it.icon ?? ""] ?? icons.clipboard}
+    </span>
+  );
+
+  const row = (it: ServiceTypeItem, primary: boolean) => (
     <ListRow
-      leading={
-        <span
-          aria-hidden
-          className="flex size-[29px] shrink-0 items-center justify-center rounded-[7px] text-white"
-          style={{ background: it.color ?? "var(--sys-gray)" }}
-        >
-          {icons[it.icon ?? ""] ?? icons.clipboard}
-        </span>
-      }
-      sepInset={60}
+      leading={tile(it)}
+      sepInset={62}
       title={it.name}
-      subtitle={[
-        duration(it.defaultDurationMin),
-        it.defaultPriceCents != null ? formatMoney(it.defaultPriceCents) : null,
-        it.requiresOwnershipCheck ? "ID check" : null,
-        it.photosRequiredBefore + it.photosRequiredAfter > 0
-          ? `${it.photosRequiredBefore}+${it.photosRequiredAfter} photos`
-          : null,
-      ]
-        .filter(Boolean)
-        .join(" · ")}
+      subtitle={rules(it)}
       detail={
-        it.contractKind === "improvement" ? (
-          <Pill tone="orange" size="sm">
-            Improvement
+        primary ? (
+          <Pill tone="gray" size="sm" dot={false}>
+            Default
           </Pill>
         ) : undefined
       }
-      onClick={() => setEditing(it)}
+      onClick={() => setEditing({ item: it, kind: it.kind, primary })}
       accessory="chevron"
     />
   );
 
   return (
     <div className="flex flex-col gap-[var(--section-gap)]">
-      <div className="flex justify-end">
-        <Button
-          variant="tinted"
-          size="sm"
-          icon={<Plus aria-hidden size={16} />}
-          onClick={() => setEditing("new")}
-        >
-          New service type
-        </Button>
-      </div>
-      {active.length === 0 ? (
-        <div className="list-card">
-          <EmptyState
-            compact
-            title="No service types yet"
-            message="Service types set default durations, prices, photo rules and checklists for jobs."
-            action={
-              <Button onClick={() => setEditing("new")}>
-                Add service type
-              </Button>
-            }
-          />
-        </div>
-      ) : (
-        <ListSection
-          header="Active"
-          footer="Swipe left to archive. Archived types stay on old jobs but can't be picked for new ones."
-        >
-          {active.map((it) => (
+      {groups.map((g) => (
+        <KindSection
+          key={g.kind}
+          group={g}
+          icon={icons[KIND_ICON[g.kind]]}
+          onAdd={() => setEditing({ item: null, kind: g.kind, primary: false })}
+          onSetUp={() =>
+            setEditing({ item: null, kind: g.kind, primary: true })
+          }
+          renderPrimary={(it) => row(it, true)}
+          renderJob={(it) => (
             <SwipeActions
               key={it.id}
               trailing={[
@@ -157,13 +174,16 @@ export function ServiceTypesManager({
                 },
               ]}
             >
-              {row(it)}
+              {row(it, false)}
             </SwipeActions>
-          ))}
-        </ListSection>
-      )}
+          )}
+        />
+      ))}
       {archived.length > 0 && (
-        <ListSection header="Archived">
+        <ListSection
+          header="Archived"
+          footer="Archived job types stay on old jobs but can't be booked. Swipe left to restore."
+        >
           {archived.map((it) => (
             <SwipeActions
               key={it.id}
@@ -176,14 +196,14 @@ export function ServiceTypesManager({
                 },
               ]}
             >
-              <div className="opacity-60">{row(it)}</div>
+              <div className="opacity-60">{row(it, false)}</div>
             </SwipeActions>
           ))}
         </ListSection>
       )}
       {editing && (
         <ServiceTypeSheet
-          item={editing === "new" ? null : editing}
+          editing={editing}
           checklists={checklists}
           onClose={() => setEditing(null)}
         />
@@ -192,35 +212,113 @@ export function ServiceTypesManager({
   );
 }
 
+/** One job type card: its defaults row, then the trade's jobs under it. */
+function KindSection({
+  group,
+  icon,
+  onAdd,
+  onSetUp,
+  renderPrimary,
+  renderJob,
+}: {
+  group: KindGroup<ServiceTypeItem>;
+  icon: ReactNode;
+  onAdd: () => void;
+  onSetUp: () => void;
+  renderPrimary: (it: ServiceTypeItem) => ReactNode;
+  renderJob: (it: ServiceTypeItem) => ReactNode;
+}) {
+  const { kind, primary, jobs } = group;
+  const headingId = `kind-${kind}-h`;
+  return (
+    <section aria-labelledby={headingId}>
+      <div className="flex items-center gap-3 px-1 pb-3">
+        <span
+          aria-hidden
+          className="flex size-10 shrink-0 items-center justify-center rounded-[12px] text-white"
+          style={{ background: KIND_COLOR[kind] }}
+        >
+          {icon}
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 id={headingId} className="text-title3 text-label">
+            {KIND_LABEL[kind]}
+          </h2>
+          <p className="text-subhead text-label-2">{KIND_HINT[kind]}</p>
+        </div>
+        <Button
+          variant="secondary"
+          size="sm"
+          icon={<Plus aria-hidden size={16} />}
+          onClick={onAdd}
+          aria-label={`Add a job under ${KIND_LABEL[kind]}`}
+        >
+          Add job
+        </Button>
+      </div>
+      <ul className="list-card">
+        <li>
+          {primary ? (
+            renderPrimary(primary)
+          ) : (
+            <ListRow
+              title={`Set up ${KIND_LABEL[kind]}`}
+              subtitle={`${durationLabel(KIND_DEFAULTS[kind].durationMin)} by default`}
+              onClick={onSetUp}
+              accessory="chevron"
+            />
+          )}
+        </li>
+        {jobs.map((it) => (
+          <li key={it.id}>{renderJob(it)}</li>
+        ))}
+      </ul>
+      <p className="px-4 pt-2 text-footnote text-label-2">
+        {KIND_FOOTER[kind]}
+        {jobs.length > 0
+          ? " Swipe left or right-click a job to archive it."
+          : ""}
+      </p>
+    </section>
+  );
+}
+
 function ServiceTypeSheet({
-  item,
+  editing,
   checklists,
   onClose,
 }: {
-  item: ServiceTypeItem | null;
+  editing: Editing;
   checklists: { id: string; name: string }[];
   onClose: () => void;
 }) {
+  const { item: it, primary } = editing;
   const [open, setOpen] = useState(true);
   const [dirty, setDirty] = useState(false);
-  const [kind, setKind] = useState<"repair" | "improvement">(
-    item?.contractKind ?? "repair",
+  const [kind, setKind] = useState<JobKind>(it?.kind ?? editing.kind);
+  const defaults = KIND_DEFAULTS[it?.kind ?? editing.kind];
+  const [contract, setContract] = useState<"repair" | "improvement">(
+    it?.contractKind ?? defaults.contractKind,
   );
   const f = useActionForm(saveServiceTypeAction, {
-    success: item ? "Service type saved" : "Service type added",
+    success: it ? "Job type saved" : "Job type added",
     onSuccess: () => {
       setDirty(false);
       setOpen(false);
     },
   });
-  const it = item;
+  const title = it
+    ? it.name
+    : primary
+      ? KIND_LABEL[editing.kind]
+      : `New ${KIND_LABEL[editing.kind].toLowerCase()} job`;
   return (
     <Sheet
       open={open}
       onOpenChange={setOpen}
       onClosed={onClose}
       dirty={dirty}
-      title={it ? it.name : "New service type"}
+      title={title}
       detents={["large"]}
       leading={
         <Button variant="plain" size="sm" onClick={() => setOpen(false)}>
@@ -247,12 +345,40 @@ function ServiceTypeSheet({
           className="flex flex-col gap-6"
         >
           {it && <input type="hidden" name="id" value={it.id} />}
-          <input type="hidden" name="contractKind" value={kind} />
+          <input type="hidden" name="kind" value={kind} />
+          <input type="hidden" name="contractKind" value={contract} />
+          {primary ? (
+            <p className="px-4 text-subhead text-label-2">
+              The {KIND_LABEL[kind].toLowerCase()} card's own job: booked when
+              nobody picks one of the jobs under it.
+            </p>
+          ) : (
+            <section>
+              <h2 className="px-4 pb-2 text-subhead font-semibold text-label-2">
+                Job type
+              </h2>
+              <div className="flex flex-col gap-2 rounded-card bg-card p-4">
+                <SegmentedControl
+                  label="Job type"
+                  value={kind}
+                  onChange={(v) => {
+                    setKind(v);
+                    setDirty(true);
+                  }}
+                  segments={JOB_KINDS.map((k) => ({
+                    value: k,
+                    label: KIND_LABEL[k],
+                  }))}
+                />
+                <p className="text-footnote text-label-2">{KIND_HINT[kind]}</p>
+              </div>
+            </section>
+          )}
           <FieldCard>
             <FText
               name="name"
               label="Name"
-              defaultValue={it?.name}
+              defaultValue={it?.name ?? (primary ? KIND_LABEL[kind] : "")}
               required
               autoFocus={!it}
               placeholder="Lockout"
@@ -260,7 +386,9 @@ function ServiceTypeSheet({
             <ColorSwatches
               label="Color"
               name="color"
-              defaultValue={(it?.color ?? "#007aff").toLowerCase()}
+              defaultValue={(
+                it?.color ?? (primary ? KIND_COLOR[kind] : "#007aff")
+              ).toLowerCase()}
               options={SWATCHES.map((s) => ({
                 value: s.hex.toLowerCase(),
                 name: s.name,
@@ -269,7 +397,7 @@ function ServiceTypeSheet({
             <FSelect
               name="icon"
               label="Icon"
-              defaultValue={it?.icon ?? "tools"}
+              defaultValue={it?.icon ?? (primary ? KIND_ICON[kind] : "tools")}
               options={SERVICE_ICONS}
             />
             <FText
@@ -277,7 +405,7 @@ function ServiceTypeSheet({
               label="Also known as"
               defaultValue={it?.aliases.join(", ")}
               placeholder="locked out, lockout, can't get in"
-              hint="Words customers use. Lead forms match them to this type."
+              hint="Words customers use. Lead forms match them to this job."
             />
           </FieldCard>
 
@@ -285,12 +413,14 @@ function ServiceTypeSheet({
             <div className="grid grid-cols-2 gap-4">
               <FText
                 name="defaultDurationMin"
-                label="Duration (min)"
+                label="Length (min)"
                 type="number"
                 inputMode="numeric"
                 min={5}
                 step={5}
-                defaultValue={String(it?.defaultDurationMin ?? 60)}
+                defaultValue={String(
+                  it?.defaultDurationMin ?? defaults.durationMin,
+                )}
               />
               <FMoney
                 name="defaultPriceCents"
@@ -308,28 +438,20 @@ function ServiceTypeSheet({
                 min={0}
                 defaultValue={String(it?.warrantyDays ?? 30)}
               />
-              <FText
-                name="maintenanceIntervalMonths"
-                label="Maintenance every (months)"
-                type="number"
-                inputMode="numeric"
-                min={1}
-                defaultValue={
-                  it?.maintenanceIntervalMonths != null
-                    ? String(it.maintenanceIntervalMonths)
-                    : ""
-                }
-                placeholder="—"
+              <FSelect
+                name="checklistTemplateId"
+                label="Checklist"
+                defaultValue={it?.checklistTemplateId ?? ""}
+                placeholder="None"
+                options={checklists.map((c) => ({
+                  value: c.id,
+                  label: c.name,
+                }))}
               />
             </div>
-            <FSelect
-              name="checklistTemplateId"
-              label="Checklist"
-              defaultValue={it?.checklistTemplateId ?? ""}
-              placeholder="None"
-              options={checklists.map((c) => ({ value: c.id, label: c.name }))}
-              hint="Techs complete it before finishing the job."
-            />
+            <p className="-mt-2 text-footnote text-label-2">
+              Techs complete the checklist before finishing the job.
+            </p>
           </FieldCard>
 
           <section>
@@ -376,8 +498,8 @@ function ServiceTypeSheet({
                 defaultChecked={it?.requiresSignedEstimate ?? false}
               />
               <ToggleRow
-                title="Ownership check"
-                subtitle="ID and proof of address before opening a lock or door."
+                title="Ownership check ⚖️"
+                subtitle="Photo ID, proof of address and a signed authority line before opening a lock, door, car or safe."
                 name="requiresOwnershipCheck"
                 defaultChecked={it?.requiresOwnershipCheck ?? false}
               />
@@ -391,9 +513,9 @@ function ServiceTypeSheet({
             <div className="flex flex-col gap-3 rounded-card bg-card p-4">
               <SegmentedControl
                 label="Contract type"
-                value={kind}
+                value={contract}
                 onChange={(v) => {
-                  setKind(v);
+                  setContract(v);
                   setDirty(true);
                 }}
                 segments={[
@@ -402,7 +524,7 @@ function ServiceTypeSheet({
                 ]}
               />
               <p className="text-footnote text-label-2">
-                {kind === "improvement"
+                {contract === "improvement"
                   ? "Many states cap deposits on home-improvement contracts and require specific contract language. Deposit warnings follow your compliance profile."
                   : "Repairs and service calls. Deposit caps for home improvement don't apply."}
               </p>
@@ -429,25 +551,29 @@ function ServiceTypeSheet({
 
           <section>
             <div className="rounded-card bg-card">
-              <ToggleRow
-                title="Active"
-                subtitle="Off hides it from new jobs and lead forms."
-                name="active"
-                defaultChecked={it?.active ?? true}
-              />
+              {primary && it?.active !== false ? (
+                <input type="hidden" name="active" value="on" />
+              ) : (
+                <ToggleRow
+                  title="Active"
+                  subtitle="Off hides it from booking, new jobs and lead forms."
+                  name="active"
+                  defaultChecked={it?.active ?? true}
+                />
+              )}
               <div className="list-row flex min-h-11 items-center justify-between gap-3 px-4 py-2">
                 <span className="text-body">Sort order</span>
                 <Stepper
                   name="sort"
                   label="Sort order"
-                  defaultValue={it?.sort ?? 0}
+                  defaultValue={it?.sort ?? (primary ? 0 : 10)}
                   min={0}
                   max={999}
                 />
               </div>
             </div>
             <p className="px-4 pt-1.5 text-footnote text-label-2">
-              Deposit rules by service type live in Settings → Deposits.
+              Deposit rules by job type live in Settings → Deposits.
             </p>
           </section>
         </form>

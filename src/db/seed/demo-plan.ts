@@ -531,7 +531,7 @@ function blankJob(
     customerId: c.id,
     propertyKey: prop.key,
     propertyId: prop.id,
-    serviceTypeKey: "repair",
+    serviceTypeKey: "service_call",
     title: "",
     status: "completed",
     priority: "normal",
@@ -843,8 +843,8 @@ export function buildPlan(profile: DemoProfile) {
         );
         if (s.window) j.windowStart = s.window;
         if (n === 12) {
-          // The charged-back job is a regular daytime repair whatever recipe it got.
-          j.serviceTypeKey = "repair";
+          // The charged-back job is a regular daytime job whatever recipe it got.
+          j.serviceTypeKey = special.dispute.service;
           j.priority = "normal";
           j.windowStart = WINDOWS[n % WINDOWS.length] as string;
           j.title = special.dispute.title;
@@ -991,7 +991,7 @@ export function buildPlan(profile: DemoProfile) {
         j.windowStart = "09:00";
         if (n === 67) {
           j.title = special.specialOrder.title;
-          j.serviceTypeKey = "repair";
+          j.serviceTypeKey = special.specialOrder.service;
           j.lines = specLines(special.specialOrder.lines);
           j.totals = totals(j.lines);
           j.deposit = {
@@ -1043,6 +1043,7 @@ export function buildPlan(profile: DemoProfile) {
         j.windowStart = start;
         if (n === 69) {
           j.title = special.todayCash.title;
+          j.serviceTypeKey = special.todayCash.service;
           j.lines = specLines(special.todayCash.lines);
           if (special.todayCash.discountCents)
             j.lines.push(discount(special.todayCash.discountCents));

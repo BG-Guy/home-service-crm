@@ -70,7 +70,7 @@ export default async function PayPage() {
             ? `Week of ${formatDateKey(o.period.startsOn)} – ${formatDateKey(o.period.endsOn)}`
             : undefined
         }
-        trailing={<HeaderActions />}
+        trailing={<HeaderActions own="receipt" />}
       />
       <Page>
         <div className="flex flex-col gap-[var(--section-gap)]">

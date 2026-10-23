@@ -19,6 +19,12 @@ import {
   builtinAutomations,
   builtinTemplates,
 } from "@/features/automations/builtin";
+import {
+  KIND_COLOR,
+  KIND_DEFAULTS,
+  KIND_ICON,
+  KIND_LABEL,
+} from "@/features/jobs/kinds";
 import { modules } from "@/features/registry";
 import { DEFAULT_PREFIXES } from "@/lib/counters";
 import { sha256Hex } from "@/lib/hash";
@@ -74,54 +80,53 @@ export const PARTNER_25_CONFIG = {
   min_wage_cents_per_hour: 725,
 } as const;
 
+/**
+ * The three job types (leads-flow redesign, item 6): each kind's own row, the card a
+ * booking starts from; the trade's jobs (demo profiles, or added in Settings → Job
+ * types) sit under them. The keys are the pre-redesign ones on purpose: seed ids stay
+ * the same, so a database migrated by drizzle/0006 (which renamed these rows in
+ * place) matches a fresh one and this idempotent seed never inserts a duplicate.
+ * "repair" and "maintenance" are retired (`RETIRED_SERVICE_TYPE_KEYS`): 0006 set them
+ * inactive on old databases and fresh ones never get them.
+ */
 export const GENERIC_SERVICE_TYPES = [
   {
-    key: "service_call",
-    name: "Service call / diagnostic",
-    color: "#007AFF",
-    icon: "clipboard",
-    duration: 60,
-    sort: 1,
-    aliases: ["diagnostic", "service call", "inspection"],
+    key: "estimate_visit",
+    kind: "estimate",
+    name: KIND_LABEL.estimate,
+    color: KIND_COLOR.estimate,
+    icon: KIND_ICON.estimate,
+    duration: KIND_DEFAULTS.estimate.durationMin,
+    contractKind: KIND_DEFAULTS.estimate.contractKind,
+    sort: 0,
+    aliases: ["estimate", "free estimate", "quote", "bid"],
   },
   {
-    key: "repair",
-    name: "Repair",
-    color: "#FF9500",
-    icon: "tools",
-    duration: 90,
-    sort: 2,
-    aliases: ["fix", "repair"],
+    key: "service_call",
+    kind: "service",
+    name: KIND_LABEL.service,
+    color: KIND_COLOR.service,
+    icon: KIND_ICON.service,
+    duration: KIND_DEFAULTS.service.durationMin,
+    contractKind: KIND_DEFAULTS.service.contractKind,
+    sort: 1,
+    aliases: ["service call", "diagnostic", "inspection", "repair", "fix"],
   },
   {
     key: "installation",
-    name: "Installation",
-    color: "#34C759",
-    icon: "hammer",
-    duration: 180,
-    sort: 3,
-    aliases: ["install", "replace", "replacement"],
-  },
-  {
-    key: "maintenance",
-    name: "Maintenance",
-    color: "#5856D6",
-    icon: "checklist",
-    duration: 60,
-    sort: 4,
-    aliases: ["tune-up", "tune up", "service"],
-    intervalMonths: 12,
-  },
-  {
-    key: "estimate_visit",
-    name: "Estimate visit",
-    color: "#8E8E93",
-    icon: "estimates",
-    duration: 45,
-    sort: 5,
-    aliases: ["estimate", "quote", "bid"],
+    kind: "project",
+    name: KIND_LABEL.project,
+    color: KIND_COLOR.project,
+    icon: KIND_ICON.project,
+    duration: KIND_DEFAULTS.project.durationMin,
+    contractKind: KIND_DEFAULTS.project.contractKind,
+    sort: 2,
+    aliases: ["project", "install", "installation", "replace", "replacement"],
   },
 ] as const;
+
+/** Generic types retired by the redesign (inactive on migrated databases only). */
+export const RETIRED_SERVICE_TYPE_KEYS = ["repair", "maintenance"] as const;
 
 export async function seedBase(db: DB): Promise<void> {
   // Roles + default grants (explicit grid rows; the resolver also falls back to code defaults).
@@ -305,20 +310,20 @@ export async function seedBase(db: DB): Promise<void> {
     })
     .onConflictDoNothing();
 
-  // Generic service types (vertical presets add more; §15.3).
+  // The three job types (trade presets and demo profiles add their jobs; §15.3).
   await db
     .insert(serviceTypes)
     .values(
       GENERIC_SERVICE_TYPES.map((s) => ({
         id: seedId("service_type", s.key),
         name: s.name,
+        kind: s.kind,
         color: s.color,
         icon: s.icon,
         aliases: [...s.aliases],
         defaultDurationMin: s.duration,
+        contractKind: s.contractKind,
         sort: s.sort,
-        maintenanceIntervalMonths:
-          "intervalMonths" in s ? s.intervalMonths : null,
       })),
     )
     .onConflictDoNothing();

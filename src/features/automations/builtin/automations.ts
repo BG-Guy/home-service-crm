@@ -27,8 +27,11 @@ export const builtinAutomationList: AutomationSeed[] = [
     key: "lead_ack",
     name: "Lead auto-reply",
     description:
-      "Texts new leads right away (after-hours text outside business hours).",
+      "Texts new leads right away (after-hours text outside business hours). Not leads typed in during a call.",
     triggerEvent: "lead.created",
+    // Phone-entered leads are answered at once (status contacted, leads-flow fix
+    // "phone leads count as answered"): the missed-lead automations skip them.
+    conditions: { field: "lead.status", op: "eq", value: "new" },
     steps: steps({ channel: PREF, audience: C, template_key: "lead.ack" }),
     // Any human handling makes the auto-reply moot (an outbox card left waiting after
     // the lead was booked, QA T2-16). The sender also re-checks the lead is still new.
@@ -50,6 +53,7 @@ export const builtinAutomationList: AutomationSeed[] = [
     key: "lead_escalate_5",
     name: "Lead not answered in 5 min",
     triggerEvent: "lead.created",
+    conditions: { field: "lead.status", op: "eq", value: "new" },
     steps: steps({
       delay: { minutes: 5 },
       channel: "push",
@@ -63,6 +67,7 @@ export const builtinAutomationList: AutomationSeed[] = [
     key: "lead_escalate_15",
     name: "Lead not answered in 15 min",
     triggerEvent: "lead.created",
+    conditions: { field: "lead.status", op: "eq", value: "new" },
     steps: steps({
       delay: { minutes: 15 },
       channel: "push",
@@ -76,8 +81,9 @@ export const builtinAutomationList: AutomationSeed[] = [
     key: "lead_not_reached",
     name: "Couldn't reach a lead",
     description:
-      "Texts the lead after 1 h, next morning 9:00 and after 3 days.",
+      "Texts the lead after 1 h, next morning 9:00 and after 3 days. Not leads typed in during a call; a wrong number stops it.",
     triggerEvent: "lead.created",
+    conditions: { field: "lead.status", op: "eq", value: "new" },
     steps: steps(
       {
         delay: { hours: 1 },

@@ -2,6 +2,249 @@
 
 ## Unreleased
 
+### Leads flow redesign (2026-10-22)
+Design review "Making the leads flow feel like Life360": ten proposals and twelve smaller fixes,
+each marked Build it, Later or Skip by the owner. This is everything marked Build it, with the
+options the owner chose; the skipped items are listed at the end.
+
+**Job types: three cards with the trade's jobs under them**
+- Two levels wherever a job type is picked (the caller form, booking, New job): **Free
+  estimate** (45 min, no deposit, ends with an estimate), **Service call** (90 min, repair
+  rules) and **Project** (240 min, deposit rules, `contractKind: "improvement"`). The old generic
+  types are retired; existing jobs keep their history. The trade's own jobs (Lockout, Rekey,
+  Car key…) are `service_types` rows with a `kind`, shown as "What's the job?" chips under their
+  card, and keep their rules (price, length, photos, checklist, warranty).
+- `src/features/jobs/kinds.ts` (client-safe, no imports): `JOB_KINDS`, `KIND_LABEL`, `KIND_HINT`,
+  `KIND_ICON`, `KIND_COLOR`, `KIND_DEFAULTS`, `splitByKind`, `primaryTypeId`. Each kind has its
+  own row (the "primary": the row named like the kind), which a booking uses when no trade job
+  is picked. `zJobKind` in `@/db/enums`; `listServiceTypeOptions()` (`jobs/service-types.ts`) →
+  `ServiceTypeOption` (`jobs/contracts.ts`).
+- ⚖️ The lockout proof-of-ownership check is kept: `requiresOwnershipCheck` and the "Ownership
+  check" checklist stay on Lockout, After-hours lockout, Car key and Safe opening (locksmith and
+  the mixed demo), and booking one says "<Job> keeps the ID and ownership check".
+- The maintenance reminder is dropped: the field is gone from Settings, nothing writes
+  `maintenance_interval_months` (0006 cleared it), so the built-in `maintenance` automation
+  never fires.
+- Settings → **Job types** (`/settings/services`, renamed from Service types): the three cards
+  with their defaults row and the jobs under each, the per-job rules, the ⚖️ ownership switch
+  and the contract type, a kind switch that moves a job to another card, archive and restore.
+- Migrations: `0005_job_kinds_scheduling` (`service_types.kind`, `users.work_hours`, the
+  `time_off` table) and `0006_job_kinds_data` (data only, for databases seeded before it):
+  "Estimate visit" → Free estimate, "Service call / …" → Service call, "Installation" → Project
+  (improvement contract), Repair and Maintenance archived (techs with those skills get the
+  Service call skill), every other row a service call unless it is clearly an install or a
+  project. Nothing is deleted.
+- Seeds: the base seed writes Free estimate, Service call and Project only; each demo profile
+  seeds its trade jobs (`settings.tradeJobs`). The mixed demo's plan hash changed on purpose.
+
+**Working hours, time off and booking settings**
+- Team member page (`/team/[id]`, techs, `users.manage`): **Working hours** (the business hours,
+  or each weekday on or off with a start and end; `users.work_hours`, null = business hours) and
+  **Time off** (whole days or part of a day, in the company time zone; removing asks first).
+  Actions in `team/schedule-actions.ts` (audited `user.work_hours_updated`,
+  `user.time_off_added`, `user.time_off_removed`), reads in `team/schedule-queries.ts`, pure
+  helpers in `src/lib/work-hours.ts`.
+- Settings → Jobs & scheduling → **Booking**: Jobs per tech a day (`jobs.daily_job_cap`, 6), Far
+  jobs (`jobs.max_extra_miles`, 25) and Book after hours (`jobs.after_hours_booking`, off).
+- Demo techs work Mon–Fri 8–5 (set explicitly); office and admin follow the business hours.
+
+**The real availability engine**
+- `jobs/availability/engine.ts` (pure, golden-tested in `tests/golden/availability.test.ts`)
+  replaces the mock. `index.ts` loads the whole range in one batch of queries (about 6 ms for
+  28 days on the locksmith demo).
+- A 2-hour arrival window is open when at least one tech fits:
+  - works then (their hours minus time off)
+  - has the skill (a tech with no skill list takes any job)
+  - is under the daily cap
+  - fits the route: the Assign hub's `recommendTechs` places the job with no overlap, and the
+    new `arrivalFit` (`dispatch/recommend.ts`) checks the drive from the previous stop
+    (straight line, 30 mph), an arrival before the window ends, the whole job inside their
+    hours and clear of time off, and no later job pushed past its own window.
+- The owner's choices: one cap for everyone (6 jobs); far jobs are hidden (more than 25 extra
+  miles for every tech who fits, or a ZIP outside the service ZIPs); weekends and evenings stay
+  closed unless a tech is set to work them; after-hours booking is off by default (the office
+  books emergencies by hand on New job).
+- Booked jobs with no tech yet still take room (each is placed with the tech the hub would
+  rank first). Today, windows that already started are closed and the earliest arrival is 30
+  minutes away. The job's length is the trade job's, else the job type's default (45, 90 or 240).
+- Day status: Open (2+ windows), Limited (1), Full (0, with a reason: closed, far, full or
+  outside the service area). Best = the top 3 open days nearest the asked-for day, then the
+  least extra driving.
+- ⚖️ Like the Assign hub ranking, the engine never takes age or date of birth (`EngineTech` has
+  no such field; a golden test checks it).
+- The Assign hub's matches now respect working hours and time off too (`dispatch/work-fit.ts`
+  on the availability loader's `getTechWorkDays`): a tech who is off that day, off then or on
+  time off is listed last with that reason and can still be picked. `colorFor` moved to client-safe
+  `dispatch/colors.ts`.
+
+**One booking flow: Who → What → When**
+- Book on any lead (phone, website, Google, Thumbtack) opens `/leads/new/schedule?leadId=<id>`.
+  A phone caller starts at `/leads/new` ("New lead", was "New call"), whose main button is now
+  Save & book.
+- Who: the caller form fits the first phone screen (phone and name, source and quoted price,
+  the verbal text consent, the address, the job type tiles; urgency, after-hours and notes
+  below), and the field you're typing in stays clear of the sticky bars and the keyboard.
+- What: the three job type cards (`JobTypePicker`) with the trade's jobs as "What's the job?"
+  chips, then urgency, after-hours and the customer's notes (prefilled from the lead).
+- When: a week strip from today (28 days, up to 60 when they asked for a later day), the
+  asked-for day picked and tagged "Asked", with the best / open / limited / full dots. The day's
+  2-hour windows read "Arrives 8–10 AM"; the one with the least extra driving says "Best · adds
+  2 mi". A day with nothing open says why in plain words, with the soonest open day and "Book by
+  hand on New job".
+- No tech step: `bookLead` (`leads/booking-actions.ts`, `leads.convert` + `jobs.create`, audited
+  `lead.booked`) → `createBookedJob` (jobs api) puts the window, type, priority, after-hours,
+  customer notes and the asked-for day on the job and assigns nobody, so the job waits in the
+  Assign hub. The lead's quoted price becomes the draft invoice's first line; a "Check" lead
+  gets its customer when it is booked.
+- Done shows at once: "Booked: arrives Fri, Oct 23 · 8–10 AM", "Confirmation goes out when a
+  tech is assigned", then **Assign a tech** (the hub with this job picked), **Next lead** and
+  Open job.
+- New job (`/jobs/new`): the job type cards and chips replace the Service type select; a job
+  from a lead hides Technicians and keeps the lead's job type, urgency and after-hours.
+- Removed: `ScheduleFlow`, `WindowPicker` and `WindowSheet` (the month calendar and tech
+  picker) and the availability mock. The kit `Calendar` stays, but no screen uses it now.
+
+**Leads inbox: a grid of lead boxes**
+- `/leads`: phones start with 2 columns and a 1 / 2 switch remembered on the device (the
+  `leads-cols` cookie, read by the server, so the grid never flashes); tablets and desktop fit
+  as many columns as there's room for.
+- A count line ("11 open leads · Longest wait first"), status chips with counts (New,
+  Contacted, Qualified, Check while there are any, Booked, Lost, Spam; tap again for all open)
+  and a Filter chip whose sheet holds Mine, Overdue and the sources. An empty inbox shows a big
+  New lead button.
+
+**The lead box in every state**
+- Initials in the SLA timer ring (2-column boxes show a new lead's wait under it), the name, the
+  job and status, and the street (not just the ZIP). Tapping anywhere on the box opens the lead card.
+- Open: Call, Text, Directions, Open card. Check: Looks legit and Spam (booking stays allowed).
+  Lost: Reopen. Spam: Not spam. Booked: Open job, and Reopen once its job is cancelled.
+- Swipe left on an open lead: Lost or Spam, each with Undo.
+
+**The lead card**
+- `LeadCardProvider` / `useLeadCard()` with the lazy `LeadCardSheet`: a bottom sheet on phones
+  (drag down or ✕; the page steps back behind it) and a centered sheet on tablet and desktop.
+  `?lead=<id>` mirrors it, so Back closes it and a link or a reload opens it again.
+- A TL;DR (name, status, job type, street, arrival window or asked-for day), then boxes: Phone
+  (call, text, copy), Address (mini map, directions, copy), Wants or Arrives, Quote & source,
+  Last contact, Notes and Photos; the action groups; and a booking bar with Book as the one
+  primary.
+- The box's data shows at once; the rest comes from the light `loadLeadCard` (`getLeadCard`),
+  cached per lead and reloaded after each change.
+- `/leads/[id]` stays for links and printing: the same layout, plus source and attribution,
+  notes, the intake log and the activity. The list pane beside it is gone.
+
+**Actions with their way back, and Undo**
+- No "…" menu on a lead. Four groups: Reach (Call, Text, Email) · Move forward (Contacted ↔ Not
+  contacted, Qualify ↔ Unqualify, Looks legit on Check leads, Book; Open job once booked) ·
+  Manage (Claim ↔ Release, Take over, Edit, Tags) · Close (Lost ↔ Reopen, Spam ↔ Not spam). A
+  step already taken shows its way back drawn "on". Rules in `leads/rules.ts` (golden-tested).
+- Reopen and Not spam return the lead to the open status it had before (from its status
+  history), not always Contacted. A booked lead reopens once its job is cancelled.
+- Every change shows Undo for 5 seconds (`undoLeadChange`): each status change writes a
+  `lead_events` row with what it overwrote, and Undo puts that back while it is still the lead's
+  latest change. In the card the Undo bar sits above the booking bar, because toasts can't show
+  over a modal sheet; one still showing when the card closes moves to a toast.
+- Take over asks first and tells the previous owner; its Undo gives the lead back.
+
+**Named create buttons**
+- The header's "+" menu is gone. **New lead, New job, New customer** are named buttons, the
+  page's own first: small labeled icons on phones, pills on tablet and desktop with the page's
+  main one in the accent (only on its own list page). In a narrow list pane (`[data-pane]`,
+  SplitView) they fall back to the icons.
+- Pages with a create action of their own put it first (`HeaderActions own="…"`): New estimate
+  on /estimates, Upload receipt on /parts and /pay, New tool on /tools, New vehicle on
+  /vehicles. One name everywhere: "New lead", the screen too.
+- The header's client island is now plain links (`CreateButtons`) instead of `AddMenu` →
+  `MenuPopover`.
+
+**Needs a tech: the hand-off to Assign**
+- A booked job needs a tech when its arrival window is today or later, it isn't cancelled,
+  closed or completed, and nobody is assigned (`dispatch/needs-tech.ts`). One definition for
+  the new `jobs.needs_tech` badge (Assign in the sidebar and the More list; on phones the More
+  tab carries it) and the Assign hub's queue.
+- The hub lists "Needs a tech · N" first: every such job across all days, soonest first, with
+  its day and window ("Fri 23 · 8–10 AM"). A row opens the hub on that day with the job picked
+  (`hubHrefForJob`). Undated jobs are listed apart ("No date yet") and not counted. The day
+  switcher moved under the queue.
+- The customer's confirmation still goes out when a tech is assigned (`job.scheduled`). No
+  auto-assign: the office picks the tech.
+
+**The lead map**
+- A Grid / Map switch in the inbox on phones and tablets; desktop (≥ 1024 px) shows the grid
+  and the map side by side. `getLeadsMapData` (`leads/map-queries.ts`) → `LeadsMapSlot` →
+  `LazyLeadsMap` (its own chunk; Leaflet is a second one).
+- Pins: open inbox leads (not Check) with their initials in the SLA ring, colored like the box
+  avatar. The two newest unanswered leads still inside the 15-minute ring pulse; overlapping
+  pins fold to dots (`src/lib/declutter.ts`); pins at one address fan out; the selected pin grows
+  with a halo and a name tag. Today's jobs are small dark squares under the pins.
+- Phones in Map mode: the map fills the screen, and the count line, chips and boxes ride in a
+  drawer (peek, half, full; transform only) with the Grid / Map pill on its edge. Full screen
+  is the kit `FullscreenHub` (`?fs=leads-map`): the corner button, or dragging the drawer all
+  the way down; "Show N leads" brings the drawer back and Back exits. Tapping a pin opens the
+  lead card, also over the full-screen map.
+- Every lead with an address gets a position: the `leads.map_backfill` cron hook (every 10
+  minutes, batches of 25; `map-backfill.ts`) gives open leads with a street and ZIP a customer
+  and a property the way intake does (which queues the geocode), and re-queues a stuck geocode
+  once a day (`map-geocode.ts`). Intake re-queues a matched property that never got a
+  position. The demo seed places its walk-in leads (locksmith: 11 of 11 open leads on the map,
+  was 1). A note says "4 of 6 leads on the map" and why, in plain words.
+
+**Approved fixes**
+- Phone leads count as answered: typing in a caller stamps the first response (the office
+  user, by call), moves the lead to Contacted and claims it. The missed-lead texts and alerts
+  (`lead_ack`, `lead_escalate_5`, `lead_escalate_15`, `lead_not_reached`) now need
+  `lead.status = new`.
+- Ask before merging a repeat caller: when the phone has an open lead, the form asks "Update
+  their open lead or start a new one?". `lookupCaller` returns `openLeads`;
+  `createLeadAndCustomer` saves nothing and answers `needsChoice` until the office picks
+  (`mergeIntoLeadId`, or `forceNew`, which runs the intake with `merge: false`).
+- Don't lose call outcomes: a started call is kept on the device until its outcome is saved,
+  and the app asks again after a reload or a Skip (up to 3 times, within 2 hours). "Wrong
+  number" cancels the lead's queued follow-up texts and open call-back tasks.
+- Booking keeps what was typed: urgency, after-hours, the asked-for day and the customer's
+  notes carry into the job.
+- Fix a lead's contact details: Edit lead changes the phone, email and address (the address
+  becomes a customer property; a customer that still has the old phone or email is fixed too,
+  `updateContactFromLead`).
+- The Done screen shows at once (the confirmation status fills in after it).
+- The caller form fits the first screen.
+- One count everywhere: the Leads badge (tab and sidebar) is the New chip's number, new leads
+  outside "Check" (`newLeadsWhere`, `countsAsNew`). The old "unclaimed or mine" filter is gone.
+
+**Skipped by the owner**
+- "Techs who save a lead see a confirmation" (instead of "You don't have access").
+- "Flagged leads need a look first": Book stays available on Check leads.
+- "Fix two wrong messages" ("Saved, but needs a review" when nothing was saved, and "Inbox
+  zero" on the Booked and Lost views).
+- "Red only when it matters": the SLA ring's timing is unchanged.
+- Auto-assign when exactly one tech can take the job: the owner chose "Still wait for the
+  office".
+
+**Contracts and internals**
+- Leads: `LeadBoxData`, `LeadCardData`, `LeadMapPoint`, `LeadMapJob`, `CallerLookup` /
+  `CallerOpenLead` and `LeadChangeResult` in `leads/contracts.ts`; `LeadBox` and
+  `useLeadCard()` (`components/lead-env.ts`) for other screens; `ensureLeadCustomer` moved to
+  `leads/ensure-customer.ts`. `getLeadPrefill` adds `kind`, `priority` and `afterHours` (typed
+  on the call, kept in `leads.extra._booking`). `markLeadConverted` now writes a status
+  `lead_events` row. New actions `releaseLead` (replaces `assignLead`), `reopenLead`,
+  `markLeadNotSpam`, `setLeadStatus`, `undoLeadChange`; `claimLead({ force })` is Take over.
+- Jobs: `createBookedJob(tx, input, actor)`; `getTechWorkDays(date)` (availability) and
+  `arrivalFit` (recommend.ts) shared by booking and the hub; `NEEDS_TECH_BADGE`.
+- Kit: `.box-hit` (globals.css), the lead box's whole-box tap target with its focus ring. One-off
+  values a component computes (kind tints, a muted avatar, the map pin's shadow) are inline
+  styles, so the global stylesheet stays under its 25 KB budget (docs/budget.md).
+- Removed: `LeadsPane`, `LeadCard`, `LeadActions`, `LeadActionsSheets`, `LeadLoadMore`,
+  `LeadEditForm` (merged into `LeadEditSheet`), `ScheduleFlow`, `WindowPicker`, `WindowSheet`,
+  `availability/mock.ts` and its test.
+
+**Upgrading an existing database**
+- Run the app once (or `npm run db:migrate`) to apply 0005 and 0006: job types are renamed in
+  place and Repair and Maintenance archived. The trade jobs (Lockout, Rekey…) and the techs'
+  own working hours arrive only with a reseed (`npm run demo:businesses -- reseed` for the
+  demos); until then every tech follows the business hours. The new lead-automation
+  conditions reach unedited rows on the next start.
+- Checks: typecheck, lint, the full suite (113 test files, 1,556 tests) and a production build pass.
+
 ### Maps and boards on the full-screen hub (2026-10-22, R1)
 Owner goal: "the user can see the hub on his full screen on smaller devices", reusing the kit.
 - **Live map wall mode** (`/map`): "Wall mode" in the header (tablet and up, kit

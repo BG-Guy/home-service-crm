@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  contextualize,
-  createItemsFor,
-} from "@/app/(app)/_components/create-items";
 import { homeFor } from "@/lib/auth/home";
 import { brandCss, brandTokens, contrast, normalizeHex } from "@/lib/branding";
-import type { Perm } from "@/lib/permissions";
 import { dataThemeFor, parseTheme } from "@/lib/theme";
 
 describe("branding", () => {
@@ -79,24 +74,5 @@ describe("theme + role home", () => {
   });
 });
 
-describe("global + menu", () => {
-  const perms = new Set<Perm>([
-    "jobs.create",
-    "customers.create",
-    "estimates.create",
-  ] as Perm[]);
-  it("filters by permission and flag", () => {
-    const keys = createItemsFor(perms, { estimates: false }).map((i) => i.key);
-    expect(keys).toEqual(["job", "customer"]);
-  });
-  it("puts the page's item first and prefills the customer", () => {
-    const items = createItemsFor(perms, {});
-    const id = "0b9a6f3e-2f43-4c51-9a55-5b8f3e0a1c2d";
-    const out = contextualize(items, `/customers/${id}`);
-    expect(out[0]?.key).toBe("customer");
-    expect(out.find((i) => i.key === "job")?.href).toBe(
-      `/jobs/new?customerId=${id}`,
-    );
-    expect(contextualize(items, "/estimates")[0]?.key).toBe("estimate");
-  });
-});
+// The header's create buttons (formerly the "+" menu) moved to
+// tests/lib/create-items.test.ts.

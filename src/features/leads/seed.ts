@@ -1,24 +1,30 @@
 // Demo seed fragment for `leads` (BUILD_PLAN §10.3 #6). Owner: B1.
 // Lead sources (+ deterministic demo keys), 2 months of source_spend, 25 leads with
 // lead_events (received / touch / call_attempt / status), calls, one API key and the
-// L15 `lead_retry` task via B2 createTask. Never emits events; reruns are no-ops.
+// L15 `lead_retry` task via B2 createTask. Open walk-in leads get what intake gives
+// them (a customer and a geocoded property), so the lead map shows them. Never
+// emits events; reruns are no-ops.
 import { eq } from "drizzle-orm";
 import type { DB } from "@/db";
 import {
   apiKeys,
   calls,
+  customers,
   leadEvents,
   leadSources,
   leads,
+  properties,
   sourceSpend,
 } from "@/db/schema";
 import { seedId } from "@/db/seed/demo-ids";
+import type { DemoProfile } from "@/db/seed/profiles/types";
 import type { DemoSeedCtx } from "@/db/seed/types";
 import { createTask } from "@/features/tasks/api";
 import { sha256Hex } from "@/lib/hash";
 import { addDaysToKey, dateKey } from "@/lib/time";
 import type { Actor } from "@/lib/types";
 import { hashKey } from "./keys";
+import { settingsShape } from "./settings";
 
 /** Demo-only secrets (documented in the leads README) so curl examples work out of the box. */
 export const DEMO_LEAD_KEYS = {
@@ -28,6 +34,37 @@ export const DEMO_LEAD_KEYS = {
   lsaHook: "hk_demo_google_lsa_00000000000001",
   zapierKey: "sk_demo_zapier_00000000000000001",
 } as const;
+
+const OPEN_STATUSES = new Set(["new", "contacted", "qualified"]);
+
+/**
+ * Where a walk-in lead's address sits on the map: its ZIP area's center (the
+ * profile's metro) plus a small fixed offset by lead number (0.004–0.012°, a
+ * golden-angle turn each), else a fixed spot inside the metro box. Deterministic.
+ */
+export function walkInSpot(
+  metro: Pick<DemoProfile["metro"], "zips" | "box">,
+  zip: string,
+  n: number,
+): { lat: number; lng: number } {
+  const r6 = (v: number) => Math.round(v * 1e6) / 1e6;
+  const area = metro.zips.find((z) => z.zip === zip);
+  if (area?.lat != null && area.lng != null) {
+    const turn = (n * 137.508 * Math.PI) / 180;
+    const r = 0.004 + ((n * 7) % 9) * 0.001;
+    return {
+      lat: r6(area.lat + r * Math.sin(turn)),
+      lng: r6(
+        area.lng + (r * Math.cos(turn)) / Math.cos((area.lat * Math.PI) / 180),
+      ),
+    };
+  }
+  const b = metro.box;
+  return {
+    lat: r6(b.lat + (0.15 + 0.7 * ((n * 0.618034) % 1)) * b.span),
+    lng: r6(b.lng + (0.15 + 0.7 * ((n * 0.381966 + 0.25) % 1)) * b.span),
+  };
+}
 
 export async function seedDemo(db: DB, ctx: DemoSeedCtx): Promise<void> {
   const plan = ctx.plan;
@@ -114,6 +151,67 @@ export async function seedDemo(db: DB, ctx: DemoSeedCtx): Promise<void> {
     })
     .onConflictDoNothing();
 
+  // ---- walk-in leads get what intake gives them (processLead step 7): open,
+  // unflagged ones with a phone or email get a customer and a property at their
+  // address, placed from the profile's area centers, so the lead map shows them.
+  // Flagged, spam and closed walk-ins stay without one, as intake leaves them.
+  const threshold = settingsShape.leads.parse(undefined).spam_review_threshold;
+  const walkIns = new Map<number, { customerId: string; propertyId: string }>();
+  const walkInCustomers: (typeof customers.$inferInsert)[] = [];
+  const walkInProperties: (typeof properties.$inferInsert)[] = [];
+  for (const l of plan.leads) {
+    if (
+      l.customerN ||
+      !OPEN_STATUSES.has(l.status) ||
+      l.spamScore >= threshold ||
+      (!l.phone && !l.email)
+    )
+      continue;
+    const a = ADDRESSES[l.n % ADDRESSES.length] as (typeof ADDRESSES)[number];
+    const s = src.get(l.sourceKey);
+    const at = new Date(ctx.now.getTime() - l.minutesAgo * 60_000);
+    const ids = {
+      customerId: seedId("customer", `lead-${l.n}`),
+      propertyId: seedId("property", `lead-${l.n}`),
+    };
+    const [first, ...rest] = l.name.trim().split(/\s+/);
+    walkInCustomers.push({
+      id: ids.customerId,
+      type: "residential",
+      firstName: first ?? null,
+      lastName: rest.join(" ") || null,
+      displayName: l.name,
+      phone: l.phone,
+      email: l.email,
+      preferredChannel: l.phone ? "sms" : "email",
+      leadSourceId: s?.id ?? null,
+      source: s?.name ?? null,
+      createdBy: office,
+      createdAt: at,
+      updatedAt: at,
+    });
+    walkInProperties.push({
+      id: ids.propertyId,
+      customerId: ids.customerId,
+      street: a.street,
+      city: a.city,
+      state: plan.company.state,
+      zip: a.zip,
+      ...walkInSpot(ctx.profile.metro, a.zip, l.n),
+      geocodeStatus: "ok",
+      timezone: tz,
+      propertyType: "house",
+      isPrimary: true,
+      createdAt: at,
+      updatedAt: at,
+    });
+    walkIns.set(l.n, ids);
+  }
+  if (walkInCustomers.length)
+    await db.insert(customers).values(walkInCustomers).onConflictDoNothing();
+  if (walkInProperties.length)
+    await db.insert(properties).values(walkInProperties).onConflictDoNothing();
+
   // ---- leads
   const leadRows: (typeof leads.$inferInsert)[] = [];
   const eventRows: (typeof leadEvents.$inferInsert)[] = [];
@@ -171,8 +269,12 @@ export async function seedDemo(db: DB, ctx: DemoSeedCtx): Promise<void> {
       leadSourceId: s?.id ?? null,
       externalId: l.sourceKey === "thumbtack" ? `tt-demo-${l.n}` : null,
       status: l.status,
-      customerId: hasCustomer ? (c?.id ?? null) : null,
-      propertyId: hasCustomer ? (prop?.id ?? null) : null,
+      customerId: hasCustomer
+        ? (c?.id ?? null)
+        : (walkIns.get(l.n)?.customerId ?? null),
+      propertyId: hasCustomer
+        ? (prop?.id ?? null)
+        : (walkIns.get(l.n)?.propertyId ?? null),
       name: l.n === 13 ? "xkcdqw zzptrv" : l.name,
       phone: l.phone,
       email: l.email,
@@ -248,7 +350,9 @@ export async function seedDemo(db: DB, ctx: DemoSeedCtx): Promise<void> {
         l.n === 15 || l.lostReason === "no_answer" ? "no_answer" : "connected";
       callRows.push({
         id: seedId("call", `lead-${l.n}`),
-        customerId: hasCustomer ? (c?.id ?? null) : null,
+        customerId: hasCustomer
+          ? (c?.id ?? null)
+          : (walkIns.get(l.n)?.customerId ?? null),
         leadId: l.id,
         userId: office,
         direction: "out",
@@ -303,7 +407,7 @@ export async function seedDemo(db: DB, ctx: DemoSeedCtx): Promise<void> {
           payload: { lead_id: l15.id },
           assigneeUserId: office,
           entity: { type: "lead", id: l15.id },
-          customerId: null,
+          customerId: walkIns.get(15)?.customerId ?? null,
           dueAt: new Date(ctx.now.getTime() + 10 * 60_000),
         },
         actor,
@@ -322,6 +426,6 @@ export async function seedDemo(db: DB, ctx: DemoSeedCtx): Promise<void> {
     }
   }
   ctx.log(
-    `${leadRows.length} leads, ${eventRows.length} lead events, ${callRows.length} calls`,
+    `${leadRows.length} leads (${walkIns.size} walk-ins with a customer and a map spot), ${eventRows.length} lead events, ${callRows.length} calls`,
   );
 }

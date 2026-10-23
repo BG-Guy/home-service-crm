@@ -21,41 +21,35 @@ import {
   addDaysToKey,
   dateKey,
   parseDateKey,
+  startOfDayInTz,
   zonedTimeToUtc,
 } from "@/lib/time";
+import { getTechWorkDays } from "../availability";
 import type { JobStatus } from "../contracts";
 import { maskStreetLine, revealsJobAddress } from "../mask";
+import { colorFor } from "./colors";
+import { countNeedsTech, needsTechWhere, noAssignee } from "./needs-tech";
 import { type RecTech, recommendTechs } from "./recommend";
 import type { HubData, HubJob, HubStop, HubTech, HubTechState } from "./types";
+import { type OffReason, offReason, rankByWorkHours } from "./work-fit";
 
 // Assign hub reads (/dispatch): every active technician's day (route in window
-// order, load, clock state, profile facts), the jobs that still need a tech, and
-// for `?job=` the ranked recommendation. Gated by jobs.assign (admin, office).
+// order, load, clock state, profile facts), the jobs that still need a tech
+// (every booked day from today, soonest first: ./needs-tech.ts, the same count as
+// the Assign badge; plus undated jobs apart), and for `?job=` the ranked
+// recommendation. Gated by jobs.assign (admin, office).
 
-const PALETTE = [
-  "#0a84ff",
-  "#34c759",
-  "#ff9500",
-  "#af52de",
-  "#ff2d55",
-  "#00b3c7",
-  "#5856d6",
-  "#d4a106",
-];
 const ON_JOB: readonly string[] = ["en_route", "arrived", "in_progress"];
 const DONE: readonly string[] = ["completed", "closed", "cancelled"];
 const DAY_HOURS = 8;
+/** Rows listed in the Needs a tech queue (the header shows the full count). */
+const QUEUE_LIMIT = 100;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** A tech's route color: their calendar color, else a stable palette pick. */
-export function colorFor(id: string, own: string | null): string {
-  if (own && /^#[0-9a-f]{6}$/i.test(own)) return own;
-  let h = 0;
-  for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0;
-  return PALETTE[h % PALETTE.length] as string;
-}
+// Client-safe home of the route colors; re-exported for existing importers.
+export { colorFor } from "./colors";
 
 /** A job's arrival start: the window, else the scheduled start. */
 export const startExpr = sql<Date | null>`coalesce(${jobs.windowStart}, ${jobs.scheduledStart})`;
@@ -145,6 +139,7 @@ export function loadActiveTechRows() {
       phone: users.phone,
       skills: users.skills,
       homeBase: users.homeBase,
+      workHours: users.workHours,
       hireDate: users.hireDate,
       experienceYears: users.experienceYears,
       birthDate: users.birthDate,
@@ -216,14 +211,17 @@ export async function loadDispatchHub(params: {
   const techRows = await loadActiveTechRows();
   const techIds = techRows.map((t) => t.id);
 
-  const [dayRows, queueRows, clocks, briefs, skillRows, vehicles] =
+  const [dayRows, needRows, undatedRows, clocks, briefs, skillRows, vehicles] =
     await Promise.all([
       loadDayJobs(date, tz),
+      // Needs a tech: booked from today on, nobody assigned, soonest first.
+      loadJobs(needsTechWhere(startOfDayInTz(now, tz)), QUEUE_LIMIT),
       loadJobs(
         and(
           eq(jobs.status, "unscheduled"),
           isNull(jobs.windowStart),
           isNull(jobs.scheduledStart),
+          noAssignee,
         ),
         30,
       ),
@@ -237,7 +235,7 @@ export async function loadDispatchHub(params: {
       ),
     ]);
   const ids = [
-    ...new Set([...dayRows, ...queueRows].map((r) => r.j.id)),
+    ...new Set([...dayRows, ...needRows, ...undatedRows].map((r) => r.j.id)),
     ...(jobRow ? [jobRow.j.id] : []),
   ];
   const byJob = await loadAssignees(ids);
@@ -272,6 +270,7 @@ export async function loadDispatchHub(params: {
       minutes,
       dayKey: s ? dateKey(s, tz) : null,
       address: [street, r.city].filter(Boolean).join(", "),
+      street,
       customerName: r.customerName,
       lat: shown ? r.lat : null,
       lng: shown ? r.lng : null,
@@ -344,12 +343,17 @@ export async function loadDispatchHub(params: {
     };
   });
 
-  const toAssign = [
-    ...dayJobs.filter(
-      (j) => j.assigneeIds.length === 0 && !DONE.includes(j.status),
-    ),
-    ...queueRows.map(toHubJob).filter((j) => j.assigneeIds.length === 0),
-  ];
+  // Assignees are re-checked here: one could have been added between the reads.
+  const needsTech = needRows
+    .map(toHubJob)
+    .filter((j) => j.assigneeIds.length === 0);
+  const undated = undatedRows
+    .map(toHubJob)
+    .filter((j) => j.assigneeIds.length === 0);
+  const needsTechCount =
+    needRows.length < QUEUE_LIMIT
+      ? needsTech.length
+      : await countNeedsTech(now);
 
   let recs: HubData["recs"] = [];
   if (job && !DONE.includes(job.status)) {
@@ -409,6 +413,42 @@ export async function loadDispatchHub(params: {
         timeLabel: (ms) => label.format(ms).replace(":00", ""),
       },
     );
+
+    // Hours and time off, as the booking calendar checks them: a tech who is
+    // off during the booked window, or on time off then, drops below the rest
+    // (still listed, with why). Only for techs with known hours: their own, or
+    // the company's business hours.
+    const hasHours = (t: (typeof techRows)[number]) =>
+      t.workHours != null || settings.company.business_hours.length > 0;
+    if (job.start && job.end && techRows.some(hasHours)) {
+      const work = await getTechWorkDays(date);
+      const onSite = new Map(dayRows.map((r) => [r.j.id, r.serviceMinutes]));
+      const off = new Map<string, OffReason>();
+      techRows.forEach((t, i) => {
+        if (!hasHours(t)) return;
+        const why = offReason(
+          {
+            lat: job.lat,
+            lng: job.lng,
+            from: Date.parse(job.start as string),
+            to: Date.parse(job.end as string),
+            durationMin: jobRow?.serviceMinutes ?? job.minutes,
+          },
+          work[t.id],
+          (input[i] as RecTech).stops.map((s) => ({
+            ...s,
+            minutes: onSite.get(s.id) ?? null,
+          })),
+          {
+            dayStart,
+            dayEnd,
+            notBefore: date === todayKey ? now.getTime() : undefined,
+          },
+        );
+        if (why) off.set(t.id, why);
+      });
+      recs = rankByWorkHours(recs, off);
+    }
   }
 
   const map = getMapConfig(settings.map);
@@ -418,7 +458,9 @@ export async function loadDispatchHub(params: {
     tz,
     isToday: date === todayKey,
     techs,
-    toAssign,
+    needsTech,
+    needsTechCount,
+    undated,
     job,
     movedToJobDay,
     recs,

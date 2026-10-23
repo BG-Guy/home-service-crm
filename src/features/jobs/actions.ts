@@ -994,6 +994,20 @@ export const saveJobSettings = action({
       .min(1)
       .max(8)
       .regex(/^[A-Za-z0-9-]+$/, "Letters, digits and dashes only."),
+    // Booking availability (leads-flow redesign). Optional: kept when absent.
+    daily_job_cap: z
+      .number()
+      .int()
+      .min(1, "At least 1 job a day.")
+      .max(30, "30 jobs a day at most.")
+      .optional(),
+    max_extra_miles: z
+      .number()
+      .int()
+      .min(1, "At least 1 mile.")
+      .max(500, "500 miles at most.")
+      .optional(),
+    after_hours_booking: z.boolean().optional(),
   }),
   name: "settings.jobs",
   async run({ input, tx, actor }) {
@@ -1026,6 +1040,15 @@ export const saveJobSettings = action({
           warranty_claim_due_days: input.warranty_claim_due_days,
           board_start_hour: input.board_start_hour,
           board_end_hour: input.board_end_hour,
+          ...(input.daily_job_cap != null
+            ? { daily_job_cap: input.daily_job_cap }
+            : {}),
+          ...(input.max_extra_miles != null
+            ? { max_extra_miles: input.max_extra_miles }
+            : {}),
+          ...(input.after_hours_booking != null
+            ? { after_hours_booking: input.after_hours_booking }
+            : {}),
         },
       },
       actor,

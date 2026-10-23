@@ -1,27 +1,25 @@
 "use client";
 
 import { Phone } from "lucide-react";
-import dynamic from "next/dynamic";
 import { type ReactNode, useState } from "react";
 import { useConfirm } from "@/ui/components/Alert";
 import { Button } from "@/ui/components/Button";
-import { toast } from "@/ui/components/Toast";
-import { logLeadCall, startLeadCall } from "../actions";
+import { startLeadCall } from "../actions";
+import { CallOutcomeFlow } from "./CallOutcomeFlow";
+import { useLeadEnv } from "./lead-env";
+import { startPendingCall } from "./pending-call";
 
-// The outcome sheet (with the Sheet kit) loads on the first call tap.
-const loadSheet = () =>
-  import("@/features/customers/components/CallOutcomeSheet");
-const CallOutcomeSheet = dynamic(
-  () => loadSheet().then((m) => m.CallOutcomeSheet),
-  { ssr: false },
-);
+const warmSheet = () =>
+  void import("@/features/customers/components/CallOutcomeSheet");
 
 /**
  * Claim + call: `tel:` opens the dialer, then the outcome sheet logs the call.
- * "No answer" drafts a follow-up text and a +15 min retry task (server side).
+ * The call stays "pending" on this device until its outcome is saved, so a Skip
+ * or a reload asks again (PendingCallPrompt).
  */
 export function LeadCallButton({
   leadId,
+  name,
   variant = "tinted",
   size = "sm",
   label = "Call",
@@ -29,25 +27,31 @@ export function LeadCallButton({
   render,
 }: {
   leadId: string;
-  variant?: "tinted" | "filled" | "gray" | "secondary";
+  /** Shown in "How did the call with … go?". */
+  name: string;
+  variant?: "tinted" | "primary" | "secondary";
   size?: "sm" | "md" | "lg";
   label?: string;
   className?: string;
-  /** Custom trigger (e.g. a round quick action); gets the click handler and busy state. */
+  /** Custom trigger (a round action, an icon button); gets the click handler and busy state. */
   render?: (p: { onClick: () => void; busy: boolean }) => ReactNode;
 }) {
+  const env = useLeadEnv();
   const [open, setOpen] = useState(false);
   const [armed, setArmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirm, confirmEl] = useConfirm();
 
   const start = async () => {
-    void loadSheet();
+    warmSheet();
     setBusy(true);
     const r = await startLeadCall({ leadId });
     setBusy(false);
     if (!r.ok || !r.data) {
-      toast.error(r.ok ? "Couldn't start the call" : r.error);
+      env.notify({
+        title: r.ok ? "Couldn't start the call" : r.error,
+        tone: "error",
+      });
       return;
     }
     if (
@@ -59,6 +63,7 @@ export function LeadCallButton({
       }))
     )
       return;
+    startPendingCall(leadId, name);
     window.location.href = r.data.tel;
     setArmed(true);
     setTimeout(() => setOpen(true), 600);
@@ -82,30 +87,11 @@ export function LeadCallButton({
         </Button>
       )}
       {armed && (
-        <CallOutcomeSheet
+        <CallOutcomeFlow
+          leadId={leadId}
+          name={name}
           open={open}
           onOpenChange={setOpen}
-          footnote="No answer or busy creates a call-back task in 15 minutes and drafts a text."
-          onSave={async ({ outcome, notes }) => {
-            const res = await logLeadCall({
-              leadId,
-              outcome,
-              notes,
-              clientId: crypto.randomUUID(),
-            });
-            if (!res.ok) {
-              toast.error(res.error);
-              return false;
-            }
-            toast.success(
-              res.data?.retryTaskId
-                ? res.data.textQueued
-                  ? "Logged · retry task + text drafted"
-                  : "Logged · retry in 15 min"
-                : "Call logged",
-            );
-            return true;
-          }}
         />
       )}
     </>

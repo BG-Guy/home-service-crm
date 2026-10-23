@@ -239,7 +239,7 @@ export default function EditMemberSheet({
           {(tech || member.skills.length > 0) && skills.length > 0 && (
             <ListSection
               header="Skills"
-              footer="Service types this person can do. Used as a hint when assigning jobs."
+              footer="Job types this person can do. Booking and the Assign hub match jobs to these."
             >
               {skills.map((s) => (
                 // biome-ignore lint/a11y/noLabelWithoutControl: input is inside
