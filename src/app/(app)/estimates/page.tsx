@@ -1,7 +1,11 @@
 import { FileText } from "lucide-react";
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
+import { DocCards } from "@/app/(app)/_components/DocCards";
+import { DocLayoutSwitch } from "@/app/(app)/_components/DocLayoutSwitch";
 import { HeaderActions } from "@/app/(app)/_components/HeaderActions";
+import { fetchEstimatePeek } from "@/features/estimates/peek-actions";
 import {
   getCloseRates,
   getEstimateTechOptions,
@@ -9,6 +13,7 @@ import {
 } from "@/features/estimates/queries";
 import { ParamSelect } from "@/features/invoices/components/ParamSelect";
 import { requireUser } from "@/lib/auth/current";
+import { type DocCard, parseDocLayout } from "@/lib/doc-cards";
 import { formatMoney } from "@/lib/money";
 import { getCompanyTimezone, isEnabled } from "@/lib/settings";
 import { formatDate, formatRelative } from "@/lib/time";
@@ -27,6 +32,9 @@ import { PageTransition } from "@/ui/motion/PageTransition";
 export const metadata: Metadata = { title: "Estimates" };
 
 type SP = Record<string, string | undefined>;
+
+/** Cards (the default) or the list, remembered per device. */
+const ESTIMATES_LAYOUT_COOKIE = "estimates-layout";
 
 const VIEWS = [
   { key: "unsold", label: "Unsold" },
@@ -75,6 +83,39 @@ export default async function EstimatesPage({
   ]);
   const pipeline = unsold ? rows.reduce((a, r) => a + r.totalCents, 0) : 0;
   const now = new Date();
+  const layout = parseDocLayout(
+    (await cookies()).get(ESTIMATES_LAYOUT_COOKIE)?.value,
+  );
+  const statusLine = (r: (typeof rows)[number]) => {
+    const expired = !!(r.expiresAt && r.expiresAt < now && unsold);
+    const when =
+      r.status === "viewed" && r.viewedAt
+        ? `Viewed ${formatRelative(r.viewedAt, now)}`
+        : r.sentAt
+          ? `Sent ${formatDate(r.sentAt, tz)}`
+          : `Created ${formatDate(r.createdAt, tz)}`;
+    return { when: `${when}${expired ? " · past expiry" : ""}`, expired };
+  };
+  const canText = user.perms.has("messages.send");
+  const cards: DocCard[] = rows.map((r) => {
+    const s = statusLine(r);
+    return {
+      id: r.id,
+      kind: "estimate",
+      href: `/estimates/${r.id}`,
+      status: r.status,
+      amountCents: r.totalCents,
+      amountNote: r.optionCount > 1 ? `${r.optionCount} options` : null,
+      title: r.customerName,
+      subtitle: r.title ? `${r.number} · ${r.title}` : r.number,
+      meta: [s.when, r.createdByName].filter(Boolean).join(" · "),
+      alert: s.expired,
+      customerId: r.customerId,
+      jobHref: r.jobId ? `/jobs/${r.jobId}` : null,
+      jobNumber: r.jobNumber,
+      canText,
+    };
+  });
 
   return (
     <PageTransition>
@@ -171,10 +212,35 @@ export default async function EstimatesPage({
               ) : null
             }
           />
+        ) : layout === "cards" ? (
+          <section aria-label="Estimates" className="flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-title3">
+                {unsold ? "Unsold, by value" : "Estimates"}
+              </h2>
+              <DocLayoutSwitch
+                cookie={ESTIMATES_LAYOUT_COOKIE}
+                value={layout}
+              />
+            </div>
+            <DocCards
+              cards={cards}
+              label="Estimates"
+              loadPeek={fetchEstimatePeek}
+            />
+          </section>
         ) : (
           <ListSection
             variant="title"
-            header={unsold ? "Unsold, by value" : "Estimates"}
+            header={
+              <span className="flex items-center justify-between gap-3">
+                {unsold ? "Unsold, by value" : "Estimates"}
+                <DocLayoutSwitch
+                  cookie={ESTIMATES_LAYOUT_COOKIE}
+                  value={layout}
+                />
+              </span>
+            }
           >
             {rows.map((r) => {
               const expired =

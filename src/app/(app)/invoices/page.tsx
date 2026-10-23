@@ -1,5 +1,8 @@
 import { Receipt } from "lucide-react";
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
+import { DocCards } from "@/app/(app)/_components/DocCards";
+import { DocLayoutSwitch } from "@/app/(app)/_components/DocLayoutSwitch";
 import { HeaderActions } from "@/app/(app)/_components/HeaderActions";
 import { ParamSelect } from "@/features/invoices/components/ParamSelect";
 import {
@@ -7,12 +10,15 @@ import {
   daysPastDue,
   isDueToday,
 } from "@/features/invoices/math";
+import { fetchInvoicePeek } from "@/features/invoices/peek-actions";
 import {
   getAgingSummary,
   getInvoiceFilterOptions,
   listInvoices,
 } from "@/features/invoices/queries";
 import { requireUser } from "@/lib/auth/current";
+import { type DocCard, parseDocLayout } from "@/lib/doc-cards";
+import { formatMoney } from "@/lib/money";
 import { getCompanyTimezone } from "@/lib/settings";
 import { formatDate } from "@/lib/time";
 import { Page } from "@/ui/components/AppShell";
@@ -31,6 +37,9 @@ import { PageTransition } from "@/ui/motion/PageTransition";
 export const metadata: Metadata = { title: "Invoices" };
 
 type SP = Record<string, string | undefined>;
+
+/** Cards (the default) or the list, remembered per device. */
+const INVOICES_LAYOUT_COOKIE = "invoices-layout";
 
 const STATUS_CHIPS = [
   { value: "", label: "All" },
@@ -92,6 +101,56 @@ export default async function InvoicesPage({
     !!sp.q ||
     sp.revisedAfterPayment === "1";
   const now = new Date();
+  const layout = parseDocLayout(
+    (await cookies()).get(INVOICES_LAYOUT_COOKIE)?.value,
+  );
+  /** "J-1044 · Derek · 3 days past due · v2" (list rows and cards). */
+  const subLine = (r: (typeof rows)[number]) => {
+    // Company-TZ calendar days (QA2): overdue from the day after the due date.
+    const daysPast = r.overdue ? daysPastDue(r.dueAt, now, tz) : 0;
+    return [
+      r.jobNumber,
+      r.techName,
+      r.status === "draft"
+        ? `Created ${formatDate(r.createdAt, tz)}`
+        : r.overdue
+          ? `${daysPast} day${daysPast === 1 ? "" : "s"} past due`
+          : r.dueAt && r.balanceCents > 0
+            ? isDueToday(r.dueAt, now, tz)
+              ? "Due today"
+              : `Due ${formatDate(r.dueAt, tz)}`
+            : r.issuedAt
+              ? formatDate(r.issuedAt, tz)
+              : null,
+      r.version > 1 ? `v${r.version}` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  };
+  const canText = user.perms.has("messages.send");
+  const cards: DocCard[] = rows.map((r) => {
+    const due = r.status !== "paid" && r.status !== "draft";
+    return {
+      id: r.id,
+      kind: "invoice",
+      href: `/invoices/${r.id}`,
+      status: r.overdue ? "overdue" : r.status,
+      amountCents: due ? r.balanceCents : r.totalCents,
+      amountNote:
+        due && r.balanceCents > 0 && r.balanceCents !== r.totalCents
+          ? `of ${formatMoney(r.totalCents)}`
+          : null,
+      title: r.customerName,
+      subtitle: r.number,
+      // The job number has its own action button on the card.
+      meta: subLine({ ...r, jobNumber: null }),
+      alert: r.overdue,
+      customerId: r.customerId,
+      jobHref: r.jobId ? `/jobs/${r.jobId}` : null,
+      jobNumber: r.jobNumber,
+      canText,
+    };
+  });
 
   return (
     <PageTransition>
@@ -221,32 +280,35 @@ export default async function InvoicesPage({
               )
             }
           />
+        ) : layout === "cards" ? (
+          <section aria-label="Invoices" className="flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-title3">
+                {sp.aging ? `Aging ${sp.aging} days` : "Invoices"}
+              </h2>
+              <DocLayoutSwitch cookie={INVOICES_LAYOUT_COOKIE} value={layout} />
+            </div>
+            <DocCards
+              cards={cards}
+              label="Invoices"
+              loadPeek={fetchInvoicePeek}
+            />
+          </section>
         ) : (
           <ListSection
             variant="title"
-            header={sp.aging ? `Aging ${sp.aging} days` : "Invoices"}
+            header={
+              <span className="flex items-center justify-between gap-3">
+                {sp.aging ? `Aging ${sp.aging} days` : "Invoices"}
+                <DocLayoutSwitch
+                  cookie={INVOICES_LAYOUT_COOKIE}
+                  value={layout}
+                />
+              </span>
+            }
           >
             {rows.map((r) => {
-              // Company-TZ calendar days (QA2): overdue from the day after the due date.
-              const daysPast = r.overdue ? daysPastDue(r.dueAt, now, tz) : 0;
-              const sub = [
-                r.jobNumber,
-                r.techName,
-                r.status === "draft"
-                  ? `Created ${formatDate(r.createdAt, tz)}`
-                  : r.overdue
-                    ? `${daysPast} day${daysPast === 1 ? "" : "s"} past due`
-                    : r.dueAt && r.balanceCents > 0
-                      ? isDueToday(r.dueAt, now, tz)
-                        ? "Due today"
-                        : `Due ${formatDate(r.dueAt, tz)}`
-                      : r.issuedAt
-                        ? formatDate(r.issuedAt, tz)
-                        : null,
-                r.version > 1 ? `v${r.version}` : null,
-              ]
-                .filter(Boolean)
-                .join(" · ");
+              const sub = subLine(r);
               return (
                 <ListRow
                   key={r.id}

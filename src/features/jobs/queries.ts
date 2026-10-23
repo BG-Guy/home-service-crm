@@ -253,7 +253,10 @@ export async function listJobs(
   f: JobListFilters,
 ): Promise<{ items: JobListItem[]; nextCursor: string | null; tz: string }> {
   const user = await requireAnyPerm(["jobs.view_all", "jobs.view_own"]);
-  const [tz, ua] = await Promise.all([getCompanyTimezone(), requestUserAgent()]);
+  const [tz, ua] = await Promise.all([
+    getCompanyTimezone(),
+    requestUserAgent(),
+  ]);
   const conds: (SQL | undefined)[] = [jobScope(user)];
   if (f.mine) conds.push(assignedTo(user.id));
   if (f.tech && canViewAll(user)) conds.push(assignedTo(f.tech));
