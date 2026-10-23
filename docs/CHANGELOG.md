@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Miles between a tech's stops (2026-10-23)
+- **Route maps** (Assign hub, schedule map): each leg long enough on screen carries its
+  straight-line miles in a small pill on the line, turned along it (never upside down), with the
+  direction chevron moved a third of the way in. Faded routes and the busy overview (more than 3
+  routes in focus) get arrows only (`drawArrows` in `src/features/map/route-draw.ts`; the CSS
+  ships in the map chunk's `ROUTE_CSS`).
+- **Route timelines:** `TripStep.miles` (`TripTimeline`) shows the leg's miles against the line,
+  halfway to the next stop, on the Assign hub's day route and the tech's Today's route. The
+  schedule map's timeline strip shows them on a dashed connector in the gap between two bars.
+- `src/lib/geo.ts`: `milesBetween` (moved from `dispatch/recommend.ts`, which re-exports it),
+  `formatMiles`, `legMiles`. `JobListItem` gains `lat` / `lng`, filled only when the viewer may
+  see the address, so a masked stop has no miles. Tests: `tests/lib/geo.test.ts`.
+
 ### Demo quick sign-in (2026-10-23)
 - The three demo businesses (`npm run demo:businesses`) show one-tap **Admin / Office / Tech**
   buttons on the login page, so nobody types the demo password. They sign in as the first active
