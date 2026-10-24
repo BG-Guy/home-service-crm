@@ -942,12 +942,9 @@ export default async function JobPage({
                   <Suspense fallback={null}>
                     <JobRiskChip jobId={job.id} showWhy={!techView} />
                   </Suspense>
-                  {/* The money card's rail carries the deposit when it shows. */}
-                  {!showMoney && (
-                    <Suspense fallback={null}>
-                      <DepositChip jobId={job.id} />
-                    </Suspense>
-                  )}
+                  <Suspense fallback={null}>
+                    <DepositChip jobId={job.id} />
+                  </Suspense>
                 </>
               }
               readiness={
