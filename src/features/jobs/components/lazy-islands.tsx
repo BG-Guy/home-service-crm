@@ -22,14 +22,9 @@ export const LazyActionBar = dynamic(() =>
   import("./ActionBar").then((m) => m.ActionBar),
 );
 
-/** Money card: "Present to Sophia" (present mode on this device). */
-export const LazyPresentButton = dynamic(() =>
-  import("./MoneyCardButtons").then((m) => m.PresentButton),
-);
-
-/** Money card: "Get customer sign-off" (the signature sheet loads on tap). */
-export const LazySignOffButton = dynamic(() =>
-  import("./MoneyCardButtons").then((m) => m.SignOffButton),
+/** Money card: "Present to Sophia" and "Get customer sign-off" (one island). */
+export const LazyMoneyCardButton = dynamic(() =>
+  import("./MoneyCardButtons").then((m) => m.MoneyCardButton),
 );
 
 /** Payments S-slot: Collect / Collect deposit. */

@@ -9,23 +9,45 @@ import { Button } from "@/ui/components/Button";
 import { toast } from "@/ui/components/Toast";
 import { signJobCompletion } from "../actions";
 
-// The money card's client pieces (a lazy chunk, lazy-islands.tsx): the card itself
-// is a server component; only these two buttons need the browser.
+// The money card's client pieces, one lazy island (lazy-islands.tsx
+// LazyMoneyCardButton): the card itself is a server component; only these two
+// buttons need the browser.
 
 const loadSignature = () => import("@/features/signatures/slots.client");
 const SignatureSheet = dynamic(
   () => loadSignature().then((m) => m.SignatureSheet),
-  {
-    ssr: false,
-  },
+  { ssr: false },
 );
 const warmSignature = () => void loadSignature().catch(() => {});
+
+export type MoneyCardButtonProps =
+  | { kind: "present"; estimateId: string; label: string }
+  | {
+      kind: "signoff";
+      jobId: string;
+      customerName: string;
+      consentText: string;
+      summaryLines: string[];
+    };
+
+export function MoneyCardButton(p: MoneyCardButtonProps) {
+  return p.kind === "present" ? (
+    <PresentButton estimateId={p.estimateId} label={p.label} />
+  ) : (
+    <SignOffButton
+      jobId={p.jobId}
+      customerName={p.customerName}
+      consentText={p.consentText}
+      summaryLines={p.summaryLines}
+    />
+  );
+}
 
 /**
  * "Present to Sophia": the customer's estimate full screen on this device
  * (present mode), the same action as the estimate builder's Present button.
  */
-export function PresentButton({
+function PresentButton({
   estimateId,
   label,
 }: {
@@ -57,7 +79,7 @@ export function PresentButton({
  * "Get customer sign-off": the customer signs that the work is done, on this
  * device (the signature sheet loads on the first tap; signJobCompletion).
  */
-export function SignOffButton({
+function SignOffButton({
   jobId,
   customerName,
   consentText,

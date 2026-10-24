@@ -25,15 +25,14 @@ import type {
 } from "../money-stage";
 import {
   LazyCollectPaymentButton as CollectPaymentButton,
-  LazyPresentButton as PresentButton,
-  LazySignOffButton as SignOffButton,
+  LazyMoneyCardButton as MoneyCardButton,
 } from "./lazy-islands";
 
 // The job's money card (Quote to Paid, "progress rail"; mockup step3-4): the five
 // stages, where the money stands and ONE main button for the next step, in the
 // current stage's color. A server component: the links render as plain anchors;
-// Present and the sign-off are small lazy islands; Collect reuses the payments
-// slot already on the page.
+// Present and the sign-off share one small lazy island; Collect reuses the
+// payments slot already on the page.
 
 // A check means done, so a stage still ahead never shows one.
 const STEP_ICON: Record<MoneyStageKey, LucideIcon> = {
@@ -175,7 +174,11 @@ function MainButton({
         : null;
     case "present":
       return can.present ? (
-        <PresentButton estimateId={next.estimateId} label={next.label} />
+        <MoneyCardButton
+          kind="present"
+          estimateId={next.estimateId}
+          label={next.label}
+        />
       ) : null;
     case "collect_deposit":
       return can.collect ? (
@@ -290,7 +293,8 @@ export function MoneyCard({
           {signOff.text}
         </p>
       ) : signOff ? (
-        <SignOffButton
+        <MoneyCardButton
+          kind="signoff"
           jobId={jobId}
           customerName={signOff.customerName}
           consentText={signOff.consentText}
