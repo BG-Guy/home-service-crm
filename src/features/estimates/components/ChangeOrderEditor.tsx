@@ -1,18 +1,17 @@
 "use client";
 
-import { Ellipsis, PenLine, Send } from "lucide-react";
+import { PenLine, Send } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import {
   type EditorLine,
   LineEditor,
 } from "@/features/invoices/components/LineEditor";
-import { SignatureSheet } from "@/features/signatures/slots.client";
 import { formatMoney } from "@/lib/money";
 import { ActionSheet, type ActionSheetItem } from "@/ui/components/ActionSheet";
 import { Button } from "@/ui/components/Button";
 import { TextArea } from "@/ui/components/Field";
-import { IconButton } from "@/ui/components/IconButton";
 import { ListSection } from "@/ui/components/List";
 import { toast } from "@/ui/components/Toast";
 import {
@@ -28,7 +27,13 @@ import { DeclineSheet, SendDocSheet, VerbalApprovalSheet } from "./DocSheets";
 
 // Change order (SPEC M07): the extra work beyond the signed estimate, as its own
 // signed document. Approval adds its lines to the job's draft invoice and feeds
-// getChangeOrderStatus (B4 start/complete controls).
+// getChangeOrderStatus (B4 start/complete controls). Sign here opens the same
+// one-step landscape approval as estimates (Quote to Paid E4), a lazy chunk.
+
+const SignatureApproval = dynamic(
+  () => import("@/features/signatures/approval.client"),
+  { ssr: false },
+);
 
 type Res = { ok: true; data?: unknown } | { ok: false; error: string };
 const report = (r: Res, msg?: string) => {
@@ -73,6 +78,9 @@ export function ChangeOrderEditor({
   >(null);
   const [reason, setReason] = useState(co.reason);
   const [pending, start] = useTransition();
+  // Mounted on first use and kept (its close animation).
+  const [signArmed, setSignArmed] = useState(false);
+  if (sheet === "sign" && !signArmed) setSignArmed(true);
   const more: ActionSheetItem[] = [
     ...(open && perms.approveOnBehalf && lines.length
       ? [
@@ -120,13 +128,14 @@ export function ChangeOrderEditor({
             </Button>
           ) : null}
           {more.length > 0 ? (
-            <IconButton
-              label="More actions"
-              variant="gray"
+            <Button
+              size="lg"
+              variant="secondary"
               onClick={() => setSheet("more")}
+              aria-haspopup="menu"
             >
-              <Ellipsis size={20} />
-            </IconButton>
+              More
+            </Button>
           ) : null}
         </div>
       ) : null}
@@ -232,26 +241,33 @@ export function ChangeOrderEditor({
             : r;
         }}
       />
-      <SignatureSheet
-        open={sheet === "sign"}
-        onOpenChange={(o) => !o && setSheet(null)}
-        title={`Approve ${co.number}`}
-        docType="change_order"
-        consentText={consentText}
-        summaryLines={[
-          co.reason,
-          `Additional: ${formatMoney(totalCents)}`,
-          ...(previousCents != null
-            ? [`New total: ${formatMoney(previousCents + totalCents)}`]
-            : []),
-        ]}
-        signerNameDefault={customerName}
-        action={(s) => signChangeOrderInPerson({ ...s, changeOrderId: co.id })}
-        onSigned={() => {
-          setSheet(null);
-          router.refresh();
-        }}
-      />
+      {signArmed ? (
+        <SignatureApproval
+          open={sheet === "sign"}
+          onOpenChange={(o) => !o && setSheet(null)}
+          title={`Sign to approve ${co.number}`}
+          totalLabel={formatMoney(totalCents)}
+          docType="change_order"
+          consentText={consentText}
+          signerNameDefault={customerName}
+          summary={
+            <p className="px-1 text-footnote text-label-2">
+              <span className="font-semibold text-label">{co.reason}</span>
+              {` · additional ${formatMoney(totalCents)}`}
+              {previousCents != null
+                ? ` · new total ${formatMoney(previousCents + totalCents)}`
+                : ""}
+            </p>
+          }
+          action={(s) =>
+            signChangeOrderInPerson({ ...s, changeOrderId: co.id })
+          }
+          onSigned={() => {
+            setSheet(null);
+            router.refresh();
+          }}
+        />
+      ) : null}
       <VerbalApprovalSheet
         open={sheet === "verbal"}
         onClose={() => setSheet(null)}

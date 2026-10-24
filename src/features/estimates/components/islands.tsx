@@ -9,16 +9,3 @@ import dynamic from "next/dynamic";
 export const LazyNewChangeOrderButton = dynamic(() =>
   import("./NewChangeOrderButton").then((m) => m.NewChangeOrderButton),
 );
-
-/** After signing (E5): only approved estimates load it. */
-export const LazyAfterSigning = dynamic(() =>
-  import("./AfterSigning").then((m) => m.AfterSigning),
-);
-
-/** Estimate photos (E6): the camera button and the job-photo chooser. */
-export const LazyEstimatePhotoButton = dynamic(() =>
-  import("./EstimatePhotoControls").then((m) => m.EstimatePhotoButton),
-);
-export const LazyChooseEstimatePhotos = dynamic(() =>
-  import("./EstimatePhotoControls").then((m) => m.ChooseEstimatePhotos),
-);

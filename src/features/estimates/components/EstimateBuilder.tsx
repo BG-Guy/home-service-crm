@@ -33,6 +33,10 @@ import {
 import { optionTotals } from "../logic";
 import { PresentEstimateButton } from "./PresentEstimateButton";
 
+// Item cards (the option card): a lazy chunk the line editor renders (E2).
+const LineCards = dynamic(
+  () => import("@/features/invoices/components/LineCards"),
+);
 const loadSheets = () => import("./EstimateBuilderSheets");
 const EstimateBuilderSheets = dynamic(loadSheets, { ssr: false });
 const prefetch = () => void loadSheets();
@@ -350,7 +354,7 @@ export function EstimateBuilder({
         {active ? (
           <LineEditor
             key={active.id}
-            layout="cards"
+            cardsView={LineCards}
             variant="estimate"
             header={`${active.label} items`}
             pickerTitle={`Add to ${active.label}`}

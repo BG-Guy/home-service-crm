@@ -14,17 +14,17 @@ import {
   DocLinkStrip,
 } from "@/features/estimates/components/ApprovedSummary";
 import {
+  LazyAfterSigning,
+  LazyChooseEstimatePhotos,
+  LazyEstimatePhotoButton,
+} from "@/features/estimates/components/builder-islands";
+import {
   EstimateActionsProvider,
   EstimateBar,
   EstimateBuilder,
 } from "@/features/estimates/components/EstimateBuilder";
 import { EstimateDocument } from "@/features/estimates/components/EstimateDocument";
 import { EstimatePhotos } from "@/features/estimates/components/EstimatePhotos";
-import {
-  LazyAfterSigning,
-  LazyChooseEstimatePhotos,
-  LazyEstimatePhotoButton,
-} from "@/features/estimates/components/islands";
 import { PreviewEstimateButton } from "@/features/estimates/components/PresentEstimateButton";
 import {
   loadEstimateDocForViewer,

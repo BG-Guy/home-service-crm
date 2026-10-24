@@ -198,8 +198,9 @@ export function EstimateApproval({
           ref={scroller}
           onScroll={multi ? onScroll : undefined}
           className={cx(
+            // `relative`: the cards' offsetLeft is measured from the scroller.
             multi &&
-              "-mx-[var(--gutter)] flex snap-x snap-mandatory items-start gap-3 overflow-x-auto px-[var(--gutter)] [scrollbar-width:none]",
+              "relative -mx-[var(--gutter)] flex snap-x snap-mandatory items-start gap-3 overflow-x-auto px-[var(--gutter)] [scrollbar-width:none]",
             "pt-4 pb-3",
           )}
         >

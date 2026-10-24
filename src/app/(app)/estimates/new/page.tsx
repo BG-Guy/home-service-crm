@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import {
-  NewEstimateForm,
-  StartEstimateFromJob,
-} from "@/features/estimates/components/NewEstimateForm";
+  LazyNewEstimateForm as NewEstimateForm,
+  LazyStartEstimate as StartEstimateFromJob,
+} from "@/features/estimates/components/builder-islands";
 import { getJobForUser } from "@/features/jobs/api";
 import { getLeadPrefill } from "@/features/leads/api";
 import { requireUser } from "@/lib/auth/current";
