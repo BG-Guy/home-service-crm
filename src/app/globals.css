@@ -213,6 +213,7 @@
     --shadow-float: 0 16px 48px rgb(0 0 0 / 0.6), 0 2px 10px rgb(0 0 0 / 0.4);
     --scrim: rgb(0 0 0 / 0.6);
     --tint-a: 16%;
+    --glow: 40%;
     --ink-blue: #5eacff;
     --ink-green: #38d25c;
     --ink-red: #ff7c75;
@@ -260,6 +261,7 @@
   --shadow-float: 0 16px 48px rgb(0 0 0 / 0.6), 0 2px 10px rgb(0 0 0 / 0.4);
   --scrim: rgb(0 0 0 / 0.6);
   --tint-a: 16%;
+  --glow: 40%;
   --ink-blue: #5eacff;
   --ink-green: #38d25c;
   --ink-red: #ff7c75;
@@ -880,10 +882,17 @@
     min-height: 52px;
     padding-inline: 24px;
   }
+  /* Main buttons glow softly in their own fill (red on a destructive confirm);
+     the glow settles when pressed and is lighter in dark mode (--glow). */
   .btn-primary {
     background: var(--btn-fill)
       linear-gradient(rgb(255 255 255 / 0.06), rgb(0 0 0 / 0.06));
     color: var(--on-accent);
+    box-shadow: 0 8px 22px -8px
+      color-mix(in srgb, var(--btn-fill) var(--glow, 60%), transparent);
+  }
+  .btn-primary:active {
+    --glow: 30%;
   }
   .btn-primary.btn-destructive {
     color: #fff;
@@ -922,6 +931,7 @@
   .btn[aria-disabled="true"] {
     pointer-events: none;
     opacity: 0.4;
+    box-shadow: none;
   }
   /* Loading stays at full color; .btn-busy keeps the width (label invisible) */
   .btn[aria-busy="true"] {
