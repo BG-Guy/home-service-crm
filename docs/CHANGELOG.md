@@ -2,6 +2,40 @@
 
 ## Unreleased
 
+### Quote to Paid, Part E: estimates, presenting, signing, price book, photos (2026-10-24)
+- Never bill the same work twice: invoice lines now record their source (migration 0007:
+  `line_items.source_type` estimate / change_order / lead_quote / part / manual, and `source_id`).
+  Approving an estimate onto the job's DRAFT invoice replaces what it billed (the lead's quote,
+  earlier estimates and change orders, manual lines; logged in the invoice's activity) and keeps
+  parts used on the job (a purchase, a stock move or the parts flow) and service-call fees; a kept
+  part covers its copy on the estimate. A new estimate on a job starts from the draft invoice's
+  lines. Change orders still append. An issued invoice is left alone and the approval says so.
+  Other open estimates on the job become "Replaced" (`superseded`: not signable, not in the signed
+  total or the close rate, reopenable). The signed total is the newest approved estimate plus the
+  change orders signed after it, so J-1070 stays at $876.89 with no change order needed.
+- Builder (`/estimates/[id]`, violet): from a job, "Create estimate" starts the draft at once;
+  option pills with totals (★ recommended, "+ Option", "Edit option"); item cards with a type
+  tile, the full name, an inline − 2 + stepper and the line total; the sticky bar follows the
+  selected option with Present as the main button and Send second; Sign here, Print or PDF and
+  More are named buttons; Preview in the nav bar; a link strip EST → job → invoice; a note when
+  approving would replace the invoice's lines.
+- Price book: one tap adds an item, a second tap adds one more, picked rows show a stepper,
+  "Done · 3 items added"; category chips wrap with "Recent" first (your recent estimate and
+  invoice items); a custom item is name, price and quantity with the rest under "More details".
+  The same picker serves invoices and change orders (`LineEditor` `onSave` may resolve `{ id }`
+  and receives `{ quiet }` for picker taps and steppers).
+- Presenting: one option per screen (swipe, the recommended one first, page dots), each with its
+  photo, price, notes, what's included and its add-ons; "Choose Better · $450.73" goes straight to
+  a full-screen landscape signature (consent text and checkbox, name, pad, "Approve $450.73").
+  Present mode and Preview never count as the customer (no access-log row, no "viewed").
+- After signing: "Approved · Better · $450.73" with the signature and the link strip; "When is
+  the work?" now, or schedule later (the lines and the open deposit move to an unscheduled
+  follow-up job; "Move it back" while it's unbooked and unpaid; locked once a deposit is paid);
+  Collect deposit, Text a pay link, Not now.
+- Estimate photos: take or upload a Problem / Goal photo and attach it, or choose up to 8 job
+  photos (`setEstimatePhotos`); the customer page, the cards and the PDF show them with their
+  labels; approving locks them as evidence.
+
 ### Notifications: type icons, cards, filters, sort and a peek (2026-10-23)
 - Every notification shows its type's icon on its color (`src/features/notify/kinds.ts`: new
   lead blue, unconfirmed job orange, estimate approved green, new text green, chargeback red…),

@@ -266,19 +266,15 @@ function SignSummary({
   coolingOff: boolean;
 }) {
   const extras = option.lines.filter((l) => l.isOptional);
+  const items = option.lines.length - extras.length;
   return (
     <div className="flex flex-col gap-3">
-      <div className="rounded-card bg-card p-3 shadow-card">
-        <p className="flex items-baseline justify-between gap-3">
-          <span className="text-headline">
-            {multi ? option.label : "Total"}
-          </span>
-          <span className="num text-headline">{formatMoney(totalCents)}</span>
-        </p>
-        <p className="text-footnote text-label-2">
-          {option.lines.filter((l) => !l.isOptional).length} items
-        </p>
-      </div>
+      <p className="px-1 text-footnote text-label-2">
+        <span className="font-semibold text-label">
+          {multi ? option.label : "Total"} · {formatMoney(totalCents)}
+        </span>
+        {` · ${items} ${items === 1 ? "item" : "items"}`}
+      </p>
       {extras.length > 0 ? (
         <div className="list-card">
           {extras.map((l) => (

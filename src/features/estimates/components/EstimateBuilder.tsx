@@ -44,7 +44,6 @@ export type BuilderSheet =
   | "option"
   | "details"
   | "sign"
-  | "signpad"
   | "verbal"
   | "decline"
   | "add";

@@ -15,6 +15,62 @@ const CHANNEL: Record<string, string> = {
   verbal: "verbal approval",
 };
 
+const chip =
+  "inline-flex items-center gap-1 rounded-pill bg-card px-3 py-1 font-semibold shadow-card";
+
+/** EST-1026 → J-1079 → INV-1067: the estimate, its job and the job's invoice. */
+export function DocLinkStrip({
+  number,
+  approved,
+  job,
+  invoice,
+  className,
+}: {
+  number: string;
+  approved?: boolean;
+  job: { id: string; number: string } | null;
+  invoice: { id: string; number: string } | null;
+  className?: string;
+}) {
+  return (
+    <nav
+      aria-label="Estimate, job and invoice"
+      className={`flex flex-wrap items-center gap-1.5 text-subhead ${className ?? ""}`}
+    >
+      <span
+        className={approved ? `${chip} text-success` : chip}
+        style={
+          approved
+            ? {
+                background:
+                  "color-mix(in srgb, var(--sys-green) var(--tint-a), var(--card))",
+              }
+            : undefined
+        }
+      >
+        {approved ? <Check size={14} strokeWidth={3} aria-hidden /> : null}
+        {number}
+      </span>
+      {job ? (
+        <>
+          <ArrowRight size={14} aria-hidden className="text-label-3" />
+          <Link href={`/jobs/${job.id}`} className={chip}>
+            {job.number}
+          </Link>
+        </>
+      ) : null}
+      {invoice ? (
+        <>
+          <ArrowRight size={14} aria-hidden className="text-label-3" />
+          <Link href={`/invoices/${invoice.id}`} className={chip}>
+            {invoice.number}
+          </Link>
+        </>
+      ) : null}
+    </nav>
+  );
+}
+
 export function ApprovedSummary({
   number,
   optionLabel,
@@ -36,8 +92,6 @@ export function ApprovedSummary({
   job: { id: string; number: string } | null;
   invoice: { id: string; number: string } | null;
 }) {
-  const chip =
-    "inline-flex items-center gap-1 rounded-pill bg-card px-3 py-1 font-semibold shadow-card";
   return (
     <section
       aria-label="Approved"
@@ -79,37 +133,13 @@ export function ApprovedSummary({
           className="mt-3 h-16 w-auto max-w-60 rounded-lg bg-white object-contain px-3 py-1"
         />
       ) : null}
-      <nav
-        aria-label="Estimate, job and invoice"
-        className="mt-4 flex flex-wrap items-center justify-center gap-1.5 text-subhead"
-      >
-        <span
-          className={`${chip} text-success`}
-          style={{
-            background:
-              "color-mix(in srgb, var(--sys-green) var(--tint-a), var(--card))",
-          }}
-        >
-          <Check size={14} strokeWidth={3} aria-hidden />
-          {number}
-        </span>
-        {job ? (
-          <>
-            <ArrowRight size={14} aria-hidden className="text-label-3" />
-            <Link href={`/jobs/${job.id}`} className={chip}>
-              {job.number}
-            </Link>
-          </>
-        ) : null}
-        {invoice ? (
-          <>
-            <ArrowRight size={14} aria-hidden className="text-label-3" />
-            <Link href={`/invoices/${invoice.id}`} className={chip}>
-              {invoice.number}
-            </Link>
-          </>
-        ) : null}
-      </nav>
+      <DocLinkStrip
+        number={number}
+        approved
+        job={job}
+        invoice={invoice}
+        className="mt-4 justify-center"
+      />
       {signature ? (
         <p className="mt-4 text-caption text-label-3 [overflow-wrap:anywhere]">
           {[

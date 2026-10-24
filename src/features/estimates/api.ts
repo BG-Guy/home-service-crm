@@ -1709,6 +1709,13 @@ async function latestJobInvoice(exec: Tx, jobId: string) {
   return inv ?? null;
 }
 
+/** The job's latest non-void invoice, for the link strip EST → job → invoice. */
+export function jobInvoiceBrief(
+  jobId: string,
+): Promise<{ id: string; number: string; status: string } | null> {
+  return latestJobInvoice(db, jobId);
+}
+
 const estimateLinesOn = (invoiceId: string, estimateId: string) =>
   and(
     eq(lineItems.parentType, "invoice"),

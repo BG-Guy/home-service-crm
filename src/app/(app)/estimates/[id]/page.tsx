@@ -3,9 +3,16 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CustomerCard } from "@/features/customers/slots";
 import { assertEstimateAccess } from "@/features/estimates/access";
-import { draftInvoiceImpact, workState } from "@/features/estimates/api";
+import {
+  draftInvoiceImpact,
+  jobInvoiceBrief,
+  workState,
+} from "@/features/estimates/api";
 import { complianceNotes } from "@/features/estimates/compliance";
-import { ApprovedSummary } from "@/features/estimates/components/ApprovedSummary";
+import {
+  ApprovedSummary,
+  DocLinkStrip,
+} from "@/features/estimates/components/ApprovedSummary";
 import {
   EstimateActionsProvider,
   EstimateBar,
@@ -68,7 +75,7 @@ export default async function EstimatesIdPage({
   if (!doc) notFound();
   const e = doc.estimate;
   const open = isEstimateOpen(e.status);
-  const [settings, company, tagMap, impact, replacedBy, work] =
+  const [settings, company, tagMap, impact, replacedBy, work, jobInvoice] =
     await Promise.all([
       getSettings(),
       findCompany(),
@@ -76,6 +83,9 @@ export default async function EstimatesIdPage({
       open && doc.job ? draftInvoiceImpact(doc.job.id) : Promise.resolve(null),
       e.status === "superseded" ? replacementFor(e) : Promise.resolve(null),
       e.status === "approved" ? workState(e.id) : Promise.resolve(null),
+      e.status !== "approved" && doc.job
+        ? jobInvoiceBrief(doc.job.id)
+        : Promise.resolve(null),
     ]);
   const tz = doc.timezone;
   const canCreate = user.perms.has("estimates.create");
@@ -197,6 +207,14 @@ export default async function EstimatesIdPage({
                 </div>
                 <StatusPill kind="estimate" status={e.status} />
               </section>
+              {doc.job && e.status !== "approved" ? (
+                <DocLinkStrip
+                  number={e.number}
+                  job={doc.job}
+                  invoice={jobInvoice}
+                  className="px-1"
+                />
+              ) : null}
 
               {e.status === "viewed" && e.viewedAt ? (
                 <Banner tone="info" title="The customer opened it">
