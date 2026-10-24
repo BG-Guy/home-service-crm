@@ -1,6 +1,6 @@
 "use client";
 
-import { Link2, Mail, MessageSquare } from "lucide-react";
+import { Copy, Link2, Mail, MessageSquare } from "lucide-react";
 import { useEffect, useState, useTransition } from "react";
 import {
   type QueuedOutcome,
@@ -9,6 +9,7 @@ import {
 import { formatMoney } from "@/lib/money";
 import { Banner } from "@/ui/components/Banner";
 import { Button } from "@/ui/components/Button";
+import { IconButton } from "@/ui/components/IconButton";
 import { KeyValueList } from "@/ui/components/KeyValueList";
 import { Sheet } from "@/ui/components/Sheet";
 import { Skeleton } from "@/ui/components/Skeleton";
@@ -148,41 +149,61 @@ export function ReceiptSheet({
   onOpenChange: (open: boolean) => void;
   paymentId: string;
 }) {
-  const [data, setData] = useState<ReceiptView | null>(null);
+  const [loaded, setLoaded] = useState<ReceiptView | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [linked, setLinked] = useState<{ id: string; url: string } | null>(
+    null,
+  );
   const [linking, startLink] = useTransition();
+  // Only this payment's receipt and link: a sheet kept mounted while the invoice's
+  // latest payment changes never shows the previous one.
+  const data = loaded?.paymentId === paymentId ? loaded : null;
+  const url = linked?.id === paymentId ? linked.url : null;
   useEffect(() => {
     if (!open) return;
     let live = true;
-    loadReceipt({ paymentId }).then((r) => {
-      if (!live) return;
-      if (r.ok && r.data) setData(r.data);
-      else setError(r.ok ? "Couldn't load the receipt." : r.error);
-    });
+    setError(null); // reopening retries after a failed load
+    loadReceipt({ paymentId }).then(
+      (r) => {
+        if (!live) return;
+        if (r.ok && r.data) setLoaded(r.data);
+        else setError(r.ok ? "Couldn't load the receipt." : r.error);
+      },
+      () => live && setError("Couldn't load the receipt. Check your signal."),
+    );
     return () => {
       live = false;
     };
   }, [open, paymentId]);
 
-  const share = () =>
+  const shareUrl = async (link: string) => {
+    try {
+      if (navigator.share)
+        await navigator.share({ title: "Payment receipt", url: link });
+      else {
+        await navigator.clipboard.writeText(link);
+        toast({ title: "Receipt link copied", tone: "success" });
+      }
+    } catch (e) {
+      // Closing the share sheet is fine; anything else (iOS refuses a share that
+      // isn't right after a tap) leaves the link below to copy, and says so.
+      if ((e as Error | null)?.name !== "AbortError")
+        toast({ title: "Couldn't share. Copy the link below." });
+    }
+  };
+  const share = () => {
+    // A link we already have shares inside the tap itself (iOS needs that).
+    if (url) return void shareUrl(url);
     startLink(async () => {
       const r = await receiptLink({ paymentId });
       if (!r.ok || !r.data) {
         toast({ title: r.ok ? "No link" : r.error, tone: "error" });
         return;
       }
-      const url = r.data.url;
-      try {
-        if (navigator.share)
-          await navigator.share({ title: "Payment receipt", url });
-        else {
-          await navigator.clipboard.writeText(url);
-          toast({ title: "Receipt link copied", tone: "success" });
-        }
-      } catch {
-        /* share cancelled */
-      }
+      setLinked({ id: paymentId, url: r.data.url });
+      await shareUrl(r.data.url);
     });
+  };
 
   return (
     <Sheet
@@ -238,6 +259,29 @@ export function ReceiptSheet({
               >
                 Share the receipt link
               </Button>
+            ) : null}
+            {url ? (
+              <div className="flex items-center gap-2 rounded-card bg-card px-3 py-2 shadow-card">
+                <span className="min-w-0 flex-1 truncate text-footnote text-label-2">
+                  {url}
+                </span>
+                <IconButton
+                  label="Copy link"
+                  size={36}
+                  onClick={() =>
+                    navigator.clipboard.writeText(url).then(
+                      () => toast({ title: "Link copied", tone: "success" }),
+                      () =>
+                        toast({
+                          title: "Couldn't copy. Select the link instead.",
+                          tone: "error",
+                        }),
+                    )
+                  }
+                >
+                  <Copy size={18} />
+                </IconButton>
+              </div>
             ) : null}
           </>
         )}

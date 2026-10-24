@@ -5,6 +5,7 @@ import { estimates, payments, signatures } from "@/db/schema";
 import { getMediaUrls, invoicePhotoState } from "@/features/media/api";
 import type { InvoiceDoc } from "./doc";
 import { invoicePhotoLabel } from "./photo-labels";
+import { creditTotals } from "./screen-copy";
 
 // Read model for the invoice screen's section cards (Quote to Paid, Part I): the
 // approved estimate behind the invoice (number, option, signed total, signature), the
@@ -39,7 +40,7 @@ export interface InvoiceScreenData {
   } | null;
   /** The customer's "work is done" sign-off on the job (latest). */
   completion: SignatureView | null;
-  /** Deposits applied to this invoice (positive cents). */
+  /** Deposits applied to this invoice, net of their refunds (positive cents). */
   depositCents: number;
   /** Other payments on this invoice, net of their refunds (positive cents). */
   paidCents: number;
@@ -153,15 +154,7 @@ export async function loadInvoiceScreenData(
   const estSig = sigs.find((s) => s.id === est?.signatureId);
   const snap = (estSig?.snapshot ?? null) as Snapshot;
 
-  let depositCents = 0;
-  let paidCents = 0;
-  let creditCents = 0;
-  for (const c of doc.credits) {
-    if (c.kind === "deposit") depositCents += c.amountCents;
-    else if (c.kind === "credit_note") creditCents += c.amountCents;
-    else if (c.kind === "payment" || c.kind === "refund")
-      paidCents += c.amountCents;
-  }
+  const { depositCents, paidCents, creditCents } = creditTotals(doc.credits);
 
   return {
     estimate: est

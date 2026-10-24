@@ -365,11 +365,23 @@ describe("I2 Get paid on a draft", () => {
     if (!refused.ok) expect(refused.error).toBe("Issue the invoice first.");
     const r = await createPayLink({ invoiceId: d.invoiceId, issueDraft: true });
     expect(r.ok, r.ok ? "" : r.error).toBe(true);
-    if (r.ok) expect(r.data?.url).toMatch(/\/p\//);
+    if (!r.ok) return;
+    expect(r.data?.url).toMatch(/\/p\//);
     expect((await invoiceRow(d.invoiceId))?.status).toBe("issued");
+    // Picking "Pay on their phone" again shows the same QR: no second link, no
+    // second issue, one line on the timeline.
+    const again = await createPayLink({
+      invoiceId: d.invoiceId,
+      issueDraft: true,
+    });
+    expect(again.ok && again.data?.url).toBe(r.data?.url);
     expect((await issuedEvents(d.invoiceId)).map((e) => e.via)).toEqual([
       "collect",
     ]);
+    const [created] = await execRows<{ n: number }>(
+      sql`select count(*)::int as n from activity where kind = 'payment.link_created' and entity_id = ${d.invoiceId}`,
+    );
+    expect(created?.n).toBe(1);
   });
 
   it("an empty draft has nothing to collect yet (not 'paid in full')", async () => {
@@ -645,6 +657,24 @@ describe("I6 Preview as the customer", () => {
     expect(p?.name).toBe("Derek Novak");
     auth.user = null;
     expect(await invoicePreviewer(token)).toBeNull();
+  });
+
+  it("masks the customer's contact for a tech outside the contact window", async () => {
+    const d = await draftJob(5_000);
+    auth.user = tech; // completed, unscheduled job: no contact window
+    const r = await previewInvoice({ invoiceId: d.invoiceId });
+    if (!r.ok || !r.data) throw new Error("preview");
+    const token = r.data.href.slice(3, r.data.href.indexOf("?"));
+    const masked = (await invoicePreviewer(token))?.doc;
+    expect(masked?.customer.phone).toBe("•••• 0117");
+    expect(masked?.customer.email).toBe("s•••@example.com");
+    expect(masked?.property?.addressLines.join(" ")).not.toContain("8106");
+
+    auth.user = admin; // sees contact details everywhere
+    const full = (await invoicePreviewer(token))?.doc;
+    expect(full?.customer.phone).toBe("+13035550117");
+    expect(full?.customer.email).toBe("sophia@example.com");
+    expect(full?.property?.addressLines.join(" ")).toContain("8106");
   });
 });
 

@@ -1,5 +1,6 @@
 // Golden: the invoice screen's plain words and photo labels (Quote to Paid, Part I).
 import { describe, expect, it } from "vitest";
+import type { DocCredit } from "@/features/invoices/money-lines";
 import {
   INVOICE_PHOTO_TAGS,
   invoiceLabelTag,
@@ -8,6 +9,7 @@ import {
 } from "@/features/invoices/photo-labels";
 import {
   balanceParts,
+  creditTotals,
   customerShortName,
   describeSend,
   minusMoney,
@@ -75,6 +77,42 @@ describe("balance line", () => {
         creditCents: 0,
       }),
     ).toEqual([{ text: "Total $140.36" }]);
+  });
+
+  it("a refund nets against what it refunded, so the line still adds up", () => {
+    const at = new Date("2026-10-20T15:00:00Z");
+    const credit = (
+      id: string,
+      kind: DocCredit["kind"],
+      amountCents: number,
+      paymentId: string | null = id,
+    ): DocCredit => ({
+      id,
+      kind,
+      label: id,
+      at,
+      amountCents,
+      tipCents: 0,
+      status: "succeeded",
+      paymentId,
+    });
+    const totals = creditTotals([
+      credit("dep", "deposit", 9_000),
+      credit("pay", "payment", 20_000),
+      credit("tip", "tip_only", 0),
+      credit("cn", "credit_note", 1_500, null),
+      credit("r1", "refund", -9_000, "dep"), // the deposit, refunded in full
+      credit("r2", "refund", -5_000, "pay"), // part of the payment
+    ]);
+    expect(totals).toEqual({
+      depositCents: 0,
+      paidCents: 15_000,
+      creditCents: 1_500,
+    });
+    // $500.00 − $150.00 − $15.00 = $335.00 due: every part shown, none hidden.
+    expect(
+      balanceParts({ totalCents: 50_000, ...totals }).map((p) => p.text),
+    ).toEqual(["Total $500.00", "Paid −$150.00", "Credits −$15.00"]);
   });
 
   it("money and quantities read like a receipt", () => {

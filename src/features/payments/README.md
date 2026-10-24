@@ -16,8 +16,11 @@ always derived (`invoice_balances` view); ledgers are append-only.
   `recordPayment`), reference # / check-photo rules, risk-band card restrictions (High: 3DS
   link only; Critical + `cash_only`: no card/Venmo), split payments ("Collect the remaining
   $X"). On a DRAFT invoice getting paid issues it first, in the same transaction
-  (`issueDraft` on `recordManualPayment` / `createPayLink` / `sendPayLink`, `via: "collect"`);
-  an empty draft has nothing to collect. Manual methods go through the offline outbox
+  (`issueDraft` on `recordManualPayment` / `createPayLink` / `sendPayLink`, `via: "collect"`;
+  the row is locked first); picking "Pay on their phone" on a draft waits for "Show the QR
+  code" or "Text the link" before issuing it. The QR's link (`createPayLink`) is reused for a
+  while (`mintOrReusePublicToken`, purpose `pay.collect`); a texted link is fresh. An empty
+  draft has nothing to collect. Manual methods go through the offline outbox
   (`payments.recordManual`, idempotent on `clientId`). Success: the invoice's payments, "Send
   the receipt: Text / Email" (`sendReceipt` with a channel; the result is said in place),
   "Receipt emailed to …" (`receiptStatus`), View receipt (`ReceiptSheet`, `loadReceipt`; its

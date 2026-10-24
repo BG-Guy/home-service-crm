@@ -24,7 +24,8 @@ total − paid + refunded − credited).
 - **Viewed** (`viewed.ts`): the customer's first view of an issued invoice on `/i/` emits
   `invoice.viewed` and writes "Customer opened invoice INV-1067" (once per invoice: an earlier
   activity row; never drafts, voids or staff). `?preview=1` with a staff session is a preview:
-  the token is only peeked at (no access-log row), drafts show, Pay is off, a banner says so.
+  the token is only peeked at (no access-log row), drafts show, Pay is off, a banner says so,
+  and the contact is masked outside the previewer's contact window (`invoicePreviewer`).
 - **Revise** (`invoices.revise`): same number, version + 1, full snapshot + sha256 + line diff +
   reason; flagged `afterPayment` when money was already received (anomaly report).
 - **Credit notes** reduce the balance; **void** (no payments) and **write off** (`invoices.void`).

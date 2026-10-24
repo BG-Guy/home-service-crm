@@ -2,6 +2,7 @@ import "server-only";
 import { and, eq } from "drizzle-orm";
 import type { Tx } from "@/db";
 import { activity, invoices } from "@/db/schema";
+import { contactRevealedFor } from "@/features/customers/api";
 import { peekPublicToken } from "@/features/portal/token";
 import { writeActivity } from "@/lib/activity";
 import { getCurrentUser } from "@/lib/auth/current";
@@ -9,6 +10,8 @@ import { emit } from "@/lib/events";
 import type { PublicTokenRow } from "@/lib/tokens";
 import type { Actor } from "@/lib/types";
 import { assertInvoiceAccess } from "./api";
+import { type InvoiceDoc, loadInvoiceDoc } from "./doc";
+import { maskInvoiceDoc } from "./masking";
 
 // The customer opening their invoice (Quote to Paid I6/I7): the first real view of an
 // issued invoice emits `invoice.viewed` (Part J's alert) and says so on the timeline;
@@ -76,11 +79,13 @@ export async function markInvoiceViewed(
 /**
  * The staff user previewing invoice link `token` (`?preview=1`), or null: a signed-in
  * user who may see this invoice. The token is only peeked at (no access-log row, no
- * use count). Anyone else gets the normal customer page.
+ * use count). Anyone else gets the normal customer page. `doc` is the invoice as this
+ * user may see it: outside their contact window the customer's email, phone and
+ * street are masked, exactly as on the staff invoice screen (SPEC §4.2).
  */
 export async function invoicePreviewer(
   token: string,
-): Promise<{ tok: PublicTokenRow; name: string } | null> {
+): Promise<{ tok: PublicTokenRow; name: string; doc: InvoiceDoc } | null> {
   const user = await getCurrentUser().catch(() => null);
   if (!user || !user.perms.has("invoices.view")) return null;
   const tok = await peekPublicToken(["invoice"], token);
@@ -90,7 +95,10 @@ export async function invoicePreviewer(
   } catch {
     return null;
   }
-  return { tok, name: user.name };
+  const doc = await loadInvoiceDoc(tok.entityId);
+  if (!doc) return null;
+  const { revealed } = await contactRevealedFor(user, doc.customer.id);
+  return { tok, name: user.name, doc: revealed ? doc : maskInvoiceDoc(doc) };
 }
 
 /** A signed-in staff user is looking (their opening of a link isn't the customer's). */

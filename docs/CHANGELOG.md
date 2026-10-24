@@ -13,15 +13,18 @@
 - One bar: Send + Get paid, Send receipt once paid. The bar owns its sheets in every state, so
   the success screen stays up when the payment turns the invoice paid.
 - Get paid on a draft issues it in the same transaction as the payment (offline replays included,
-  same clientId) or before the card pay link; `invoice.issued.via: "collect"` (and `"send"` for
-  Send on a draft) keeps the `invoice_sent` automation from texting it too. An empty draft has
-  nothing to collect yet (it used to say "paid in full").
+  same clientId) or when its card pay link is asked for (Show the QR code, Text the link; picking
+  the tile alone never issues it); `invoice.issued.via: "collect"` (and `"send"` for Send on a
+  draft) keeps the `invoice_sent` automation from texting it too. The draft row is locked before
+  it's issued, so Get paid on two phones (or Send and Get paid together) can't both issue it. An
+  empty draft has nothing to collect yet (it used to say "paid in full").
 - The payment sheet: the amount big with "Includes a $54.11 tip", one-tap tips, big method tiles
   ("Pay on their phone" = the pay link's QR + Text the link; Card off with its reason without a
   processor; cash, check, Zelle, Venmo with the business's pay instructions to read out), the main
   button in the sheet's sticky footer. Success: check, amount, method and tip, the invoice's
   payments, Send the receipt (Text / Email), "Receipt emailed to …", View receipt, Done. The QR's
-  pay page starts on the tip picked on the tech's phone.
+  pay page starts on the tip picked on the tech's phone, and the QR is the same link each time
+  the tile is picked (reused, one "Pay link created" on the timeline).
 - Receipts open in the app (a sheet), their share link is reused per payment. Sending says what
   happened in the sheet ("Ready to text", "Emailed to sophia@…", "Not sent: Sophia opted out of
   texts", "Will send at 8:00 AM"); the text card goes to the sender's own outbox inside their
@@ -32,6 +35,8 @@
   sheet picks, orders, relabels and takes new ones.
 - Preview as the customer: the customer's own `/i/` page full screen over the invoice (a frame in
   the kit FullscreenHub), drafts included, Pay off, a banner; no access-log row, no "viewed".
+  Outside the previewer's contact window the email, phone and street are masked, as on the staff
+  screen.
 - Invoice viewed: the customer's first view of an issued invoice emits `invoice.viewed` and writes
   "Customer opened invoice INV-1067" (once; never drafts, voids, staff or previews).
 - Budgets (production build, budget.md method, base 2e91e12 → now): `/invoices/[id]` route JS

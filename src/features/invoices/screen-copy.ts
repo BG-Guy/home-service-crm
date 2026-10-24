@@ -1,6 +1,7 @@
 // Plain words for the invoice screen (Quote to Paid, Part I). Pure and client-safe;
 // pinned by tests/golden/invoice-screen-copy.test.ts.
 import { formatMoney } from "@/lib/money";
+import type { DocCredit } from "./money-lines";
 
 /** "−$90.00": a true minus sign, the way receipts print it. */
 export function minusMoney(cents: number): string {
@@ -40,6 +41,33 @@ export function balanceParts(i: {
   if (i.creditCents > 0)
     parts.push({ text: `Credits ${minusMoney(i.creditCents)}`, off: true });
   return parts;
+}
+
+/**
+ * What came off the balance, for `balanceParts`. A refund nets against what it
+ * refunded (a refunded deposit lowers "Deposit", not "Paid"), so the line still adds
+ * up after one: total − deposit − paid − credits = balance due. Tip-only payments
+ * carry no balance.
+ */
+export function creditTotals(credits: readonly DocCredit[]): {
+  depositCents: number;
+  paidCents: number;
+  creditCents: number;
+} {
+  const kindOf = new Map<string, DocCredit["kind"]>();
+  for (const c of credits)
+    if (c.kind !== "refund" && c.paymentId) kindOf.set(c.paymentId, c.kind);
+  const t = { depositCents: 0, paidCents: 0, creditCents: 0 };
+  for (const c of credits) {
+    const kind =
+      c.kind === "refund"
+        ? (kindOf.get(c.paymentId ?? "") ?? "payment")
+        : c.kind;
+    if (kind === "deposit") t.depositCents += c.amountCents;
+    else if (kind === "credit_note") t.creditCents += c.amountCents;
+    else if (kind === "payment") t.paidCents += c.amountCents;
+  }
+  return t;
 }
 
 /**

@@ -74,7 +74,9 @@ export default async function ITokenPage({
     : await openPortalToken("invoice", token, "/i/[token]");
   if (!tok || tok.entityType !== "invoice")
     return <PortalExpired what="invoice link" />;
-  const doc = await loadInvoiceDoc(tok.entityId);
+  // A preview shows the invoice as the previewer may see it (contact masked outside
+  // their contact window); the customer gets their own record unmasked.
+  const doc = previewer ? previewer.doc : await loadInvoiceDoc(tok.entityId);
   if (!doc || (doc.invoice.status === "draft" && !previewer))
     return <PortalExpired what="invoice" />;
   const inv = doc.invoice;

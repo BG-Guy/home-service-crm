@@ -254,6 +254,8 @@ function CollectForm({
   const [done, setDone] = useState<Done | null>(null);
   const [pending, start] = useTransition();
   const [fieldErr, setFieldErr] = useState<Record<string, string[]>>({});
+  // The pay link issued the draft while this sheet was open (Show the QR code).
+  const [issuedHere, setIssuedHere] = useState(false);
 
   useEffect(() => {
     setAmount(due);
@@ -261,7 +263,7 @@ function CollectForm({
   }, [due]);
 
   const isPayment = target === "balance";
-  const issuing = isPayment && ctx.issuesDraft;
+  const issuing = isPayment && ctx.issuesDraft && !issuedHere;
   const tipsOn = ctx.tipsEnabled && isPayment;
   const tipCents =
     !tipsOn || amount == null
@@ -609,9 +611,11 @@ function CollectForm({
 
       {method === "card" ? (
         <CardPanel
+          key={target ?? "none"}
           ctx={ctx}
           target={target}
           issuing={issuing}
+          onIssued={() => setIssuedHere(true)}
           first={first}
           tipPct={typeof tipPct === "number" ? tipPct : 0}
         />
@@ -770,12 +774,15 @@ function CardPanel({
   ctx,
   target,
   issuing,
+  onIssued,
   first,
   tipPct,
 }: {
   ctx: CollectContext;
   target: Target | null;
   issuing: boolean;
+  /** A link was made for the draft, so it's issued now. */
+  onIssued: () => void;
   first: string;
   tipPct: number;
 }) {
@@ -783,16 +790,17 @@ function CardPanel({
   const [base, setBase] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<QueuedOutcome | null>(null);
   const [sent, setSent] = useState(false);
+  const [sending, setSending] = useState(false);
   const forDeposit = target === "deposit" && ctx.openDeposit;
   const canLink = forDeposit || (target === "balance" && ctx.invoiceId);
+  // A draft is issued only by a tap that asks for its link (Show the QR code, Text
+  // the link), never by picking this tile: backing out keeps the draft.
+  const asks = issuing && !forDeposit;
   // The tip picked here is the pay page's starting choice (they can change it).
   const url =
     base && !forDeposit && tipPct > 0 ? `${base}?tip=${tipPct}` : base;
 
-  // Picking "Pay on their phone" shows the QR right away (a draft is issued first).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: once per target
-  useEffect(() => {
-    if (!canLink || base) return;
+  const mint = () =>
     start(async () => {
       const r = await createPayLink(
         forDeposit
@@ -802,10 +810,18 @@ function CardPanel({
               issueDraft: issuing || undefined,
             },
       );
-      if (r.ok && r.data) setBase(r.data.url);
-      else if (!r.ok) toast.error(r.error);
+      if (r.ok && r.data) {
+        setBase(r.data.url);
+        if (asks) onIssued();
+      } else if (!r.ok) toast.error(r.error);
     });
-  }, [target]);
+
+  // Picking "Pay on their phone" shows the QR right away (the same link each time;
+  // the panel is keyed by target, so this runs once per target).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once on mount
+  useEffect(() => {
+    if (canLink && !asks) mint();
+  }, []);
 
   if (!canLink)
     return (
@@ -816,26 +832,32 @@ function CardPanel({
 
   const send = () =>
     start(async () => {
-      if (forDeposit) {
-        const r = await sendDepositLink({
-          depositRequestId: ctx.openDeposit?.id as string,
+      setSending(true);
+      try {
+        if (forDeposit) {
+          const r = await sendDepositLink({
+            depositRequestId: ctx.openDeposit?.id as string,
+          });
+          if (r.ok) {
+            setSent(true);
+            toast.success("Deposit link sent");
+          } else toast.error(r.error);
+          return;
+        }
+        const r = await sendPayLink({
+          invoiceId: ctx.invoiceId as string,
+          channel: "customer_preferred",
+          issueDraft: issuing || undefined,
+          clientId: uuid(),
         });
-        if (r.ok) {
-          setSent(true);
-          toast.success("Deposit link sent");
-        } else toast.error(r.error);
-        return;
+        if (r.ok && r.data) {
+          setBase((b) => b ?? r.data?.url ?? null);
+          setOutcome(r.data.outcome);
+          if (asks) onIssued();
+        } else if (!r.ok) toast.error(r.error);
+      } finally {
+        setSending(false);
       }
-      const r = await sendPayLink({
-        invoiceId: ctx.invoiceId as string,
-        channel: "customer_preferred",
-        issueDraft: issuing || undefined,
-        clientId: uuid(),
-      });
-      if (r.ok && r.data) {
-        setBase((b) => b ?? r.data?.url ?? null);
-        setOutcome(r.data.outcome);
-      } else if (!r.ok) toast.error(r.error);
     });
 
   return (
@@ -850,6 +872,16 @@ function CardPanel({
               __html: qrSvg(url, { title: "Pay link QR code" }),
             }}
           />
+        ) : asks && !pending ? (
+          <div
+            className="flex flex-col items-center justify-center gap-3 rounded-card bg-fill-2 p-4"
+            style={{ width: 256, height: 256 }}
+          >
+            <QrCode size={48} aria-hidden className="text-label-2" />
+            <Button variant="tinted" onClick={mint}>
+              Show the QR code
+            </Button>
+          </div>
         ) : (
           <Skeleton width={256} height={256} rounded="card" />
         )}
@@ -866,8 +898,12 @@ function CardPanel({
         <Button
           variant="tinted"
           icon={<MessageSquare size={18} aria-hidden />}
-          disabled={(!ctx.customerHasPhone && !ctx.customerHasEmail) || sent}
-          loading={pending && !!base}
+          disabled={
+            (!ctx.customerHasPhone && !ctx.customerHasEmail) ||
+            sent ||
+            (pending && !sending)
+          }
+          loading={sending}
           onClick={send}
         >
           Text the link

@@ -75,11 +75,12 @@ async function issueForCollect(
   actor: Actor,
   invoiceId: string,
 ): Promise<boolean> {
+  // Locked: a Send or Get paid on another phone can't issue it at the same time.
   const [cur] = await tx
     .select({ status: invoices.status })
     .from(invoices)
     .where(eq(invoices.id, invoiceId))
-    .limit(1);
+    .for("update");
   if (cur?.status !== "draft") return false;
   if (!user.perms.has("invoices.create"))
     throw new ForbiddenError(
@@ -88,6 +89,7 @@ async function issueForCollect(
     );
   await assertInvoiceAccess(user, invoiceId, "write");
   const r = await issueDraftInvoice(tx, invoiceId, "collect", actor);
+  if (!r.issued) return false;
   // Its own audit row: the action's row is the payment's.
   await writeAudit(tx, {
     actor,
@@ -360,6 +362,8 @@ async function invoicePayLink(
   invoiceId: string,
   /** "Get paid" on a draft: issue it first (Quote to Paid I2). */
   issue?: { user: SessionUser; actor: Actor },
+  /** The QR / copy link on the get-paid sheet: the same link for a while (T4-28). */
+  reuse = false,
 ) {
   if (issue) await issueForCollect(tx, issue.user, issue.actor, invoiceId);
   const [inv] = await tx
@@ -370,12 +374,15 @@ async function invoicePayLink(
   if (!inv) throw new NotFoundError("Invoice");
   if (inv.status === "void" || inv.status === "draft")
     throw new ConflictError("invoice_not_issued", "Issue the invoice first.");
-  const link = await mintPublicToken(tx, {
-    kind: "pay",
-    entity: { type: "invoice", id: invoiceId },
+  const mint = {
+    kind: "pay" as const,
+    entity: { type: "invoice", id: invoiceId } as const,
     customerId: inv.customerId,
     jobId: inv.jobId,
-  });
+  };
+  const link = reuse
+    ? await mintOrReusePublicToken(tx, { ...mint, purpose: "pay.collect" })
+    : { ...(await mintPublicToken(tx, mint)), reused: false };
   return { inv, link };
 }
 
@@ -410,11 +417,14 @@ export const createPayLink = action({
           "deposit_closed",
           "This deposit is no longer open.",
         );
-      const link = await mintPublicToken(tx, {
+      // The sheet shows this link as a QR each time "Pay on their phone" is picked:
+      // the same link for a while, not a new one per tap (T4-28).
+      const link = await mintOrReusePublicToken(tx, {
         kind: "pay",
         entity: { type: "deposit_request", id: d.d.id },
         customerId: d.customerId,
         jobId: d.d.jobId,
+        purpose: "pay.collect",
       });
       return { url: link.url, jobId: d.d.jobId };
     }
@@ -424,14 +434,16 @@ export const createPayLink = action({
       tx,
       invoiceId,
       input.issueDraft ? { user, actor } : undefined,
+      true,
     );
-    await activity({
-      entity: { type: "invoice", id: inv.id },
-      customerId: inv.customerId,
-      jobId: inv.jobId,
-      kind: "payment.link_created",
-      summary: `Pay link created for invoice ${inv.number}`,
-    });
+    if (!link.reused)
+      await activity({
+        entity: { type: "invoice", id: inv.id },
+        customerId: inv.customerId,
+        jobId: inv.jobId,
+        kind: "payment.link_created",
+        summary: `Pay link created for invoice ${inv.number}`,
+      });
     return { url: link.url, jobId: inv.jobId };
   },
   auditEntity: ({ input }) =>
@@ -604,6 +616,19 @@ function atLabel(d: Date, tz: string, now = new Date()): string {
   );
 }
 
+/** Someone who may read receipts in the app (and then only payments they can see). */
+async function receiptReader(): Promise<SessionUser> {
+  const user = await requireUser();
+  if (
+    !user.perms.has("payments.collect") &&
+    !user.perms.has("payments.record_manual") &&
+    !user.perms.has("payments.view_all") &&
+    !user.perms.has("invoices.view")
+  )
+    throw new ForbiddenError();
+  return user;
+}
+
 /**
  * The receipt, in the app (Quote to Paid I3): the receipt sheet and the get-paid
  * success screen read it instead of opening the customer's page in a new tab.
@@ -612,14 +637,7 @@ export async function loadReceipt(input: {
   paymentId: string;
 }): Promise<ActionResult<ReceiptView>> {
   try {
-    const user = await requireUser();
-    if (
-      !user.perms.has("payments.collect") &&
-      !user.perms.has("payments.record_manual") &&
-      !user.perms.has("payments.view_all") &&
-      !user.perms.has("invoices.view")
-    )
-      throw new ForbiddenError();
+    const user = await receiptReader();
     const p = await paymentFor(user, uuid.parse(input.paymentId));
     const [r, tz, cust, inv] = await Promise.all([
       getPaymentReceiptData(p.id),
@@ -741,7 +759,7 @@ export async function receiptStatus(input: {
   paymentId: string;
 }): Promise<ActionResult<ReceiptAutoSend[]>> {
   try {
-    const user = await requireUser();
+    const user = await receiptReader();
     const p = await paymentFor(user, uuid.parse(input.paymentId));
     const { revealed } = await contactRevealedFor(user, p.customerId);
     const rows = await db

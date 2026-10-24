@@ -75,15 +75,19 @@ export function InvoicePhotoSheet({
   useEffect(() => {
     if (!open) return;
     let live = true;
+    setError(null); // reopening retries after a failed load
     Promise.all([
       listPickablePhotos({ jobId, tags: [...INVOICE_PHOTO_TAGS] }),
       cfg ? null : getCaptureConfig(),
-    ]).then(([r, c]) => {
-      if (!live) return;
-      if (r.ok) setPhotos(r.data ?? []);
-      else setError(r.error);
-      if (c?.ok && c.data) setCfg(c.data);
-    });
+    ]).then(
+      ([r, c]) => {
+        if (!live) return;
+        if (r.ok) setPhotos(r.data ?? []);
+        else setError(r.error);
+        if (c?.ok && c.data) setCfg(c.data);
+      },
+      () => live && setError("Couldn't load the photos. Check your signal."),
+    );
     return () => {
       live = false;
     };

@@ -568,30 +568,41 @@ async function issueForSend(
   inv: typeof invoices.$inferSelect,
   user: Parameters<typeof assertInvoiceAccess>[0],
   actor: Parameters<typeof issueDraftInvoice>[3],
-): Promise<typeof invoices.$inferSelect> {
-  if (inv.status !== "draft") return inv;
-  if (!user.perms.has("invoices.create"))
-    throw new ConflictError(
-      "invoice_draft",
-      "Issue the invoice before sharing it.",
-    );
-  await assertInvoiceAccess(user, inv.id, "write");
-  const r = await issueDraftInvoice(tx, inv.id, "send", actor);
-  // Its own audit row: the action's row is the send's (or the link's).
-  await writeAudit(tx, {
-    actor,
-    action: "invoice.issued",
-    entity: { type: "invoice", id: inv.id },
-    after: { via: "send", total_cents: r.totalCents },
-    full: true,
-  });
+): Promise<{ inv: typeof invoices.$inferSelect; issued: boolean }> {
+  if (inv.status !== "draft") return { inv, issued: false };
+  // Locked re-read: a Get paid on another phone may have issued it a moment ago.
+  const [cur] = await tx
+    .select({ status: invoices.status })
+    .from(invoices)
+    .where(eq(invoices.id, inv.id))
+    .for("update");
+  let issued = false;
+  if (cur?.status === "draft") {
+    if (!user.perms.has("invoices.create"))
+      throw new ConflictError(
+        "invoice_draft",
+        "Issue the invoice before sharing it.",
+      );
+    await assertInvoiceAccess(user, inv.id, "write");
+    const r = await issueDraftInvoice(tx, inv.id, "send", actor);
+    issued = r.issued;
+    // Its own audit row: the action's row is the send's (or the link's).
+    if (issued)
+      await writeAudit(tx, {
+        actor,
+        action: "invoice.issued",
+        entity: { type: "invoice", id: inv.id },
+        after: { via: "send", total_cents: r.totalCents },
+        full: true,
+      });
+  }
   const [fresh] = await tx
     .select()
     .from(invoices)
     .where(eq(invoices.id, inv.id))
     .limit(1);
   if (!fresh) throw new NotFoundError("Invoice");
-  return fresh;
+  return { inv: fresh, issued };
 }
 
 /**
@@ -620,13 +631,13 @@ export const getInvoiceLink = action({
         "invoice_draft",
         "Issue the invoice before sharing it.",
       );
-    const inv = await issueForSend(tx, row, user, actor);
+    const { inv, issued } = await issueForSend(tx, row, user, actor);
     const { url } = await mintInvoiceLink(tx, inv);
     return {
       url: input.receiptPaymentId
         ? `${url}?receipt=${input.receiptPaymentId}`
         : url,
-      issued: row.status === "draft",
+      issued,
       jobId: inv.jobId,
     };
   },
@@ -697,7 +708,7 @@ export const sendInvoice = action({
       .limit(1);
     if (!row) throw new NotFoundError("Invoice");
     if (row.status === "void") throw new ConflictError("invoice_void");
-    const inv = await issueForSend(tx, row, user, actor);
+    const { inv, issued } = await issueForSend(tx, row, user, actor);
     const { url } = await mintInvoiceLink(tx, inv);
     const [b] = await tx
       .select()
@@ -754,7 +765,7 @@ export const sendInvoice = action({
       jobId: inv.jobId,
       status: res.status,
       url,
-      issued: row.status === "draft",
+      issued,
       outcome,
     };
   },
