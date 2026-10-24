@@ -680,9 +680,12 @@ export default async function JobPage({
         <Slot>
           <JobInvoicePanel jobId={job.id} />
         </Slot>
-        <Slot>
-          <JobPaymentsPanel jobId={job.id} />
-        </Slot>
+        {/* The money card's "All money" lands here (#payments). */}
+        <div id="payments" className="scroll-mt-24">
+          <Slot>
+            <JobPaymentsPanel jobId={job.id} />
+          </Slot>
+        </div>
       </div>
     ),
     parts: (

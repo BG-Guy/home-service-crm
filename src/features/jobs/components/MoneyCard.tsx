@@ -267,10 +267,10 @@ export function MoneyCard({
             <p className="mt-0.5 text-subhead text-label-2">{stage.detail}</p>
           )}
         </div>
+        {/* The Invoice tab, scrolled to its payments and deposits. */}
         <Link
-          href={`/jobs/${jobId}?tab=invoice`}
+          href={`/jobs/${jobId}?tab=invoice#payments`}
           replace
-          scroll={false}
           className="hit-44 flex shrink-0 items-center text-subhead font-semibold text-accent-text"
         >
           All money
