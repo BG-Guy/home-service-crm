@@ -12,14 +12,18 @@ import {
   EstimateBuilder,
 } from "@/features/estimates/components/EstimateBuilder";
 import { EstimateDocument } from "@/features/estimates/components/EstimateDocument";
-import { LazyAfterSigning } from "@/features/estimates/components/islands";
+import { EstimatePhotos } from "@/features/estimates/components/EstimatePhotos";
+import {
+  LazyAfterSigning,
+  LazyChooseEstimatePhotos,
+  LazyEstimatePhotoButton,
+} from "@/features/estimates/components/islands";
 import { PreviewEstimateButton } from "@/features/estimates/components/PresentEstimateButton";
 import {
   loadEstimateDocForViewer,
   replacementFor,
 } from "@/features/estimates/doc";
 import { isEstimateOpen } from "@/features/estimates/logic";
-import { CameraCaptureButton } from "@/features/media/slots.client";
 import { ActivityTimeline } from "@/features/notify/slots";
 import { getEntityTags } from "@/features/settings/api";
 import { TagEditor } from "@/features/settings/slots.client";
@@ -35,7 +39,6 @@ import { Avatar } from "@/ui/components/Avatar";
 import { Banner } from "@/ui/components/Banner";
 import { ListRow, ListSection } from "@/ui/components/List";
 import { NavBar } from "@/ui/components/NavBar";
-import { PhotoGrid } from "@/ui/components/PhotoGrid";
 import { StatusPill } from "@/ui/components/StatusPill";
 import { Morph } from "@/ui/motion/Morph";
 import { PageTransition } from "@/ui/motion/PageTransition";
@@ -364,39 +367,54 @@ export default async function EstimatesIdPage({
                 }}
                 consentText={doc.consentText}
                 coolingOff={doc.coolingOff}
+                actions={
+                  open && canCreate && doc.job ? (
+                    <LazyEstimatePhotoButton
+                      estimateId={e.id}
+                      jobId={doc.job.id}
+                    />
+                  ) : undefined
+                }
               >
                 {doc.job ? (
-                  <ListSection
-                    variant="title"
-                    header="Photos of the problem"
-                    footer="Problem photos show on the estimate the customer sees."
+                  <section
+                    aria-label="Estimate photos"
+                    className="flex flex-col gap-2"
                   >
-                    {doc.problemPhotos.length > 0 ? (
-                      <div className="p-3">
-                        <PhotoGrid
-                          columns={4}
-                          photos={doc.problemPhotos.map((p) => ({
-                            id: p.id,
-                            url: p.url,
-                            thumbUrl: p.thumbUrl,
-                            caption: p.caption,
-                            alt: p.caption ?? "Problem photo",
-                          }))}
-                        />
-                      </div>
-                    ) : null}
-                    {open && canCreate ? (
-                      <div className="px-4 py-3">
-                        <CameraCaptureButton
+                    <div className="flex min-h-11 items-center justify-between gap-2 px-1">
+                      <h2 className="text-headline">Photos</h2>
+                      {open && canCreate ? (
+                        <LazyChooseEstimatePhotos
+                          estimateId={e.id}
                           jobId={doc.job.id}
-                          defaultTag="problem"
-                          allowedTags={["problem"]}
-                          label="Add problem photo"
-                          multiple
+                          selected={
+                            doc.photosAttached
+                              ? doc.problemPhotos.map((p) => p.id)
+                              : []
+                          }
                         />
-                      </div>
+                      ) : null}
+                    </div>
+                    {doc.problemPhotos.length > 0 ? (
+                      <EstimatePhotos
+                        photos={doc.problemPhotos}
+                        title={null}
+                        compact
+                      />
+                    ) : (
+                      <p className="px-1 text-subhead text-label-2">
+                        No photos yet. Add one of the problem and one of how it
+                        should look after: the customer sees them with the
+                        options.
+                      </p>
+                    )}
+                    {!doc.photosAttached && doc.problemPhotos.length > 0 ? (
+                      <p className="px-1 text-footnote text-label-2">
+                        The customer sees the job's problem photos. Choose
+                        photos to pick which ones.
+                      </p>
                     ) : null}
-                  </ListSection>
+                  </section>
                 ) : null}
               </EstimateBuilder>
             </DetailLayout>

@@ -750,6 +750,8 @@ export const setEstimatePhotos = action({
   input: z.object({
     estimateId: uuid,
     photoMediaIds: zf.array(uuid).pipe(z.array(uuid).max(8)),
+    /** Add to the current selection (a photo just taken) instead of replacing it. */
+    append: z.preprocess((v) => v === true || v === "true", z.boolean()),
   }),
   audit: "estimate.photos_updated",
   async run({ input, user, tx }) {
@@ -759,7 +761,17 @@ export const setEstimatePhotos = action({
       throw new ValidationError({
         photoMediaIds: ["Photos come from the job: link a job first."],
       });
-    const ids = [...new Set(input.photoMediaIds)];
+    const ids = [
+      ...new Set([
+        ...(input.append ? e.photoMediaIds : []),
+        ...input.photoMediaIds,
+      ]),
+    ];
+    if (ids.length > 8)
+      throw new ValidationError(
+        { photoMediaIds: ["Up to 8 photos on an estimate."] },
+        "Up to 8 photos on an estimate. Choose which ones to keep.",
+      );
     if (ids.length > 0) {
       const ok = await tx
         .select({ id: media.id })

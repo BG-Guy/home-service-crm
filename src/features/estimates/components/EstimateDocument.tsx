@@ -8,6 +8,7 @@ import { formatMoney } from "@/lib/money";
 import { formatDate, formatDateTime } from "@/lib/time";
 import { cx } from "@/ui/cx";
 import type { EstimateDoc } from "../doc";
+import { photoTagLabel } from "./EstimatePhotos";
 
 // The estimate as paper (print page, and the read-only body for approved / closed
 // estimates). Every option prints with its own totals; the approved one is marked.
@@ -97,25 +98,24 @@ export function EstimateDocument({
       ) : null}
 
       {doc.problemPhotos.length > 0 ? (
-        <section className="mt-5" aria-label="Photos of the problem">
-          <h3 className="text-footnote font-semibold text-label-2">
-            What we found
-          </h3>
+        <section className="mt-5" aria-label="Photos">
+          <h3 className="text-footnote font-semibold text-label-2">Photos</h3>
           <div className="print-photos mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
             {doc.problemPhotos.map((p) => (
               <figure key={p.id} className="m-0">
                 {/* biome-ignore lint/performance/noImgElement: signed storage URL */}
                 <img
                   src={p.thumbUrl}
-                  alt={p.caption ?? "Photo of the problem"}
+                  alt={p.caption ?? `${photoTagLabel(p.tag)} photo`}
                   className="aspect-[4/3] w-full rounded-lg object-cover"
                   loading="lazy"
                 />
-                {p.caption ? (
-                  <figcaption className="mt-1 text-footnote text-label-2">
-                    {p.caption}
-                  </figcaption>
-                ) : null}
+                <figcaption className="mt-1 text-footnote text-label-2">
+                  <span className="font-semibold text-label">
+                    {photoTagLabel(p.tag)}
+                  </span>
+                  {p.caption ? ` · ${p.caption}` : null}
+                </figcaption>
               </figure>
             ))}
           </div>
