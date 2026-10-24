@@ -973,6 +973,8 @@ async function linesToInvoice(
   actor: Actor,
 ): Promise<LinesToInvoiceResult> {
   const { invoiceId } = await getOrCreateDraftInvoice(tx, jobId, actor);
+  // Locked: two approvals on the same job (online and in person at once) take
+  // turns replacing the draft's lines instead of interleaving.
   const [inv] = await tx
     .select({
       status: invoices.status,
@@ -981,7 +983,8 @@ async function linesToInvoice(
     })
     .from(invoices)
     .where(eq(invoices.id, invoiceId))
-    .limit(1);
+    .limit(1)
+    .for("update");
   const none = { added: 0, removed: 0 };
   if (!inv)
     return { invoiceId: null, invoiceNumber: null, skipped: false, ...none };

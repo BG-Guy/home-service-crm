@@ -9,9 +9,8 @@ import { ActionSheet, type ActionSheetItem } from "@/ui/components/ActionSheet";
 import type { useConfirm } from "@/ui/components/Alert";
 import { Button } from "@/ui/components/Button";
 import { DateField, TextArea, TextField } from "@/ui/components/Field";
-import { ListRow, ListSection } from "@/ui/components/List";
+import { ListSection } from "@/ui/components/List";
 import { Sheet } from "@/ui/components/Sheet";
-import { Pill } from "@/ui/components/StatusPill";
 import { toast } from "@/ui/components/Toast";
 import { ToggleRow } from "@/ui/components/Toggle";
 import {
