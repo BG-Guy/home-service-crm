@@ -115,7 +115,7 @@ export function EstimateBar({
       summary={
         <BarSummary
           title={<MoneyText cents={sel?.totalCents ?? 0} />}
-          subtitle={multi ? `${sel?.label} · tax included` : "Tax included"}
+          subtitle={multi ? sel?.label : "Tax included"}
         />
       }
       secondary={

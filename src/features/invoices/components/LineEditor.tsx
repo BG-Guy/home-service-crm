@@ -286,8 +286,8 @@ export function LineEditor(props: LineEditorProps) {
                   l,
                   <ListRow
                     title={
-                      <span className="flex items-center gap-2">
-                        <span className="truncate">{l.name}</span>
+                      <span className="flex flex-wrap items-center gap-x-2">
+                        <span className="break-words">{l.name}</span>
                         <LineBadges line={l} />
                       </span>
                     }
