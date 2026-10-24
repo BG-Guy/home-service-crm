@@ -1,8 +1,9 @@
 // Office money chain, QA round 2 verification pass (money fixer), on a throwaway
 // PGlite (TEST_PGLITE_ROOT):
 // 1. A job booked from a lead with a quoted price, then an approved estimate: the
-//    quote placeholder line is REPLACED on the draft invoice (no $250 + $334.54).
-//    An issued invoice is never touched.
+//    quote placeholder line is REPLACED on the draft invoice (no $250 + $334.54),
+//    and so is a quote line someone edited (Quote to Paid E1: the estimate is the
+//    job's scope). An issued invoice is never touched.
 // 3. "Request deposit" works with a draft invoice; refused once the invoice is issued.
 // 4. One office deposit request = one deposit text (the built-in automation skips
 //    office requests; a rule-made deposit is still texted now + 24 h).
@@ -293,7 +294,11 @@ describe("1: the lead's quoted price is a placeholder an approved estimate repla
     expect(act[0]?.summary).toContain("Quoted price $250.00 replaced");
   });
 
-  it("a quote line someone edited stays; an issued invoice is never touched", async () => {
+  // Quote to Paid E1 changed this on purpose: the approved estimate is the job's
+  // scope, so it replaces every line a draft billed for the work (an edited quote
+  // too; a new estimate on the job starts from those lines). Only parts used on the
+  // job and service-call fees stay (tests/estimates/never-bill-twice.test.ts).
+  it("a quote line someone edited is replaced too; an issued invoice is never touched", async () => {
     const edited = await bookFromLead(18000);
     const before = await draftInvoiceOf(edited);
     await db
@@ -302,7 +307,12 @@ describe("1: the lead's quoted price is a placeholder an approved estimate repla
       .where(eq(lineItems.id, before.lines[0]?.id as string));
     const e1 = await sentEstimate(edited);
     await approve(e1.estimateId, e1.optionId);
-    expect((await draftInvoiceOf(edited)).lines).toHaveLength(3);
+    const after1 = await draftInvoiceOf(edited);
+    expect(after1.lines.map((l) => l.name).sort()).toEqual([
+      "Lock installation",
+      "Smart deadbolt",
+    ]);
+    expect(after1.inv?.totalCents).toBe(33454);
 
     const issued = await bookFromLead(18000);
     const { inv } = await draftInvoiceOf(issued);

@@ -1,6 +1,6 @@
 "use server";
 
-import { and, asc, eq, isNull, ne } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne } from "drizzle-orm";
 import { z } from "zod";
 import type { Tx } from "@/db";
 import {
@@ -8,6 +8,7 @@ import {
   estimateOptions,
   estimates,
   lineItems,
+  media,
   properties,
 } from "@/db/schema";
 import { assertCustomerAccess } from "@/features/customers/api";
@@ -45,7 +46,9 @@ import {
   loadChangeOrder,
   loadEstimate,
   markEstimateSent,
+  moveEstimateBackTx,
   recomputeChangeOrder,
+  scheduleEstimateLaterTx,
 } from "./api";
 import { isEstimateOpen } from "./logic";
 
@@ -75,7 +78,9 @@ async function openEstimateOrThrow(tx: Tx, estimateId: string) {
   if (!isEstimateOpen(e.status))
     throw new ConflictError(
       "estimate_closed",
-      `Estimate ${e.number} is ${e.status} and can't be changed.`,
+      e.status === "superseded"
+        ? `Estimate ${e.number} was replaced by another estimate on the job. Reopen it to change it.`
+        : `Estimate ${e.number} is ${e.status} and can't be changed.`,
     );
   return e;
 }
@@ -106,6 +111,9 @@ export const createEstimate = action({
     jobId: z.preprocess((v) => (v === "" ? undefined : v), uuid.optional()),
     leadId: z.preprocess((v) => (v === "" ? undefined : v), uuid.optional()),
     title: zf.optionalText(200),
+    // Starting from a job creates the draft at once: a repeated call (a double
+    // effect, a retry) returns the first result (action() receipts).
+    clientId: uuid.optional(),
   }),
   audit: "estimate.created",
   async run({ input, user, tx, actor }) {
@@ -526,12 +534,14 @@ const deviceDate = (s: string) => {
 
 /**
  * "Present to customer": the customer's own /e/ page on this device, full screen
- * (present mode). Mints or reuses a short-lived link; nothing is sent.
+ * (present mode). Mints or reuses a short-lived link; nothing is sent, and the /e
+ * page doesn't count a signed-in presenter as the customer viewing it. `preview`
+ * (the builder's Preview): the same page with a banner and Approve / Decline off.
  */
 export const presentEstimate = action({
   perm: "estimates.send",
   feature: F,
-  input: z.object({ estimateId: uuid }),
+  input: z.object({ estimateId: uuid, preview: z.boolean().optional() }),
   audit: "estimate.presented",
   async run({ input, user, tx }) {
     await assertEstimateAccess(user, input.estimateId, "read");
@@ -540,7 +550,10 @@ export const presentEstimate = action({
     if (!loaded || loaded.options.every((o) => o.lines.length === 0))
       throw new ValidationError({ lines: ["Add at least one item first."] });
     const url = await mintEstimatePresentLink(tx, e);
-    return { estimateId: e.id, href: `${new URL(url).pathname}?present=1` };
+    return {
+      estimateId: e.id,
+      href: `${new URL(url).pathname}?present=1${input.preview ? "&preview=1" : ""}`,
+    };
   },
   auditEntity: ({ input }) => ({ type: "estimate", id: input.estimateId }),
 });
@@ -639,7 +652,10 @@ export const declineEstimate = action({
   revalidate: ({ data }) => estPaths(data.estimateId, data.jobId),
 });
 
-/** Re-open a declined or expired estimate as a fresh draft window (new expiry). */
+/**
+ * Re-open a declined, expired or replaced estimate as a fresh window (new expiry).
+ * Approving a reopened one replaces the job's invoice lines like any approval.
+ */
 export const reopenEstimate = action({
   perm: "estimates.create",
   feature: F,
@@ -647,10 +663,10 @@ export const reopenEstimate = action({
   audit: "estimate.reopened",
   async run({ input, user, tx, activity }) {
     const e = await assertEstimateAccess(user, input.estimateId, "write");
-    if (e.status !== "declined" && e.status !== "expired")
+    if (!["declined", "expired", "superseded"].includes(e.status))
       throw new ConflictError(
         "estimate_open",
-        "Only declined or expired estimates can be reopened.",
+        "Only declined, expired or replaced estimates can be reopened.",
       );
     const days = (await getSettings()).estimates.expiry_days;
     await tx
@@ -671,6 +687,113 @@ export const reopenEstimate = action({
       summary: `Estimate ${e.number} reopened`,
     });
     return { estimateId: e.id, jobId: e.jobId };
+  },
+  auditEntity: ({ input }) => ({ type: "estimate", id: input.estimateId }),
+  revalidate: ({ data }) => estPaths(data.estimateId, data.jobId),
+});
+
+// ------------------------------------------------------------------ after signing
+
+const workPaths = (estimateId: string, jobIds: string[]) => [
+  `/estimates/${estimateId}`,
+  "/estimates",
+  "/jobs",
+  "/dispatch",
+  "/today",
+  ...jobIds.map((j) => `/jobs/${j}`),
+];
+
+/**
+ * "When is the work?" → Schedule later (Quote to Paid E5): the approved lines and
+ * the open deposit request move to a new unscheduled follow-up job.
+ */
+export const scheduleEstimateLater = action({
+  perm: "estimates.send",
+  feature: F,
+  input: z.object({ estimateId: uuid }),
+  audit: "estimate.work_later",
+  async run({ input, user, tx, actor }) {
+    await assertEstimateAccess(user, input.estimateId, "read");
+    const r = await scheduleEstimateLaterTx(tx, input.estimateId, actor);
+    return { estimateId: input.estimateId, ...r };
+  },
+  auditEntity: ({ input }) => ({ type: "estimate", id: input.estimateId }),
+  revalidate: ({ data }) =>
+    workPaths(data.estimateId, [data.jobId, data.fromJobId]),
+});
+
+/** "Move it back to this job": undo Schedule later while the follow-up is unbooked and unpaid. */
+export const moveEstimateBack = action({
+  perm: "estimates.send",
+  feature: F,
+  input: z.object({ estimateId: uuid }),
+  audit: "estimate.work_now",
+  async run({ input, user, tx, actor }) {
+    await assertEstimateAccess(user, input.estimateId, "read");
+    const r = await moveEstimateBackTx(tx, input.estimateId, actor);
+    return { estimateId: input.estimateId, ...r };
+  },
+  auditEntity: ({ input }) => ({ type: "estimate", id: input.estimateId }),
+  revalidate: ({ data }) =>
+    workPaths(data.estimateId, [data.jobId, data.followUpJobId]),
+});
+
+/**
+ * The photos on the estimate the customer sees (Quote to Paid E6, modeled on
+ * setInvoicePhotos): an ordered selection of the job's photos (Problem / Goal
+ * labels come from each photo's tag). Presentation only, never in the signed
+ * snapshot; approving locks them as evidence.
+ */
+export const setEstimatePhotos = action({
+  perm: "estimates.create",
+  feature: F,
+  input: z.object({
+    estimateId: uuid,
+    photoMediaIds: zf.array(uuid).pipe(z.array(uuid).max(8)),
+    /** Add to the current selection (a photo just taken) instead of replacing it. */
+    append: z.preprocess((v) => v === true || v === "true", z.boolean()),
+  }),
+  audit: "estimate.photos_updated",
+  async run({ input, user, tx }) {
+    await assertEstimateAccess(user, input.estimateId, "write");
+    const e = await openEstimateOrThrow(tx, input.estimateId);
+    if (!e.jobId && input.photoMediaIds.length > 0)
+      throw new ValidationError({
+        photoMediaIds: ["Photos come from the job: link a job first."],
+      });
+    const ids = [
+      ...new Set([
+        ...(input.append ? e.photoMediaIds : []),
+        ...input.photoMediaIds,
+      ]),
+    ];
+    if (ids.length > 8)
+      throw new ValidationError(
+        { photoMediaIds: ["Up to 8 photos on an estimate."] },
+        "Up to 8 photos on an estimate. Choose which ones to keep.",
+      );
+    if (ids.length > 0) {
+      const ok = await tx
+        .select({ id: media.id })
+        .from(media)
+        .where(
+          and(
+            inArray(media.id, ids),
+            eq(media.jobId, e.jobId as string),
+            eq(media.kind, "photo"),
+            isNull(media.deletedAt),
+          ),
+        );
+      if (ok.length !== ids.length)
+        throw new ValidationError({
+          photoMediaIds: ["Pick photos of this job."],
+        });
+    }
+    await tx
+      .update(estimates)
+      .set({ photoMediaIds: ids, updatedAt: new Date() })
+      .where(eq(estimates.id, e.id));
+    return { estimateId: e.id, jobId: e.jobId, count: ids.length };
   },
   auditEntity: ({ input }) => ({ type: "estimate", id: input.estimateId }),
   revalidate: ({ data }) => estPaths(data.estimateId, data.jobId),

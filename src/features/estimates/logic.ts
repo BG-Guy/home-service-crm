@@ -12,7 +12,9 @@ export type EstimateStatusValue =
   | "viewed"
   | "approved"
   | "declined"
-  | "expired";
+  | "expired"
+  /** "Replaced": another estimate on the same job was approved first. */
+  | "superseded";
 
 /** Lines can change, options can be added and the customer can still sign. */
 export const OPEN_ESTIMATE_STATUSES: readonly EstimateStatusValue[] = [
@@ -239,9 +241,98 @@ export function buildChangeOrderSnapshot(i: {
   };
 }
 
+// ------------------------------------------------------------------ never bill twice
+
+/** A line on the job's DRAFT invoice, as the replace rule sees it. */
+export interface DraftLineLike {
+  id: string;
+  type: string;
+  name: string;
+  pricebookItemId: string | null;
+  isServiceFee: boolean;
+  /** line_items.source_type (null on older rows). */
+  sourceType: string | null;
+  /** `part_purchase_id` is set or a `stock_moves` row points at the line. */
+  partTied: boolean;
+}
+
+/** A line the approval would copy onto the invoice. */
+export interface ApprovedLineLike {
+  type: string;
+  name: string;
+  pricebookItemId: string | null;
+}
+
+/** A part the job really used: bought for it, taken from stock, or added as a part. */
+const usedPart = (l: DraftLineLike) => l.partTied || l.sourceType === "part";
+
+const sameName = (a: string, b: string) =>
+  a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/**
+ * Never bill the same work twice (Quote to Paid E1). Approving an estimate onto the
+ * job's DRAFT invoice replaces what the estimate supersedes (the lead's quoted
+ * price, earlier estimates and change orders, manual and older lines) and keeps
+ * what can't be taken back: parts used on the job (a purchase, a stock move, or a
+ * line from the parts flow) and service-call fees (credited by their own rule). An
+ * approved line that matches a kept part (same price-book item, else the same name
+ * and type) is not added again: each kept part covers one approved line. A new
+ * estimate on such a job starts from the invoice's lines, so nothing is lost.
+ */
+export function planInvoiceReplace<
+  D extends DraftLineLike,
+  A extends ApprovedLineLike,
+>(
+  draft: readonly D[],
+  approved: readonly A[],
+): { keep: D[]; remove: D[]; add: A[]; covered: A[] } {
+  const keep = draft.filter((l) => usedPart(l) || l.isServiceFee);
+  const remove = draft.filter((l) => !(usedPart(l) || l.isServiceFee));
+  const parts = keep.filter(usedPart);
+  const add: A[] = [];
+  const covered: A[] = [];
+  for (const a of approved) {
+    const i = parts.findIndex((k) =>
+      a.pricebookItemId && k.pricebookItemId
+        ? a.pricebookItemId === k.pricebookItemId
+        : a.type === k.type && sameName(a.name, k.name),
+    );
+    if (i >= 0) {
+      parts.splice(i, 1);
+      covered.push(a);
+    } else add.push(a);
+  }
+  return { keep, remove, add, covered };
+}
+
+/**
+ * What the customer has signed for on a job: the newest approved estimate (as
+ * signed; it replaced the earlier ones on the invoice) plus the signed change orders
+ * approved after it (earlier ones were folded into that estimate). Null without an
+ * approved estimate. Superseded estimates are never approved, so they never count.
+ */
+export function signedJobTotal(
+  estimates: readonly { approvedAt: Date | null; totalCents: number | null }[],
+  changeOrders: readonly { signedAt: Date | null; deltaCents: number }[],
+): number | null {
+  let newest: { at: number; total: number } | null = null;
+  for (const e of estimates) {
+    if (e.totalCents == null) continue;
+    const at = e.approvedAt?.getTime() ?? 0;
+    if (!newest || at > newest.at) newest = { at, total: e.totalCents };
+  }
+  if (!newest) return null;
+  const from = newest.at;
+  return changeOrders.reduce(
+    (sum, c) =>
+      !c.signedAt || c.signedAt.getTime() >= from ? sum + c.deltaCents : sum,
+    newest.total,
+  );
+}
+
 /**
  * Close rate per tech (unsold board): approved ÷ decided (approved + declined +
- * expired). Undecided estimates don't count either way.
+ * expired). Undecided and replaced (superseded) estimates don't count either way.
  */
 export function closeRate(c: {
   approved: number;

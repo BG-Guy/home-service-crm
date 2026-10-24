@@ -165,6 +165,11 @@ export function lineValues(line: LineInput) {
     serial: line.serial ?? null,
     isServiceFee: line.isServiceFee ?? false,
     isUpsell: line.isUpsell ?? false,
+    // Only when given: the editors' updates go through here too and must keep the
+    // tag an approval wrote (estimates/api linesToInvoice reads it).
+    ...(line.sourceType
+      ? { sourceType: line.sourceType, sourceId: line.sourceId ?? null }
+      : {}),
   };
 }
 

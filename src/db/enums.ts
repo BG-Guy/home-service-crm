@@ -344,6 +344,10 @@ export const NOTE_VISIBILITIES = ["internal", "customer"] as const;
 export const zNoteVisibility = e(NOTE_VISIBILITIES);
 
 // ---------- §6.5 Estimates, invoices, signatures ----------
+/**
+ * `superseded` ("Replaced"): another estimate on the same job was approved while
+ * this one was still open, so it can't be signed and the close rate ignores it.
+ */
 export const ESTIMATE_STATUSES = [
   "draft",
   "sent",
@@ -351,8 +355,20 @@ export const ESTIMATE_STATUSES = [
   "approved",
   "declined",
   "expired",
+  "superseded",
 ] as const;
 export const zEstimateStatus = e(ESTIMATE_STATUSES);
+
+/** line_items.source_type: where an invoice line came from (null on older rows). */
+export const LINE_SOURCE_TYPES = [
+  "estimate",
+  "change_order",
+  "lead_quote",
+  "part",
+  "manual",
+] as const;
+export const zLineSourceType = e(LINE_SOURCE_TYPES);
+export type LineSourceType = (typeof LINE_SOURCE_TYPES)[number];
 
 export const APPROVAL_CHANNELS = [
   "remote_link",

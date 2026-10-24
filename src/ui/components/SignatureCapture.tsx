@@ -24,8 +24,8 @@ export interface CapturedSignature {
 export interface SignatureCaptureProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** The signer tapped Done. */
-  onDone: (signature: CapturedSignature) => void;
+  /** The signer tapped Done (not used with `onSubmit`). */
+  onDone?: (signature: CapturedSignature) => void;
   /** Top-bar title (default "Customer signature") and an optional line under it. */
   title?: ReactNode;
   subtitle?: ReactNode;
@@ -35,15 +35,40 @@ export interface SignatureCaptureProps {
   historyKey?: string;
   /** The in-page box it grows from and shrinks back into (e.g. `absolute inset-0` over a field). */
   className?: string;
+  /**
+   * Approval mode (one step: consent, name and pad on one screen): shown beside
+   * the pad in landscape, above it upright. Scrolls on its own.
+   */
+  aside?: ReactNode;
+  /** Top-bar trailing slot, e.g. the total. */
+  controls?: ReactNode;
+  /** The finish button's label (default "Done"). */
+  doneLabel?: ReactNode;
+  /** Keep the finish button off (e.g. until consent is given). */
+  doneDisabled?: boolean;
+  /**
+   * Async finish (approval mode): resolves true to show `savedLabel` and close,
+   * false to stay open with the signature kept (the caller shows the error).
+   */
+  onSubmit?: (signature: CapturedSignature) => Promise<boolean>;
+  /** Confirmation after finishing (default "Signature added"). */
+  savedLabel?: string;
 }
 
 // The rotate tip invites a turn before anyone signs: gone from the first stroke.
+// With an aside (approval mode) the pad and the aside share the screen: side by
+// side in landscape, the aside on top upright.
 const CSS = `.sigcap{visibility:hidden;pointer-events:none}
 .sigcap>.fs-slot{height:100%}
 .sigcap .fs-hub[data-fs]{visibility:visible;pointer-events:auto}
 .sigcap .sigcap-pad{position:absolute;inset:12px calc(12px + env(safe-area-inset-right)) 12px calc(12px + env(safe-area-inset-left))}
 .sigcap[data-touched] .fs-tip,.sigcap[data-touched] .fs-hint{display:none}
-.sigcap-ok{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:rgb(255 255 255/.88);color:#1d1d1f;font-size:17px;line-height:22px;font-weight:600}`;
+.sigcap-ok{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:rgb(255 255 255/.88);color:#1d1d1f;font-size:17px;line-height:22px;font-weight:600}
+.sigcap-row{position:absolute;inset:0;display:flex;gap:12px;padding:12px calc(12px + env(safe-area-inset-right)) 12px calc(12px + env(safe-area-inset-left))}
+.sigcap-row>.sigcap-box{position:relative;flex:1 1 auto;min-width:0;min-height:160px}
+.sigcap .sigcap-row .sigcap-pad{inset:0}
+.sigcap-aside{flex:0 0 clamp(240px,36vw,360px);overflow-y:auto;overscroll-behavior:contain;padding-bottom:4px}
+@media (orientation:portrait){.sigcap-row{flex-direction:column}.sigcap-aside{flex:0 1 auto;max-height:48%}}`;
 
 /**
  * Full-screen signature capture (DESIGN.md "Fullscreen hub (M19)", use 3): a
@@ -67,6 +92,12 @@ export function SignatureCapture({
   label = "Signature",
   historyKey = "sign",
   className,
+  aside,
+  controls,
+  doneLabel = "Done",
+  doneDisabled,
+  onSubmit,
+  savedLabel = "Signature added",
 }: SignatureCaptureProps) {
   const pad = useRef<SignaturePadHandle>(null);
   const [empty, setEmpty] = useState(true);
@@ -103,7 +134,7 @@ export function SignatureCapture({
 
   const done = async () => {
     const p = pad.current;
-    if (!p || p.isEmpty() || state !== "draw") return;
+    if (!p || p.isEmpty() || state !== "draw" || doneDisabled) return;
     setState("saving");
     const blob = await p.toBlob({ trim: true });
     const dataUrl = p.toDataURL({ trim: true });
@@ -111,10 +142,29 @@ export function SignatureCapture({
       setState("draw");
       return;
     }
-    onDone({ blob, dataUrl });
+    if (onSubmit) {
+      // Approval mode: the caller uploads and records it; on a failure the
+      // signature stays on the pad and the caller shows why.
+      const ok = await onSubmit({ blob, dataUrl }).catch(() => false);
+      if (!ok) {
+        setState("draw");
+        return;
+      }
+    } else onDone?.({ blob, dataUrl });
     setState("saved");
     timer.current = setTimeout(() => live.current(false), 700);
   };
+  const padEl = (
+    <SignaturePad
+      ref={pad}
+      height="fill"
+      clearButton={false}
+      label={label}
+      onChange={setEmpty}
+      onStart={() => setTouched(true)}
+      className="sigcap-pad"
+    />
+  );
 
   return (
     <div
@@ -138,6 +188,7 @@ export function SignatureCapture({
         // usually sits in; the hub alone already covers the screen.
         browserFullscreen={false}
         closeLabel="Cancel signing"
+        controls={controls}
         onResize={() => pad.current?.resize()}
         footer={
           <>
@@ -149,28 +200,27 @@ export function SignatureCapture({
               Clear
             </Button>
             <Button
-              disabled={empty || state === "saved"}
+              disabled={empty || state === "saved" || doneDisabled}
               loading={state === "saving"}
               onClick={done}
             >
-              Done
+              {doneLabel}
             </Button>
           </>
         }
       >
-        <SignaturePad
-          ref={pad}
-          height="fill"
-          clearButton={false}
-          label={label}
-          onChange={setEmpty}
-          onStart={() => setTouched(true)}
-          className="sigcap-pad"
-        />
+        {aside ? (
+          <div className="sigcap-row">
+            <div className="sigcap-aside">{aside}</div>
+            <div className="sigcap-box">{padEl}</div>
+          </div>
+        ) : (
+          padEl
+        )}
         {state === "saved" ? (
           <output className="sigcap-ok">
-            <SuccessCheck size={64} label="Signature added" />
-            Signature added
+            <SuccessCheck size={64} label={savedLabel} />
+            {savedLabel}
           </output>
         ) : null}
       </FullscreenHub>

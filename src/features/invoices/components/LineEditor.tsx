@@ -2,8 +2,13 @@
 
 import { Plus, Tag, Trash2 } from "lucide-react";
 import dynamic from "next/dynamic";
-import { useMemo, useState, useTransition } from "react";
-import type { PricebookPick } from "@/features/pricebook/contracts";
+import {
+  type ComponentType,
+  type ReactNode,
+  useMemo,
+  useState,
+  useTransition,
+} from "react";
 import { newId } from "@/lib/ids";
 import { formatMoney } from "@/lib/money";
 import { useConfirm } from "@/ui/components/Alert";
@@ -20,15 +25,13 @@ import {
   type DocTotals,
 } from "../math";
 
-// The line sheet and the price-book picker are lazy chunks (loaded on hover,
-// focus or the first tap), so a document page ships only the rows and totals.
+// The line sheet and the price-book picker (with its one-tap glue, LinePicker)
+// are lazy chunks (loaded on hover, focus or the first tap), so a document page
+// ships only the rows and totals.
 const loadSheet = () => import("./LineSheet");
 const LineSheet = dynamic(loadSheet, { ssr: false });
-const loadPicker = () => import("@/features/pricebook/slots.client");
-const PricebookPicker = dynamic(
-  () => loadPicker().then((m) => m.PricebookPicker),
-  { ssr: false },
-);
+const loadPicker = () => import("./LinePicker");
+const LinePicker = dynamic(loadPicker, { ssr: false });
 const prefetchSheet = () => void loadSheet();
 const prefetchPicker = () => {
   void loadPicker();
@@ -36,9 +39,13 @@ const prefetchPicker = () => {
 };
 
 // Line editor shared by the invoice draft/revision, estimate options and change
-// orders (SPEC M07/M08). Tap a line to edit it in a sheet; add from the price book
-// (S14) or as a custom line. The parent decides persistence: `onSave`/`onDelete`
-// return true on success (immediate server actions) or update local state (revise).
+// orders (SPEC M07/M08). Add from the price book with one tap per item (Quote to
+// Paid E3: tap again for one more), tap a line to edit it in a sheet, or add a
+// custom line. With `cardsView` (the estimate builder passes LineCards, E2) the
+// lines show as item cards instead of rows. The parent decides persistence:
+// `onSave`/`onDelete` resolve truthy on success (immediate server actions, `{ id }`
+// when the new line's id is known) or update local state (revise). `quiet` saves
+// (picker taps, steppers) skip toasts.
 
 export interface EditorLine {
   id?: string;
@@ -68,6 +75,24 @@ export interface EditorLine {
 }
 
 export type LineEditorVariant = "invoice" | "estimate" | "change_order";
+
+/** What a save resolves to: success, or the saved line's id. */
+export type LineSaveResult = boolean | { id: string };
+
+export type LineSave = (
+  line: EditorLine,
+  opts?: { quiet?: boolean },
+) => Promise<LineSaveResult>;
+
+/** What LineEditor hands a `cardsView` (LineCards): its own props, plus these. */
+export interface LineCardsViewProps extends LineEditorProps {
+  onEdit: (l: EditorLine) => void;
+  onAdd: () => void;
+  onAddDiscount: () => void;
+  onPrefetch: () => void;
+  /** Wraps a card in the remove swipe (or returns it as is). */
+  swipe: (l: EditorLine, node: ReactNode) => ReactNode;
+}
 
 export function lineTotal(l: EditorLine): number {
   return computeLineTotal({
@@ -114,23 +139,10 @@ export function lineSubtitle(l: EditorLine, showCost = false): string {
   return parts.join(" · ");
 }
 
-export function LineEditor({
-  lines,
-  onSave,
-  onDelete,
-  variant,
-  readOnly,
-  allowDiscount = true,
-  showCost = false,
-  taxBps,
-  taxExempt,
-  header = "Items",
-  footer,
-  emptyHint = "Add items from the price book or type a custom line.",
-}: {
+export interface LineEditorProps {
   lines: EditorLine[];
-  onSave: (line: EditorLine) => Promise<boolean>;
-  onDelete?: (id: string) => Promise<boolean>;
+  onSave: LineSave;
+  onDelete?: (id: string, opts?: { quiet?: boolean }) => Promise<boolean>;
   variant: LineEditorVariant;
   readOnly?: boolean;
   allowDiscount?: boolean;
@@ -138,9 +150,36 @@ export function LineEditor({
   taxBps: number;
   taxExempt?: boolean;
   header?: string;
-  footer?: React.ReactNode;
+  footer?: ReactNode;
   emptyHint?: string;
-}) {
+  /** Item cards instead of rows (the estimate builder passes LineCards, E2). */
+  cardsView?: ComponentType<LineCardsViewProps>;
+  /** Cards: shown at the top of the card (e.g. the option's name and badges). */
+  cardHeader?: ReactNode;
+  /** More buttons after the add buttons (e.g. Photos). */
+  actions?: ReactNode;
+  /** The picker's title, e.g. "Add to Better". */
+  pickerTitle?: string;
+}
+
+export function LineEditor(props: LineEditorProps) {
+  const {
+    lines,
+    onSave,
+    onDelete,
+    variant,
+    readOnly,
+    allowDiscount = true,
+    showCost = false,
+    taxBps,
+    taxExempt,
+    header = "Items",
+    footer,
+    emptyHint = "Add items from the price book or type a custom line.",
+    cardsView: Cards,
+    actions,
+    pickerTitle,
+  } = props;
   const [editing, setEditingState] = useState<EditorLine | null>(null);
   const [picker, setPickerState] = useState(false);
   const [sheetArmed, setSheetArmed] = useState(false);
@@ -160,25 +199,6 @@ export function LineEditor({
     [lines, taxBps, taxExempt],
   );
 
-  const fromPick = (p: PricebookPick): EditorLine => ({
-    type: p.kind,
-    pricebookItemId: p.id,
-    name: p.name,
-    description: p.description,
-    qty: 1,
-    unitPriceCents: p.unitPriceCents,
-    unitCostCents: p.unitCostCents,
-    taxable: p.taxable,
-    partSource:
-      p.kind === "part" || p.kind === "material" ? "company_stock" : null,
-    warrantyDays: p.warrantyDays,
-    manufacturerWarrantyMonths: p.manufacturerWarrantyMonths,
-    isServiceFee:
-      p.kind === "service" && /service call|diagnostic/i.test(p.name),
-    isOptional: false,
-    isSelected: true,
-  });
-
   // Confirm before starting the transition (QA T2-01).
   const remove = async (l: EditorLine) => {
     if (!l.id || !onDelete) return;
@@ -195,147 +215,151 @@ export function LineEditor({
       await onDelete(id);
     });
   };
+  const custom = () =>
+    setEditing({
+      type: "service",
+      name: "",
+      qty: 1,
+      unitPriceCents: 0,
+      taxable: false,
+      isOptional: false,
+      isSelected: true,
+    });
+  const discount = () =>
+    setEditing({
+      type: "discount",
+      name: "Discount",
+      qty: 1,
+      unitPriceCents: 0,
+      taxable: false,
+    });
+  const swipe = (l: EditorLine, node: ReactNode) =>
+    readOnly || !l.id || !onDelete ? (
+      node
+    ) : (
+      <SwipeActions
+        trailing={[
+          {
+            label: "Remove",
+            icon: <Trash2 size={18} />,
+            destructive: true,
+            onAction: () => remove(l),
+          },
+        ]}
+      >
+        {node}
+      </SwipeActions>
+    );
 
   return (
     <>
       {confirmEl}
-      <ListSection
-        variant="title"
-        header={header}
-        footer={footer}
-        trailing={
-          !readOnly && lines.length > 0 ? (
-            <span className="num text-subhead text-label-2">
-              {lines.length} {lines.length === 1 ? "item" : "items"}
-            </span>
-          ) : null
-        }
-      >
-        {lines.length === 0 ? (
-          <p className="px-4 py-4 text-subhead text-label-2">{emptyHint}</p>
-        ) : null}
-        {lines.map((l) => {
-          const total = lineTotal(l);
-          const row = (
-            <ListRow
-              key={l.id ?? l.name}
-              title={
-                <span className="flex items-center gap-2">
-                  <span className="truncate">{l.name}</span>
-                  {l.isOptional && (
-                    <Pill
-                      size="sm"
-                      dot={false}
-                      tone={l.isSelected ? "green" : "gray"}
-                    >
-                      Add-on
-                    </Pill>
-                  )}
-                  {l.isUpsell && (
-                    <Pill size="sm" dot={false} tone="indigo">
-                      Upsell
-                    </Pill>
-                  )}
+      {Cards ? (
+        <Cards
+          {...props}
+          onEdit={setEditing}
+          onAdd={() => setPicker(true)}
+          onAddDiscount={discount}
+          onPrefetch={prefetchPicker}
+          swipe={swipe}
+        />
+      ) : (
+        <>
+          <ListSection
+            variant="title"
+            header={header}
+            footer={footer}
+            trailing={
+              !readOnly && lines.length > 0 ? (
+                <span className="num text-subhead text-label-2">
+                  {lines.length} {lines.length === 1 ? "item" : "items"}
                 </span>
-              }
-              subtitle={lineSubtitle(l, showCost)}
-              detail={
-                <MoneyText
-                  cents={total}
-                  className={
-                    l.type === "discount"
-                      ? "font-medium text-danger"
-                      : "font-medium text-label"
-                  }
-                />
-              }
-              onClick={readOnly ? undefined : () => setEditing(l)}
-              accessory={readOnly ? "none" : "chevron"}
-              multiline
-            />
-          );
-          return readOnly || !l.id || !onDelete ? (
-            <div key={l.id ?? l.name}>{row}</div>
-          ) : (
-            <SwipeActions
-              key={l.id}
-              trailing={[
-                {
-                  label: "Remove",
-                  icon: <Trash2 size={18} />,
-                  destructive: true,
-                  onAction: () => remove(l),
-                },
-              ]}
-            >
-              {row}
-            </SwipeActions>
-          );
-        })}
-        {!readOnly && (
-          <div
-            className="flex flex-wrap gap-2 px-4 py-3"
-            onPointerOver={prefetchSheet}
-            onFocusCapture={prefetchSheet}
+              ) : null
+            }
           >
-            {pickerArmed && (
-              <PricebookPicker
-                triggerLabel="Price book"
-                onPick={(p) => setEditing(fromPick(p))}
-                open={picker}
-                onOpenChange={setPicker}
-              />
-            )}
-            <Button
-              size="sm"
-              variant="tinted"
-              icon={<Plus size={17} />}
-              onClick={() => setPicker(true)}
-              onPointerEnter={prefetchPicker}
-              onFocus={prefetchPicker}
-              aria-haspopup="dialog"
-            >
-              Price book
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() =>
-                setEditing({
-                  type: variant === "invoice" ? "service" : "service",
-                  name: "",
-                  qty: 1,
-                  unitPriceCents: 0,
-                  taxable: false,
-                  isOptional: false,
-                  isSelected: true,
-                })
-              }
-            >
-              Custom line
-            </Button>
-            {allowDiscount && (
-              <Button
-                size="sm"
-                variant="secondary"
-                icon={<Tag size={16} />}
-                onClick={() =>
-                  setEditing({
-                    type: "discount",
-                    name: "Discount",
-                    qty: 1,
-                    unitPriceCents: 0,
-                    taxable: false,
-                  })
-                }
+            {lines.length === 0 ? (
+              <p className="px-4 py-4 text-subhead text-label-2">{emptyHint}</p>
+            ) : null}
+            {lines.map((l) => (
+              <div key={l.id ?? l.name}>
+                {swipe(
+                  l,
+                  <ListRow
+                    title={
+                      <span className="flex items-center gap-2">
+                        <span className="truncate">{l.name}</span>
+                        <LineBadges line={l} />
+                      </span>
+                    }
+                    subtitle={lineSubtitle(l, showCost)}
+                    detail={
+                      <MoneyText
+                        cents={lineTotal(l)}
+                        className={
+                          l.type === "discount"
+                            ? "font-medium text-danger"
+                            : "font-medium text-label"
+                        }
+                      />
+                    }
+                    onClick={readOnly ? undefined : () => setEditing(l)}
+                    accessory={readOnly ? "none" : "chevron"}
+                    multiline
+                  />,
+                )}
+              </div>
+            ))}
+            {!readOnly && (
+              <div
+                className="flex flex-wrap gap-2 px-4 py-3"
+                onPointerOver={prefetchSheet}
+                onFocusCapture={prefetchSheet}
               >
-                Discount
-              </Button>
+                <Button
+                  size="sm"
+                  variant="tinted"
+                  icon={<Plus size={17} />}
+                  onClick={() => setPicker(true)}
+                  onPointerEnter={prefetchPicker}
+                  onFocus={prefetchPicker}
+                  aria-haspopup="dialog"
+                >
+                  Price book
+                </Button>
+                <Button size="sm" variant="secondary" onClick={custom}>
+                  Custom line
+                </Button>
+                {allowDiscount && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    icon={<Tag size={16} />}
+                    onClick={discount}
+                  >
+                    Discount
+                  </Button>
+                )}
+                {actions}
+              </div>
             )}
-          </div>
-        )}
-      </ListSection>
-      <TotalsCard totals={totals} />
+          </ListSection>
+          <TotalsCard totals={totals} />
+        </>
+      )}
+      {pickerArmed && (
+        <LinePicker
+          open={picker}
+          onOpenChange={setPicker}
+          title={pickerTitle}
+          lines={lines}
+          onSave={onSave}
+          onDelete={onDelete}
+          onCustom={() => {
+            setPicker(false);
+            custom();
+          }}
+        />
+      )}
       {sheetArmed && (
         <LineSheet
           key={
@@ -349,7 +373,7 @@ export function LineEditor({
           showCost={showCost}
           onClose={() => setEditing(null)}
           onSave={async (l) => {
-            const ok = await onSave(l);
+            const ok = !!(await onSave(l));
             if (ok) setEditing(null);
             return ok;
           }}
@@ -362,6 +386,23 @@ export function LineEditor({
               : undefined
           }
         />
+      )}
+    </>
+  );
+}
+
+export function LineBadges({ line: l }: { line: EditorLine }) {
+  return (
+    <>
+      {l.isOptional && (
+        <Pill size="sm" dot={false} tone={l.isSelected ? "green" : "gray"}>
+          Add-on
+        </Pill>
+      )}
+      {l.isUpsell && (
+        <Pill size="sm" dot={false} tone="indigo">
+          Upsell
+        </Pill>
       )}
     </>
   );

@@ -1,17 +1,16 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import type { useRouter } from "next/navigation";
 import type { TransitionStartFunction } from "react";
 import { useState, useTransition } from "react";
-import { SignatureSheet } from "@/features/signatures/slots.client";
 import { formatMoney } from "@/lib/money";
 import { ActionSheet, type ActionSheetItem } from "@/ui/components/ActionSheet";
 import type { useConfirm } from "@/ui/components/Alert";
 import { Button } from "@/ui/components/Button";
 import { DateField, TextArea, TextField } from "@/ui/components/Field";
-import { ListRow, ListSection } from "@/ui/components/List";
+import { ListSection } from "@/ui/components/List";
 import { Sheet } from "@/ui/components/Sheet";
-import { Pill } from "@/ui/components/StatusPill";
 import { toast } from "@/ui/components/Toast";
 import { ToggleRow } from "@/ui/components/Toggle";
 import {
@@ -31,8 +30,13 @@ import type {
 } from "./EstimateBuilder";
 
 // The estimate builder's overlays (more, add option, send, option settings,
-// details, sign on this device, signature, verbal approval, decline): a lazy
-// chunk fetched on hover/focus or the first tap.
+// details, sign here, verbal approval, decline): a lazy chunk fetched on
+// hover/focus or the first tap. The one-step signature is its own chunk.
+
+const SignatureApproval = dynamic(
+  () => import("@/features/signatures/approval.client"),
+  { ssr: false },
+);
 
 type Res = { ok: true; data?: unknown } | { ok: false; error: string };
 
@@ -86,6 +90,9 @@ export default function EstimateBuilderSheets({
   setActiveId,
   router,
 }: BuilderSheetsProps) {
+  // The signature screen mounts on first use and stays (its close animation).
+  const [signArmed, setSignArmed] = useState(false);
+  if (sheet === "sign" && !signArmed) setSignArmed(true);
   return (
     <>
       {/* Sheets */}
@@ -168,54 +175,31 @@ export default function EstimateBuilderSheets({
         />
       ) : null}
 
-      {/* Sign on this device: choose the option + add-ons, then sign (S15). */}
-      <Sheet
-        open={sheet === "sign"}
-        onOpenChange={(o) => !o && setSheet(null)}
-        title="Customer approval"
-        detents={["large"]}
-        leading={
-          <Button variant="plain" size="sm" onClick={() => setSheet(null)}>
-            Cancel
-          </Button>
-        }
-        footer={
-          <div className="px-[var(--gutter)] pb-2 pt-2">
-            <Button
-              size="lg"
-              fullWidth
-              disabled={!pick || pick.lines.length === 0}
-              onClick={() => setSheet("signpad")}
-            >
-              Continue to sign · {formatMoney(pickTotals?.totalCents ?? 0)}
-            </Button>
-          </div>
-        }
-      >
-        <ChoosePanel
-          options={options}
-          pickId={pick?.id ?? ""}
-          onPick={_choose}
-          addons={addons}
-          setAddons={setAddons}
-          totalCents={pickTotals?.totalCents ?? 0}
-          coolingOff={coolingOff}
-        />
-      </Sheet>
-      {pick ? (
-        <SignatureSheet
-          open={sheet === "signpad"}
+      {/* Sign here: straight to the one-step landscape signature (E4): the
+          selected option, its add-ons, the consent, the name and the pad. */}
+      {pick && signArmed ? (
+        <SignatureApproval
+          open={sheet === "sign"}
           onOpenChange={(o) => !o && setSheet(null)}
-          title={`Approve ${e.number}`}
+          title={
+            options.length > 1
+              ? `Sign to approve ${pick.label}`
+              : `Sign to approve ${e.number}`
+          }
+          totalLabel={formatMoney(pickTotals?.totalCents ?? 0)}
           docType="estimate"
           consentText={consentText}
-          summaryLines={[
-            `${pick.label}: ${formatMoney(pickTotals?.totalCents ?? 0)}`,
-            ...pick.lines
-              .filter((l) => l.isOptional && addons.includes(l.id))
-              .map((l) => `Add-on: ${l.name}`),
-          ]}
           signerNameDefault={e.customerName}
+          summary={
+            <SignSummary
+              option={pick}
+              multi={options.length > 1}
+              totalCents={pickTotals?.totalCents ?? 0}
+              addons={addons}
+              setAddons={setAddons}
+              coolingOff={coolingOff}
+            />
+          }
           action={(s) =>
             signEstimateInPerson({
               ...s,
@@ -262,56 +246,41 @@ export default function EstimateBuilderSheets({
   );
 }
 
-/* ------------------------------------------------------------------ choose panel */
+/* ------------------------------------------------------------------ sign summary */
 
-export function ChoosePanel({
-  options,
-  pickId,
-  onPick,
+/** Beside the pad when the tech hands the phone over: the option and its add-ons. */
+function SignSummary({
+  option,
+  multi,
+  totalCents,
   addons,
   setAddons,
-  totalCents,
   coolingOff,
 }: {
-  options: BuilderOption[];
-  pickId: string;
-  onPick: (id: string) => void;
+  option: BuilderOption;
+  multi: boolean;
+  totalCents: number;
   addons: string[];
   setAddons: (v: string[]) => void;
-  totalCents: number;
   coolingOff: boolean;
 }) {
-  const pick = options.find((o) => o.id === pickId);
-  const extras = (pick?.lines ?? []).filter((l) => l.isOptional);
+  const extras = option.lines.filter((l) => l.isOptional);
+  const items = option.lines.length - extras.length;
   return (
-    <div className="flex flex-col gap-5 px-[var(--gutter)] pb-6">
-      <ListSection header="Option">
-        {options.map((o) => (
-          <ListRow
-            key={o.id}
-            title={
-              <span className="flex items-center gap-2">
-                {o.label}
-                {o.recommended ? (
-                  <Pill size="sm" dot={false} tone="green">
-                    Recommended
-                  </Pill>
-                ) : null}
-              </span>
-            }
-            subtitle={`${o.lines.filter((l) => !l.isOptional).length} items`}
-            accessory={o.id === pickId ? "check" : "none"}
-            onClick={() => onPick(o.id)}
-          />
-        ))}
-      </ListSection>
+    <div className="flex flex-col gap-3">
+      <p className="px-1 text-footnote text-label-2">
+        <span className="font-semibold text-label">
+          {multi ? option.label : "Total"} · {formatMoney(totalCents)}
+        </span>
+        {` · ${items} ${items === 1 ? "item" : "items"}`}
+      </p>
       {extras.length > 0 ? (
-        <ListSection header="Add-ons">
+        <div className="list-card">
           {extras.map((l) => (
             <ToggleRow
               key={l.id}
               title={l.name}
-              subtitle={formatMoney(l.totalCents ?? 0)}
+              subtitle={`Add-on · +${formatMoney(l.totalCents ?? 0)}`}
               checked={addons.includes(l.id)}
               onChange={(ev) =>
                 setAddons(
@@ -322,14 +291,8 @@ export function ChoosePanel({
               }
             />
           ))}
-        </ListSection>
+        </div>
       ) : null}
-      <div className="flex items-baseline justify-between rounded-card bg-card px-4 py-3 shadow-card">
-        <span className="text-headline">Total</span>
-        <span className="num text-title2 font-semibold">
-          {formatMoney(totalCents)}
-        </span>
-      </div>
       {coolingOff ? (
         <p className="px-1 text-footnote text-label-2">
           The customer may cancel within 3 business days (FTC Cooling-Off Rule).

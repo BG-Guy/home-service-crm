@@ -11,6 +11,8 @@ import {
   headlineTotal,
   isEstimateOpen,
   optionTotals,
+  planInvoiceReplace,
+  signedJobTotal,
 } from "@/features/estimates/logic";
 import { sha256Json } from "@/lib/hash";
 
@@ -98,9 +100,14 @@ describe("status rules", () => {
   const now = new Date("2026-10-15T12:00:00Z");
   it("open = draft, sent, viewed", () => {
     expect(["draft", "sent", "viewed"].every(isEstimateOpen)).toBe(true);
-    expect(["approved", "declined", "expired"].some(isEstimateOpen)).toBe(
-      false,
-    );
+    expect(
+      ["approved", "declined", "expired", "superseded"].some(isEstimateOpen),
+    ).toBe(false);
+  });
+  it("a replaced (superseded) estimate can't be signed", () => {
+    expect(
+      canApproveEstimate({ status: "superseded", expiresAt: null }, now),
+    ).toBe(false);
   });
   it("can't approve past the expiry even before the cron flips it", () => {
     expect(
@@ -258,6 +265,144 @@ describe("close rate", () => {
   it("approved ÷ decided, one decimal", () => {
     expect(closeRate({ approved: 2, declined: 1, expired: 0 })).toBe(66.7);
     expect(closeRate({ approved: 0, declined: 0, expired: 0 })).toBeNull();
+  });
+});
+
+describe("never bill twice: replacing the draft invoice's lines (E1)", () => {
+  const D = (
+    id: string,
+    o: Partial<{
+      type: string;
+      name: string;
+      pricebookItemId: string | null;
+      isServiceFee: boolean;
+      sourceType: string | null;
+      partTied: boolean;
+    }> = {},
+  ) => ({
+    id,
+    type: o.type ?? "service",
+    name: o.name ?? id,
+    pricebookItemId: o.pricebookItemId ?? null,
+    isServiceFee: o.isServiceFee ?? false,
+    sourceType: o.sourceType ?? null,
+    partTied: o.partTied ?? false,
+  });
+  const A = (
+    name: string,
+    type = "service",
+    pricebookItemId = null as string | null,
+  ) => ({
+    name,
+    type,
+    pricebookItemId,
+  });
+
+  it("replaces the quote, earlier estimates, change orders and manual lines", () => {
+    const plan = planInvoiceReplace(
+      [
+        D("quote", { sourceType: "lead_quote" }),
+        D("old-est", { sourceType: "estimate" }),
+        D("co", { sourceType: "change_order" }),
+        D("manual", { sourceType: "manual" }),
+        D("older", { sourceType: null }),
+      ],
+      [A("Rekey")],
+    );
+    expect(plan.remove.map((l) => l.id)).toEqual([
+      "quote",
+      "old-est",
+      "co",
+      "manual",
+      "older",
+    ]);
+    expect(plan.keep).toEqual([]);
+    expect(plan.add.map((a) => a.name)).toEqual(["Rekey"]);
+  });
+
+  it("keeps parts used on the job and fees; a kept part covers one approved line", () => {
+    const plan = planInvoiceReplace(
+      [
+        D("stock", { type: "part", pricebookItemId: "book-1", partTied: true }),
+        D("flow", {
+          type: "part",
+          name: "Door reinforcer",
+          sourceType: "part",
+        }),
+        D("fee", { isServiceFee: true }),
+        D("labor", { type: "labor", name: "Install" }),
+      ],
+      [
+        A("Grade 1 deadbolt", "part", "book-1"),
+        A("Grade 1 deadbolt", "part", "book-1"),
+        A("door reinforcer ", "part"),
+        A("Install", "labor"),
+      ],
+    );
+    expect(plan.keep.map((l) => l.id)).toEqual(["stock", "flow", "fee"]);
+    expect(plan.remove.map((l) => l.id)).toEqual(["labor"]);
+    // One deadbolt is covered by the stock line; the second one is added.
+    expect(plan.covered.map((a) => a.name)).toEqual([
+      "Grade 1 deadbolt",
+      "door reinforcer ",
+    ]);
+    expect(plan.add.map((a) => a.name)).toEqual([
+      "Grade 1 deadbolt",
+      "Install",
+    ]);
+  });
+
+  it("matches by price-book item when both have one, else by name and type", () => {
+    const plan = planInvoiceReplace(
+      [
+        D("p", {
+          type: "part",
+          name: "Strike",
+          pricebookItemId: "book-9",
+          partTied: true,
+        }),
+      ],
+      [A("Strike", "part", "book-2"), A("Strike", "material")],
+    );
+    expect(plan.covered).toEqual([]);
+    expect(plan.add).toHaveLength(2);
+  });
+});
+
+describe("signed job total (newest approved estimate + later change orders)", () => {
+  const at = (iso: string) => new Date(iso);
+  it("null without an approved estimate", () => {
+    expect(
+      signedJobTotal([], [{ signedAt: null, deltaCents: 5000 }]),
+    ).toBeNull();
+    expect(
+      signedJobTotal(
+        [{ approvedAt: at("2026-10-01T10:00:00Z"), totalCents: null }],
+        [],
+      ),
+    ).toBeNull();
+  });
+  it("the newest estimate replaces the earlier ones (no sum)", () => {
+    expect(
+      signedJobTotal(
+        [
+          { approvedAt: at("2026-10-01T10:00:00Z"), totalCents: 11500 },
+          { approvedAt: at("2026-10-02T10:00:00Z"), totalCents: 28400 },
+        ],
+        [],
+      ),
+    ).toBe(28400);
+  });
+  it("adds change orders signed after it; earlier ones were folded into it", () => {
+    expect(
+      signedJobTotal(
+        [{ approvedAt: at("2026-10-02T10:00:00Z"), totalCents: 28400 }],
+        [
+          { signedAt: at("2026-10-01T12:00:00Z"), deltaCents: 4000 },
+          { signedAt: at("2026-10-03T09:00:00Z"), deltaCents: 2500 },
+        ],
+      ),
+    ).toBe(30900);
   });
 });
 

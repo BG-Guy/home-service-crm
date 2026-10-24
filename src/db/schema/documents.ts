@@ -37,7 +37,7 @@ export const estimates = pgTable(
       .notNull()
       .references(() => customers.id),
     propertyId: uuid("property_id").references(() => properties.id),
-    status: text("status").notNull().default("draft"), // draft|sent|viewed|approved|declined|expired
+    status: text("status").notNull().default("draft"), // draft|sent|viewed|approved|declined|expired|superseded
     title: text("title"),
     notes: text("notes"),
     warrantyText: text("warranty_text"),
@@ -158,6 +158,14 @@ export const lineItems = pgTable(
     warrantyDays: integer("warranty_days"),
     manufacturerWarrantyMonths: integer("manufacturer_warranty_months"),
     serial: text("serial"),
+    /**
+     * Where an invoice line came from: estimate|change_order|lead_quote|part|manual
+     * (LINE_SOURCE_TYPES; null on older rows). With `source_id` (the estimate or
+     * change order) an approved estimate replaces what an earlier one put on the
+     * draft instead of billing it twice, and "Schedule later" finds its lines.
+     */
+    sourceType: text("source_type"),
+    sourceId: uuid("source_id"),
     ...timestamps(),
   },
   (t) => [index("line_items_parent_idx").on(t.parentType, t.parentId)],

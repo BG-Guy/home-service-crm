@@ -7,8 +7,13 @@ import { action, zf } from "@/lib/action";
 import { requireAnyPerm } from "@/lib/auth/current";
 import { NotFoundError, ValidationError } from "@/lib/errors";
 import { updateSettings } from "@/lib/settings";
-import { searchPricebook, upsertPricebookItems } from "./api";
-import type { PricebookPick } from "./contracts";
+import {
+  pricebookCategories,
+  recentPricebookItems,
+  searchPricebook,
+  upsertPricebookItems,
+} from "./api";
+import type { PricebookFacets, PricebookPick } from "./contracts";
 import { PRICEBOOK_KINDS } from "./csv";
 import { normalizeTiers } from "./markup";
 
@@ -187,22 +192,54 @@ export const saveMarkupTiers = action({
  * S14 search (a read — no action() transaction). Anyone who builds documents or
  * adds parts may search; prices are not secret, costs are only returned to editors.
  */
+const PICKER_PERMS = [
+  "estimates.create",
+  "invoices.create",
+  "pricebook.manage",
+  "parts.add_to_job",
+] as const;
+
+const pickerKinds = (kinds: unknown): PricebookPick["kind"][] =>
+  (Array.isArray(kinds) ? kinds : []).filter((k): k is PricebookPick["kind"] =>
+    (PRICEBOOK_KINDS as readonly string[]).includes(k),
+  );
+
+/** Costs only for editors (pricebook.manage / parts.view_cost). */
+const forViewer = (
+  user: Awaited<ReturnType<typeof requireAnyPerm>>,
+  items: PricebookPick[],
+) =>
+  user.perms.has("pricebook.manage") || user.perms.has("parts.view_cost")
+    ? items
+    : items.map((i) => ({ ...i, unitCostCents: null }));
+
 export async function searchPricebookItems(input: {
   q: string;
   kinds?: PricebookPick["kind"][];
+  /** A category chip (Quote to Paid E3). */
+  category?: string | null;
 }): Promise<PricebookPick[]> {
-  const user = await requireAnyPerm([
-    "estimates.create",
-    "invoices.create",
-    "pricebook.manage",
-    "parts.add_to_job",
-  ]);
+  const user = await requireAnyPerm([...PICKER_PERMS]);
   const q = typeof input?.q === "string" ? input.q : "";
-  const kinds = (input?.kinds ?? []).filter((k) =>
-    (PRICEBOOK_KINDS as readonly string[]).includes(k),
-  );
-  const items = await searchPricebook(q, { kinds, limit: 60 });
-  const showCost =
-    user.perms.has("pricebook.manage") || user.perms.has("parts.view_cost");
-  return showCost ? items : items.map((i) => ({ ...i, unitCostCents: null }));
+  const category =
+    typeof input?.category === "string" ? input.category.slice(0, 80) : null;
+  const items = await searchPricebook(q, {
+    kinds: pickerKinds(input?.kinds),
+    limit: 60,
+    category,
+  });
+  return forViewer(user, items);
+}
+
+/** The picker's category chips and this user's recent items (a read, S14). */
+export async function pricebookPickerFacets(input: {
+  kinds?: PricebookPick["kind"][];
+}): Promise<PricebookFacets> {
+  const user = await requireAnyPerm([...PICKER_PERMS]);
+  const kinds = pickerKinds(input?.kinds);
+  const [categories, recent] = await Promise.all([
+    pricebookCategories(kinds),
+    recentPricebookItems(user.id, { kinds }),
+  ]);
+  return { categories, recent: forViewer(user, recent) };
 }

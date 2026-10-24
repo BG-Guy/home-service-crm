@@ -10,7 +10,8 @@ import { toast } from "@/ui/components/Toast";
 import { createEstimate } from "../actions";
 
 // /estimates/new: pick the customer (S3) and an optional title, then jump into the
-// builder. Job and lead context arrive as hidden fields.
+// builder. Job and lead context arrive as hidden fields. From a job the draft
+// starts at once instead (StartEstimate.tsx); this form is its fallback.
 
 export function NewEstimateForm({
   jobId,

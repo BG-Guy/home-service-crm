@@ -47,6 +47,7 @@ export function PresentMode({
   heading,
   customer,
   stage,
+  preview,
 }: {
   children: ReactNode;
   /** The staff estimate page. */
@@ -58,6 +59,8 @@ export function PresentMode({
   customer?: string | null;
   /** The page's state (e.g. the estimate status): a change scrolls back to the top. */
   stage?: string;
+  /** The builder's Preview: no start screen, "Exit preview" goes straight back. */
+  preview?: boolean;
 }) {
   const root = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
@@ -65,7 +68,7 @@ export function PresentMode({
   const [open, setOpen] = useState(true);
   // The in-page box is the screen while presenting (the hub grows from it).
   const [boxed, setBoxed] = useState(true);
-  const [started, setStarted] = useState(false);
+  const [started, setStarted] = useState(!!preview);
   const [canFull, setCanFull] = useState(false);
   const [isFull, setIsFull] = useState(false);
   const [confirm, confirmEl] = useConfirm();
@@ -104,11 +107,13 @@ export function PresentMode({
     goFull();
   };
   const exit = async () => {
-    const ok = await confirm({
-      title: "Exit presentation?",
-      message: "You'll go back to the estimate in the app.",
-      confirmLabel: "Exit",
-    });
+    const ok =
+      preview ||
+      (await confirm({
+        title: "Exit presentation?",
+        message: "You'll go back to the estimate in the app.",
+        confirmLabel: "Exit",
+      }));
     if (ok) location.replace(exitHref);
   };
 
@@ -165,7 +170,7 @@ export function PresentMode({
       >
         <div className="present-top">
           <button type="button" className="present-exit hit-44" onClick={exit}>
-            Exit presentation
+            {preview ? "Exit preview" : "Exit presentation"}
           </button>
           <span className="present-brand">{company}</span>
           {canFull && started && !isFull ? (

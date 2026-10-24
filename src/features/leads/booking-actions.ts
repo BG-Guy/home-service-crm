@@ -156,6 +156,7 @@ export const bookLead = action({
           qty: 1,
           unitPriceCents: l.quotedPriceCents,
           taxable: false,
+          sourceType: "lead_quote",
         },
         actor,
       );

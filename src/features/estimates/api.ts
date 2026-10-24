@@ -4,19 +4,24 @@ import { db, execRows, type Tx } from "@/db";
 import {
   changeOrders,
   customers,
+  depositRequests,
   estimateOptions,
   estimates,
   invoices,
   jobs,
   lineItems,
+  payments,
   properties,
   serviceTypes,
   signatures,
+  stockMoves,
 } from "@/db/schema";
 import {
   defaultTaxBps,
+  emitLinesChanged,
   getOrCreateDraftInvoice,
   insertLines,
+  invoiceLines,
   recomputeInvoice,
 } from "@/features/invoices/api";
 import type {
@@ -34,6 +39,7 @@ import {
 } from "@/features/invoices/math";
 import { createJob, setJobEstimate } from "@/features/jobs/api";
 import { markLeadConverted } from "@/features/leads/api";
+import { lockEvidenceMedia } from "@/features/media/api";
 import { ensureDepositRequest } from "@/features/payments/api";
 import type { DepositBrief } from "@/features/payments/contracts";
 import { captureSignature } from "@/features/signatures/api";
@@ -54,6 +60,8 @@ import {
   headlineTotal,
   type OptionLineLike,
   optionTotals,
+  planInvoiceReplace,
+  signedJobTotal,
 } from "./logic";
 
 // B3 estimates API (BUILD_PLAN §6.3, SPEC M07). Writes take tx first and actor last,
@@ -274,13 +282,76 @@ export async function estimatePolicies(
 export const DEFAULT_ESIGN_CONSENT =
   "By checking the box and signing, you agree to sign this document electronically. Your electronic signature has the same legal effect as a handwritten one (ESIGN Act). You can ask us for a paper copy at any time.";
 
+/** The discount line that credits a service-call fee once a repair is approved. */
+const FEE_CREDIT_NAME = "Service call fee credited";
+
+const isFeeCredit = (l: { type: string; name: string }) =>
+  l.type === "discount" && l.name === FEE_CREDIT_NAME;
+
+/** The job's latest non-void invoice, when it is still a draft. */
+async function jobDraftInvoice(
+  tx: Tx,
+  jobId: string,
+): Promise<{ id: string; number: string; totalCents: number } | null> {
+  const [inv] = await tx
+    .select({
+      id: invoices.id,
+      number: invoices.number,
+      status: invoices.status,
+      totalCents: invoices.totalCents,
+    })
+    .from(invoices)
+    .where(and(eq(invoices.jobId, jobId), ne(invoices.status, "void")))
+    .orderBy(desc(invoices.createdAt))
+    .limit(1);
+  return inv?.status === "draft" ? inv : null;
+}
+
+/**
+ * The work already on the job's draft invoice, as estimate lines: a new estimate on
+ * the job starts from it instead of the service's default price, so approving it
+ * (which replaces the draft's lines) bills the same work once (E1). Service-call
+ * fees and their credit stay on the invoice; the lead-quote marker, purchases and
+ * serial numbers belong to the invoice line only.
+ */
+async function draftScopeLines(tx: Tx, jobId: string): Promise<LineInput[]> {
+  const inv = await jobDraftInvoice(tx, jobId);
+  if (!inv) return [];
+  const rows = await tx
+    .select()
+    .from(lineItems)
+    .where(
+      and(eq(lineItems.parentType, "invoice"), eq(lineItems.parentId, inv.id)),
+    )
+    .orderBy(asc(lineItems.sort), asc(lineItems.createdAt));
+  return rows
+    .filter((l) => !l.isServiceFee && !isFeeCredit(l))
+    .map((l) => ({
+      type: l.type as LineType,
+      pricebookItemId: l.pricebookItemId,
+      name: l.name,
+      description:
+        l.description === LEAD_QUOTE_LINE_DESCRIPTION ? null : l.description,
+      qty: Number(l.qty),
+      unitPriceCents: l.unitPriceCents,
+      unitCostCents: l.unitCostCents,
+      discountCents: l.discountCents,
+      taxable: l.taxable,
+      partSource: (l.partSource as PartSource | null) ?? null,
+      warrantyDays: l.warrantyDays,
+      manufacturerWarrantyMonths: l.manufacturerWarrantyMonths,
+      isUpsell: l.isUpsell,
+    }));
+}
+
 // ------------------------------------------------------------------ contract: create
 
 /**
- * Draft estimate with one recommended option. Prefill (lead or job): a service line
- * at the quoted price (or the service type's default), the service type's warranty.
- * With leadId the lead is linked, not booked: B1 markLeadConverted runs when the
- * estimate is first sent or approved.
+ * Draft estimate with one recommended option. Prefill: on a job whose draft invoice
+ * already has lines, those lines (the job's real scope, E1); else (lead or job) a
+ * service line at the quoted price or the service type's default. The service
+ * type's warranty. With leadId the lead is linked, not booked: B1 markLeadConverted
+ * runs when the estimate is first sent or approved.
  */
 export async function createEstimateDraft(
   tx: Tx,
@@ -356,9 +427,12 @@ export async function createEstimateDraft(
     .returning({ id: estimateOptions.id });
   const price =
     input.prefill?.quotedPriceCents ?? st?.defaultPriceCents ?? null;
+  const scope = input.jobId ? await draftScopeLines(tx, input.jobId) : [];
+  if (opt && scope.length > 0)
+    await insertLines(tx, "estimate_option", opt.id, scope);
   // Prefill only a priced line: a "$0.00" placeholder would reach the customer
   // if nobody edits it (QA T2-19). Without a price the option starts empty.
-  if (opt && price != null && price > 0)
+  else if (opt && price != null && price > 0)
     await insertLines(tx, "estimate_option", opt.id, [
       {
         type: "service",
@@ -445,41 +519,62 @@ export async function hasSignedAuthorization(
   return rows.length > 0;
 }
 
-/** Signed total = approved estimate option (as signed) + approved, signed change orders. */
+/** An approved estimate's total as signed (the snapshot), else as stored now. */
+async function approvedEstimateTotal(
+  e: {
+    id: string;
+    approvedOptionId: string | null;
+    signatureId: string | null;
+  },
+  exec: Tx,
+): Promise<number | null> {
+  if (e.signatureId) {
+    const [sig] = await exec
+      .select({ snap: signatures.docSnapshot })
+      .from(signatures)
+      .where(eq(signatures.id, e.signatureId))
+      .limit(1);
+    const t = (sig?.snap as { totals?: { totalCents?: number } } | null)?.totals
+      ?.totalCents;
+    if (typeof t === "number") return t;
+  }
+  if (!e.approvedOptionId) return null;
+  const loaded = await loadEstimate(e.id, exec);
+  return (
+    loaded?.options.find((o) => o.id === e.approvedOptionId)?.totals
+      .totalCents ?? null
+  );
+}
+
+/**
+ * Signed total (logic `signedJobTotal`): the newest approved estimate as signed (it
+ * replaced earlier ones on the invoice, E1) + signed change orders approved after it.
+ */
 async function signedTotalForJob(jobId: string, exec: Tx = db) {
   const ests = await exec
     .select({
       id: estimates.id,
       approvedOptionId: estimates.approvedOptionId,
       signatureId: estimates.signatureId,
+      approvedAt: estimates.approvedAt,
     })
     .from(estimates)
     .where(and(eq(estimates.jobId, jobId), eq(estimates.status, "approved")))
     .orderBy(desc(estimates.approvedAt));
-  let base: number | null = null;
+  // Newest first: only the first one with a total matters.
+  let newest: { approvedAt: Date | null; totalCents: number } | null = null;
   for (const e of ests) {
-    if (e.signatureId) {
-      const [sig] = await exec
-        .select({ snap: signatures.docSnapshot })
-        .from(signatures)
-        .where(eq(signatures.id, e.signatureId))
-        .limit(1);
-      const t = (sig?.snap as { totals?: { totalCents?: number } } | null)
-        ?.totals?.totalCents;
-      if (typeof t === "number") {
-        base = (base ?? 0) + t;
-        continue;
-      }
-    }
-    if (e.approvedOptionId) {
-      const loaded = await loadEstimate(e.id, exec);
-      const opt = loaded?.options.find((o) => o.id === e.approvedOptionId);
-      if (opt) base = (base ?? 0) + opt.totals.totalCents;
+    const t = await approvedEstimateTotal(e, exec);
+    if (t != null) {
+      newest = { approvedAt: e.approvedAt, totalCents: t };
+      break;
     }
   }
+  if (!newest) return null;
   const cos = await exec
-    .select({ delta: changeOrders.deltaCents })
+    .select({ delta: changeOrders.deltaCents, signedAt: signatures.signedAt })
     .from(changeOrders)
+    .leftJoin(signatures, eq(signatures.id, changeOrders.signatureId))
     .where(
       and(
         eq(changeOrders.jobId, jobId),
@@ -487,8 +582,10 @@ async function signedTotalForJob(jobId: string, exec: Tx = db) {
         sql`${changeOrders.signatureId} is not null`,
       ),
     );
-  if (base == null) return null;
-  return base + cos.reduce((a, c) => a + c.delta, 0);
+  return signedJobTotal(
+    [newest],
+    cos.map((c) => ({ signedAt: c.signedAt, deltaCents: c.delta })),
+  );
 }
 
 /**
@@ -659,7 +756,9 @@ export async function declineEstimateTx(
   if (!["draft", "sent", "viewed", "expired"].includes(est.status))
     throw new ConflictError(
       "estimate_closed",
-      `Estimate ${est.number} is already ${est.status}.`,
+      est.status === "superseded"
+        ? `Estimate ${est.number} was already replaced by a newer one.`
+        : `Estimate ${est.number} is already ${est.status}.`,
     );
   const now = new Date();
   await tx
@@ -826,24 +925,56 @@ function lineInputFrom(l: LineRow): LineInput {
   };
 }
 
+/** Draft-invoice lines tied to parts: bought for the job or taken from stock. */
+async function partTiedLineIds(
+  tx: Tx,
+  lines: readonly { id: string; partPurchaseId: string | null }[],
+): Promise<Set<string>> {
+  const tied = new Set(lines.filter((l) => l.partPurchaseId).map((l) => l.id));
+  if (lines.length === 0) return tied;
+  const moves = await tx
+    .selectDistinct({ id: stockMoves.lineItemId })
+    .from(stockMoves)
+    .where(
+      inArray(
+        stockMoves.lineItemId,
+        lines.map((l) => l.id),
+      ),
+    );
+  for (const m of moves) if (m.id) tied.add(m.id);
+  return tied;
+}
+
+const lineCount = (n: number) => `${n} line${n === 1 ? "" : "s"}`;
+
+interface LinesToInvoiceResult {
+  invoiceId: string | null;
+  invoiceNumber: string | null;
+  /** The invoice was already issued: nothing changed (revise it to add the lines). */
+  skipped: boolean;
+  added: number;
+  removed: number;
+}
+
 /**
- * Copy approved lines onto the job's DRAFT invoice. The service-call fee is
- * "credited if you approve the repair": fee lines on the estimate are not copied,
- * and fee lines already on the invoice get a matching credit line.
+ * Put approved lines on the job's DRAFT invoice, tagged with their source. An
+ * estimate REPLACES what the draft already bills for the same work (logic
+ * `planInvoiceReplace`: the lead's quote, earlier estimates, manual lines; parts
+ * used on the job and service-call fees stay), so the job is never billed twice
+ * (E1). A change order adds to the work. The service-call fee is "credited if you
+ * approve the repair": fee lines on the document are not copied, and fee lines on
+ * the invoice get one matching credit. An issued invoice is never touched.
  */
 async function linesToInvoice(
   tx: Tx,
   jobId: string,
   lines: LineRow[],
-  sourceLabel: string,
+  source: { type: "estimate" | "change_order"; id: string; label: string },
   actor: Actor,
-  /**
-   * Estimate approval: the approved scope REPLACES the lead's quoted-price placeholder
-   * line (invoices/lead-quote) on the draft. A change order adds to the scope instead.
-   */
-  opts: { replaceLeadQuote?: boolean } = {},
-): Promise<{ invoiceId: string | null; added: number }> {
+): Promise<LinesToInvoiceResult> {
   const { invoiceId } = await getOrCreateDraftInvoice(tx, jobId, actor);
+  // Locked: two approvals on the same job (online and in person at once) take
+  // turns replacing the draft's lines instead of interleaving.
   const [inv] = await tx
     .select({
       status: invoices.status,
@@ -852,111 +983,212 @@ async function linesToInvoice(
     })
     .from(invoices)
     .where(eq(invoices.id, invoiceId))
-    .limit(1);
-  if (!inv) return { invoiceId: null, added: 0 };
+    .limit(1)
+    .for("update");
+  const none = { added: 0, removed: 0 };
+  if (!inv)
+    return { invoiceId: null, invoiceNumber: null, skipped: false, ...none };
+  const entity = { type: "invoice", id: invoiceId } as const;
   if (inv.status !== "draft") {
     await writeActivity(tx, {
-      entity: { type: "invoice", id: invoiceId },
+      entity,
       customerId: inv.customerId,
       jobId,
       kind: "invoice.lines_skipped",
-      summary: `${sourceLabel} approved after ${inv.number} was issued — revise the invoice to add its lines`,
+      summary: `${source.label} approved after ${inv.number} was issued — revise the invoice to add its lines`,
+      data: { source: source.label, source_id: source.id },
       actorUserId: actor.userId,
     });
-    return { invoiceId, added: 0 };
+    return { invoiceId, invoiceNumber: inv.number, skipped: true, ...none };
   }
-  const copy = lines.filter((l) => !l.isServiceFee).map(lineInputFrom);
-  // QA2: never bill the lead's quote AND the approved estimate (INV-1067 $584.54).
-  if (opts.replaceLeadQuote && copy.length > 0) {
-    const placeholders = (
-      await tx
-        .select({
-          id: lineItems.id,
-          name: lineItems.name,
-          totalCents: lineItems.totalCents,
-          description: lineItems.description,
-          pricebookItemId: lineItems.pricebookItemId,
-          type: lineItems.type,
-        })
-        .from(lineItems)
-        .where(
-          and(
-            eq(lineItems.parentType, "invoice"),
-            eq(lineItems.parentId, invoiceId),
-            eq(lineItems.description, LEAD_QUOTE_LINE_DESCRIPTION),
-          ),
-        )
-    ).filter(isLeadQuoteLine);
-    if (placeholders.length > 0) {
-      await tx.delete(lineItems).where(
-        inArray(
-          lineItems.id,
-          placeholders.map((p) => p.id),
-        ),
+  const approved = lines.filter((l) => !l.isServiceFee);
+  let copy = approved;
+  let removed = 0;
+  if (source.type === "estimate" && approved.length > 0) {
+    // The fee credit stays: the credit rule below keeps it to one.
+    const draft = (await invoiceLines(tx, invoiceId)).filter(
+      (l) => !isFeeCredit(l),
+    );
+    const tied = await partTiedLineIds(tx, draft);
+    const plan = planInvoiceReplace(
+      draft.map((l) => ({ ...l, partTied: tied.has(l.id) })),
+      approved,
+    );
+    copy = plan.add;
+    if (plan.remove.length > 0) {
+      const ids = plan.remove.map((l) => l.id);
+      await tx.delete(lineItems).where(inArray(lineItems.id, ids));
+      removed = ids.length;
+      const cents = plan.remove.reduce((a, l) => a + l.totalCents, 0);
+      // QA2: never bill the lead's quote AND the approved estimate.
+      const quoteOnly = plan.remove.every(
+        (l) => l.sourceType === "lead_quote" || isLeadQuoteLine(l),
       );
       await writeActivity(tx, {
-        entity: { type: "invoice", id: invoiceId },
+        entity,
         customerId: inv.customerId,
         jobId,
         kind: "invoice.line_removed",
-        summary:
-          `Quoted price ${formatMoney(placeholders.reduce((a, p) => a + p.totalCents, 0))} replaced by ${sourceLabel}`.slice(
-            0,
-            200,
-          ),
+        summary: (quoteOnly
+          ? `Quoted price ${formatMoney(cents)} replaced by ${source.label}`
+          : `${lineCount(removed)} (${formatMoney(cents)}) replaced by ${source.label}`
+        ).slice(0, 200),
         data: {
-          source: sourceLabel,
-          line_item_ids: placeholders.map((p) => p.id),
-          reason: "lead_quote_replaced",
+          source: source.label,
+          source_id: source.id,
+          line_item_ids: ids,
+          lines: plan.remove.map((l) => ({
+            name: l.name,
+            qty: Number(l.qty),
+            total_cents: l.totalCents,
+          })),
+          reason: quoteOnly ? "lead_quote_replaced" : "replaced_by_estimate",
         },
         actorUserId: actor.userId,
       });
     }
   }
-  const existingFees = await tx
-    .select({ total: lineItems.totalCents, name: lineItems.name })
-    .from(lineItems)
-    .where(
-      and(
-        eq(lineItems.parentType, "invoice"),
-        eq(lineItems.parentId, invoiceId),
-        eq(lineItems.isServiceFee, true),
+  const inputs: LineInput[] = copy.map((l) => ({
+    ...lineInputFrom(l),
+    sourceType: source.type,
+    sourceId: source.id,
+  }));
+  const [fees, credited] = await Promise.all([
+    tx
+      .select({ total: lineItems.totalCents })
+      .from(lineItems)
+      .where(
+        and(
+          eq(lineItems.parentType, "invoice"),
+          eq(lineItems.parentId, invoiceId),
+          eq(lineItems.isServiceFee, true),
+        ),
       ),
-    );
-  const feeCents = existingFees.reduce((a, f) => a + f.total, 0);
-  const alreadyCredited = await tx
-    .select({ id: lineItems.id })
-    .from(lineItems)
-    .where(
-      and(
-        eq(lineItems.parentType, "invoice"),
-        eq(lineItems.parentId, invoiceId),
-        eq(lineItems.type, "discount"),
-        eq(lineItems.name, "Service call fee credited"),
-      ),
-    )
-    .limit(1);
-  if (feeCents > 0 && alreadyCredited.length === 0 && copy.length > 0)
-    copy.push({
+    tx
+      .select({ id: lineItems.id })
+      .from(lineItems)
+      .where(
+        and(
+          eq(lineItems.parentType, "invoice"),
+          eq(lineItems.parentId, invoiceId),
+          eq(lineItems.type, "discount"),
+          eq(lineItems.name, FEE_CREDIT_NAME),
+        ),
+      )
+      .limit(1),
+  ]);
+  const feeCents = fees.reduce((a, f) => a + f.total, 0);
+  // Not tagged: the credit belongs to the visit's fee, not to the approved work.
+  if (feeCents > 0 && credited.length === 0 && approved.length > 0)
+    inputs.push({
       type: "discount",
-      name: "Service call fee credited",
+      name: FEE_CREDIT_NAME,
       description: "Credited because you approved the repair",
       qty: 1,
       unitPriceCents: feeCents,
       taxable: false,
     });
-  await insertLines(tx, "invoice", invoiceId, copy);
+  await insertLines(tx, "invoice", invoiceId, inputs);
   await recomputeInvoice(tx, invoiceId);
-  await writeActivity(tx, {
-    entity: { type: "invoice", id: invoiceId },
-    customerId: inv.customerId,
-    jobId,
-    kind: "invoice.line_added",
-    summary: `${copy.length} line${copy.length === 1 ? "" : "s"} added from ${sourceLabel}`,
-    data: { source: sourceLabel },
-    actorUserId: actor.userId,
-  });
-  return { invoiceId, added: copy.length };
+  const covered = approved.length - copy.length;
+  if (inputs.length > 0 || covered > 0)
+    await writeActivity(tx, {
+      entity,
+      customerId: inv.customerId,
+      jobId,
+      kind: "invoice.line_added",
+      summary: `${lineCount(inputs.length)} added from ${source.label}${covered > 0 ? ` (${covered} already on it as parts used)` : ""}`,
+      data: { source: source.label, source_id: source.id },
+      actorUserId: actor.userId,
+    });
+  // Deposit rules ("total ≥ $X") re-check against the new lines.
+  if (inputs.length > 0 || removed > 0)
+    await emitLinesChanged(tx, invoiceId, jobId, actor);
+  return {
+    invoiceId,
+    invoiceNumber: inv.number,
+    skipped: false,
+    added: inputs.length,
+    removed,
+  };
+}
+
+export interface DraftInvoiceImpact {
+  invoiceId: string;
+  number: string;
+  /** The draft's total now. */
+  totalCents: number;
+  /** Lines an approval would replace, and what they add up to. */
+  replaceCount: number;
+  replaceCents: number;
+  /** Parts used on the job that stay on the invoice. */
+  partsKept: number;
+}
+
+/**
+ * What approving an estimate would replace on the job's draft invoice (E1), for
+ * the builder's note: "Approving this replaces INV-1067's lines ($876.89 now)".
+ * Null without a draft or when nothing on it would be replaced.
+ */
+export async function draftInvoiceImpact(
+  jobId: string,
+): Promise<DraftInvoiceImpact | null> {
+  const inv = await jobDraftInvoice(db, jobId);
+  if (!inv) return null;
+  const lines = (await invoiceLines(db, inv.id)).filter((l) => !isFeeCredit(l));
+  const tied = await partTiedLineIds(db, lines);
+  const plan = planInvoiceReplace(
+    lines.map((l) => ({ ...l, partTied: tied.has(l.id) })),
+    [],
+  );
+  if (plan.remove.length === 0) return null;
+  return {
+    invoiceId: inv.id,
+    number: inv.number,
+    totalCents: inv.totalCents,
+    replaceCount: plan.remove.length,
+    replaceCents: plan.remove.reduce((a, l) => a + l.totalCents, 0),
+    partsKept: plan.keep.filter((l) => !l.isServiceFee).length,
+  };
+}
+
+/**
+ * Other open estimates on the job can't be signed once one is approved (E1): they
+ * become `superseded` ("Replaced"), with "Replaced by E-1026" in their activity.
+ */
+async function supersedeOpenEstimates(
+  tx: Tx,
+  jobId: string,
+  by: { id: string; number: string },
+  actor: Actor,
+): Promise<string[]> {
+  const now = new Date();
+  const rows = await tx
+    .update(estimates)
+    .set({ status: "superseded", updatedAt: now })
+    .where(
+      and(
+        eq(estimates.jobId, jobId),
+        ne(estimates.id, by.id),
+        inArray(estimates.status, ["draft", "sent", "viewed"]),
+      ),
+    )
+    .returning({
+      id: estimates.id,
+      number: estimates.number,
+      customerId: estimates.customerId,
+    });
+  for (const r of rows)
+    await writeActivity(tx, {
+      entity: { type: "estimate", id: r.id },
+      customerId: r.customerId,
+      jobId,
+      kind: "estimate.superseded",
+      summary: `Estimate ${r.number} replaced by ${by.number}`,
+      data: { by_estimate_id: by.id, by_number: by.number },
+      actorUserId: actor.userId,
+    });
+  return rows.map((r) => r.number);
 }
 
 export interface ApproveResult {
@@ -965,6 +1197,8 @@ export interface ApproveResult {
   invoiceId: string | null;
   signatureId: string | null;
   deposit: DepositBrief | null;
+  /** The job's invoice was already issued, so the lines weren't added (E1.7). */
+  linesSkipped: { invoiceNumber: string } | null;
 }
 
 /**
@@ -995,6 +1229,11 @@ export async function approveEstimateTx(
     throw new ConflictError(
       "estimate_approved",
       `Estimate ${est.number} is already approved.`,
+    );
+  if (est.status === "superseded")
+    throw new ConflictError(
+      "estimate_replaced",
+      "This estimate was replaced by a newer one. Ask us for the current one.",
     );
   if (!canApproveEstimate(est))
     throw new ConflictError(
@@ -1080,19 +1319,23 @@ export async function approveEstimateTx(
     })
     .where(eq(estimates.id, est.id));
 
-  // 3. Job, invoice lines, deposit.
+  // The photos the customer saw with the signed estimate are evidence now.
+  if (est.photoMediaIds.length > 0)
+    await lockEvidenceMedia(tx, est.photoMediaIds);
+
+  // 3. Job, other open estimates, invoice lines (replacing, E1), deposit.
   const jobId = await ensureJobForEstimate(tx, loaded, actor);
   await setJobEstimate(tx, jobId, est.id);
+  await supersedeOpenEstimates(tx, jobId, est, actor);
   const approvedLines = option.lines.filter(
     (l) => !l.isOptional || addonIds.includes(l.id),
   );
-  const { invoiceId } = await linesToInvoice(
+  const lines = await linesToInvoice(
     tx,
     jobId,
     approvedLines,
-    `estimate ${est.number}`,
+    { type: "estimate", id: est.id, label: `estimate ${est.number}` },
     actor,
-    { replaceLeadQuote: true },
   );
   // B4 evaluates the deposit rules (null when none match or `deposits` is off).
   const deposit: DepositBrief | null = await ensureDepositRequest(
@@ -1138,9 +1381,13 @@ export async function approveEstimateTx(
   return {
     estimateId: est.id,
     jobId,
-    invoiceId,
+    invoiceId: lines.invoiceId,
     signatureId: sig.signatureId,
     deposit,
+    linesSkipped:
+      lines.skipped && lines.invoiceNumber
+        ? { invoiceNumber: lines.invoiceNumber }
+        : null,
   };
 }
 
@@ -1320,11 +1567,12 @@ export async function approveChangeOrderTx(
       updatedAt: new Date(),
     })
     .where(eq(changeOrders.id, co.id));
+  // A change order really is extra work: it adds to the invoice (tagged).
   await linesToInvoice(
     tx,
     co.jobId,
     loaded.lines,
-    `change order ${co.number}`,
+    { type: "change_order", id: co.id, label: `change order ${co.number}` },
     actor,
   );
   const entity = { type: "change_order", id: co.id } as const;
@@ -1400,4 +1648,418 @@ export async function countOpenEstimates(customerId: string): Promise<number> {
     sql`select count(*)::int as n from estimates where customer_id = ${customerId} and status in ('draft','sent','viewed')`,
   );
   return Number(r?.n ?? 0);
+}
+
+// ------------------------------------------------------------------ after signing: now or later
+
+const OPEN_DEPOSIT = ["required", "requested"];
+const PAID_DEPOSIT = ["paid", "held", "applied"];
+const CLOSED_JOB = ["completed", "closed", "cancelled"];
+
+/**
+ * "When is the work?" after signing (Quote to Paid E5). `now`: the approved lines
+ * are on this visit's invoice. `later`: they moved to an unscheduled follow-up job
+ * for the same customer and address (the office books it), recorded in the
+ * estimate's activity (`estimate.work_later` / `estimate.work_now`, like the lead
+ * link rides on `estimate.created`). The choice locks once a deposit is paid.
+ */
+export interface WorkState {
+  mode: "now" | "later";
+  /** The job the work is billed on now. */
+  job: { id: string; number: string; status: string } | null;
+  /** Later: the visit it was signed on. */
+  originJob: { id: string; number: string } | null;
+  /** That job's latest invoice. */
+  invoice: { id: string; number: string; status: string } | null;
+  /** Lines from this estimate on that invoice (line_items.source). */
+  linesOnInvoice: number;
+  /** The invoice was already issued when it was approved: nothing was added. */
+  linesSkipped: boolean;
+  /** An open deposit request for this estimate. */
+  deposit: { id: string; amountCents: number; status: string } | null;
+  depositPaid: boolean;
+  canScheduleLater: boolean;
+  canMoveBack: boolean;
+  /** Why the choice can't change, in plain words. */
+  locked: string | null;
+}
+
+async function latestWorkMove(
+  exec: Tx,
+  estimateId: string,
+): Promise<{ kind: string; from: string; to: string } | null> {
+  const [r] = await execRows<{ kind: string; f: string; t: string }>(
+    sql`select kind, data->>'from_job_id' as f, data->>'to_job_id' as t from activity
+        where entity_type = 'estimate' and entity_id = ${estimateId}
+          and kind in ('estimate.work_later', 'estimate.work_now')
+        order by created_at desc limit 1`,
+    exec,
+  );
+  return r ? { kind: r.kind, from: r.f, to: r.t } : null;
+}
+
+async function latestJobInvoice(exec: Tx, jobId: string) {
+  const [inv] = await exec
+    .select({
+      id: invoices.id,
+      number: invoices.number,
+      status: invoices.status,
+    })
+    .from(invoices)
+    .where(and(eq(invoices.jobId, jobId), ne(invoices.status, "void")))
+    .orderBy(desc(invoices.createdAt))
+    .limit(1);
+  return inv ?? null;
+}
+
+/** The job's latest non-void invoice, for the link strip EST → job → invoice. */
+export function jobInvoiceBrief(
+  jobId: string,
+): Promise<{ id: string; number: string; status: string } | null> {
+  return latestJobInvoice(db, jobId);
+}
+
+const estimateLinesOn = (invoiceId: string, estimateId: string) =>
+  and(
+    eq(lineItems.parentType, "invoice"),
+    eq(lineItems.parentId, invoiceId),
+    eq(lineItems.sourceType, "estimate"),
+    eq(lineItems.sourceId, estimateId),
+  );
+
+/** Where an approved estimate's work is billed, and what may change (E5). */
+export async function workState(
+  estimateId: string,
+  exec: Tx = db,
+): Promise<WorkState | null> {
+  const [est] = await exec
+    .select({
+      id: estimates.id,
+      status: estimates.status,
+      jobId: estimates.jobId,
+    })
+    .from(estimates)
+    .where(eq(estimates.id, estimateId))
+    .limit(1);
+  if (!est || est.status !== "approved") return null;
+  const move = await latestWorkMove(exec, est.id);
+  const later =
+    move?.kind === "estimate.work_later" &&
+    !!est.jobId &&
+    move.to === est.jobId;
+  const [job] = est.jobId
+    ? await exec
+        .select({ id: jobs.id, number: jobs.number, status: jobs.status })
+        .from(jobs)
+        .where(eq(jobs.id, est.jobId))
+        .limit(1)
+    : [];
+  const [origin] =
+    later && move
+      ? await exec
+          .select({ id: jobs.id, number: jobs.number })
+          .from(jobs)
+          .where(eq(jobs.id, move.from))
+          .limit(1)
+      : [];
+  const invoice = job ? await latestJobInvoice(exec, job.id) : null;
+  const [count] = invoice
+    ? await exec
+        .select({ n: sql<number>`count(*)::int` })
+        .from(lineItems)
+        .where(estimateLinesOn(invoice.id, est.id))
+    : [];
+  const linesOnInvoice = Number(count?.n ?? 0);
+  const deps = await exec
+    .select({
+      id: depositRequests.id,
+      amountCents: depositRequests.amountCents,
+      status: depositRequests.status,
+    })
+    .from(depositRequests)
+    .where(eq(depositRequests.estimateId, est.id))
+    .orderBy(desc(depositRequests.createdAt));
+  const deposit = deps.find((d) => OPEN_DEPOSIT.includes(d.status)) ?? null;
+  const depositPaid = deps.some((d) => PAID_DEPOSIT.includes(d.status));
+  let canMoveBack = false;
+  if (later && job && origin && !depositPaid) {
+    const [paid] = await exec
+      .select({ n: sql<number>`count(*)::int` })
+      .from(payments)
+      .where(and(eq(payments.jobId, job.id), eq(payments.status, "succeeded")));
+    const back = await latestJobInvoice(exec, origin.id);
+    canMoveBack =
+      job.status === "unscheduled" &&
+      Number(paid?.n ?? 0) === 0 &&
+      (invoice?.status ?? "draft") === "draft" &&
+      (back?.status ?? "draft") === "draft";
+  }
+  const canScheduleLater =
+    !later &&
+    !!job &&
+    !CLOSED_JOB.includes(job.status) &&
+    invoice?.status === "draft" &&
+    linesOnInvoice > 0 &&
+    !depositPaid;
+  const locked = depositPaid
+    ? "The deposit is paid, so the work stays where it is."
+    : later && !canMoveBack
+      ? "The follow-up is booked or paid, so the work stays on it."
+      : !later && invoice && invoice.status !== "draft"
+        ? `${invoice.number} was already sent, so the work stays on this job.`
+        : null;
+  return {
+    mode: later ? "later" : "now",
+    job: job ?? null,
+    originJob: origin ?? null,
+    invoice,
+    linesOnInvoice,
+    linesSkipped:
+      !!invoice && invoice.status !== "draft" && linesOnInvoice === 0,
+    deposit,
+    depositPaid,
+    canScheduleLater,
+    canMoveBack,
+    locked,
+  };
+}
+
+/** Move this estimate's lines (by source) between two draft invoices. */
+async function moveEstimateLines(
+  tx: Tx,
+  estimateId: string,
+  fromInvoiceId: string,
+  toInvoiceId: string,
+): Promise<{ count: number; cents: number }> {
+  const rows = await tx
+    .update(lineItems)
+    .set({ parentId: toInvoiceId, updatedAt: new Date() })
+    .where(estimateLinesOn(fromInvoiceId, estimateId))
+    .returning({ total: lineItems.totalCents });
+  await recomputeInvoice(tx, fromInvoiceId);
+  await recomputeInvoice(tx, toInvoiceId);
+  return {
+    count: rows.length,
+    cents: rows.reduce((a, r) => a + r.total, 0),
+  };
+}
+
+/** The estimate, its work, its open deposit: from one job to another. */
+async function pointEstimateAt(
+  tx: Tx,
+  est: { id: string },
+  from: string,
+  to: string,
+): Promise<void> {
+  const now = new Date();
+  await tx
+    .update(depositRequests)
+    .set({ jobId: to })
+    .where(
+      and(
+        eq(depositRequests.estimateId, est.id),
+        inArray(depositRequests.status, OPEN_DEPOSIT),
+      ),
+    );
+  await tx
+    .update(estimates)
+    .set({ jobId: to, updatedAt: now })
+    .where(eq(estimates.id, est.id));
+  await setJobEstimate(tx, to, est.id);
+  // The visit it left no longer sells this estimate (payroll's "sold by").
+  await tx
+    .update(jobs)
+    .set({ estimateId: null, updatedAt: now })
+    .where(and(eq(jobs.id, from), eq(jobs.estimateId, est.id)));
+}
+
+/**
+ * "Schedule later" (E5): this estimate's lines and its open deposit request move
+ * to a new unscheduled follow-up job for the same customer and address ("Follow-up:
+ * <title>", with the estimate), which shows in the Assign hub's undated list.
+ * Allowed while the work is on this visit's DRAFT invoice and no deposit is paid.
+ */
+export async function scheduleEstimateLaterTx(
+  tx: Tx,
+  estimateId: string,
+  actor: Actor,
+): Promise<{ jobId: string; number: string; fromJobId: string }> {
+  await tx
+    .select({ id: estimates.id })
+    .from(estimates)
+    .where(eq(estimates.id, estimateId))
+    .for("update");
+  const state = await workState(estimateId, tx);
+  if (!state)
+    throw new ConflictError(
+      "estimate_not_approved",
+      "Only an approved estimate's work can be scheduled.",
+    );
+  if (!state.canScheduleLater || !state.job || !state.invoice)
+    throw new ConflictError(
+      "work_locked",
+      state.locked ?? "This work can't be moved to a follow-up now.",
+    );
+  const [est] = await tx
+    .select()
+    .from(estimates)
+    .where(eq(estimates.id, estimateId))
+    .limit(1);
+  const [from] = await tx
+    .select()
+    .from(jobs)
+    .where(eq(jobs.id, state.job.id))
+    .limit(1);
+  if (!est || !from) throw new NotFoundError("Job");
+  const created = await createJob(
+    tx,
+    {
+      customerId: from.customerId,
+      propertyId: from.propertyId,
+      serviceTypeId: from.serviceTypeId,
+      title: `Follow-up: ${est.title ?? from.title}`.slice(0, 200),
+      estimateId: est.id,
+    },
+    actor,
+  );
+  const { invoiceId: toInvoice } = await getOrCreateDraftInvoice(
+    tx,
+    created.jobId,
+    actor,
+  );
+  const moved = await moveEstimateLines(
+    tx,
+    est.id,
+    state.invoice.id,
+    toInvoice,
+  );
+  await pointEstimateAt(tx, est, from.id, created.jobId);
+  const what = `${lineCount(moved.count)} (${formatMoney(moved.cents)})`;
+  await writeActivity(tx, {
+    entity: { type: "estimate", id: est.id },
+    customerId: est.customerId,
+    jobId: created.jobId,
+    kind: "estimate.work_later",
+    summary: `Work scheduled for later: ${what} moved to follow-up ${created.number}`,
+    data: { from_job_id: from.id, to_job_id: created.jobId },
+    actorUserId: actor.userId,
+  });
+  await writeActivity(tx, {
+    entity: { type: "job", id: from.id },
+    customerId: est.customerId,
+    jobId: from.id,
+    kind: "job.work_moved",
+    summary: `${est.number}'s work moved to follow-up ${created.number} (${what})`,
+    data: { estimate_id: est.id, to_job_id: created.jobId },
+    actorUserId: actor.userId,
+  });
+  await writeActivity(tx, {
+    entity: { type: "job", id: created.jobId },
+    customerId: est.customerId,
+    jobId: created.jobId,
+    kind: "job.work_moved",
+    summary: `Follow-up of ${from.number} for ${est.number} (${what})`,
+    data: { estimate_id: est.id, from_job_id: from.id },
+    actorUserId: actor.userId,
+  });
+  await emitLinesChanged(tx, state.invoice.id, from.id, actor);
+  await emitLinesChanged(tx, toInvoice, created.jobId, actor);
+  return { jobId: created.jobId, number: created.number, fromJobId: from.id };
+}
+
+/**
+ * "Move it back to this job" (E5): undoes Schedule later while the follow-up is
+ * still unscheduled and unpaid. The follow-up was made by this flow and never
+ * booked, so it is cancelled quietly (no job.cancelled: the customer was never
+ * told about it) and its empty draft invoice voided.
+ */
+export async function moveEstimateBackTx(
+  tx: Tx,
+  estimateId: string,
+  actor: Actor,
+): Promise<{ jobId: string; followUpJobId: string }> {
+  await tx
+    .select({ id: estimates.id })
+    .from(estimates)
+    .where(eq(estimates.id, estimateId))
+    .for("update");
+  const state = await workState(estimateId, tx);
+  if (!state?.canMoveBack || !state.job || !state.originJob)
+    throw new ConflictError(
+      "work_locked",
+      state?.locked ?? "This work can't be moved back now.",
+    );
+  const [est] = await tx
+    .select()
+    .from(estimates)
+    .where(eq(estimates.id, estimateId))
+    .limit(1);
+  if (!est) throw new NotFoundError("Estimate");
+  const follow = state.job;
+  const origin = state.originJob;
+  const { invoiceId: back } = await getOrCreateDraftInvoice(
+    tx,
+    origin.id,
+    actor,
+  );
+  const moved = state.invoice
+    ? await moveEstimateLines(tx, est.id, state.invoice.id, back)
+    : { count: 0, cents: 0 };
+  await pointEstimateAt(tx, est, follow.id, origin.id);
+  const now = new Date();
+  await tx
+    .update(jobs)
+    .set({
+      status: "cancelled",
+      cancelledAt: now,
+      cancelReason: "duplicate",
+      cancelNote: `Work moved back to ${origin.number}`,
+      updatedAt: now,
+    })
+    .where(and(eq(jobs.id, follow.id), eq(jobs.status, "unscheduled")));
+  if (state.invoice) {
+    const left = await invoiceLines(tx, state.invoice.id);
+    if (left.length === 0)
+      await tx
+        .update(invoices)
+        .set({
+          status: "void",
+          voidedAt: now,
+          voidReason: `Work moved back to ${origin.number}`,
+          updatedAt: now,
+        })
+        .where(
+          and(eq(invoices.id, state.invoice.id), eq(invoices.status, "draft")),
+        );
+  }
+  const what = `${lineCount(moved.count)} (${formatMoney(moved.cents)})`;
+  await writeActivity(tx, {
+    entity: { type: "estimate", id: est.id },
+    customerId: est.customerId,
+    jobId: origin.id,
+    kind: "estimate.work_now",
+    summary: `Work moved back to ${origin.number}: ${what}`,
+    data: { from_job_id: follow.id, to_job_id: origin.id },
+    actorUserId: actor.userId,
+  });
+  await writeActivity(tx, {
+    entity: { type: "job", id: origin.id },
+    customerId: est.customerId,
+    jobId: origin.id,
+    kind: "job.work_moved",
+    summary: `${est.number}'s work moved back from ${follow.number} (${what})`,
+    data: { estimate_id: est.id, from_job_id: follow.id },
+    actorUserId: actor.userId,
+  });
+  await writeActivity(tx, {
+    entity: { type: "job", id: follow.id },
+    customerId: est.customerId,
+    jobId: follow.id,
+    kind: "job.work_moved",
+    summary: `Follow-up cancelled: ${est.number}'s work moved back to ${origin.number}`,
+    data: { estimate_id: est.id, to_job_id: origin.id },
+    actorUserId: actor.userId,
+  });
+  await emitLinesChanged(tx, back, origin.id, actor);
+  return { jobId: origin.id, followUpJobId: follow.id };
 }
