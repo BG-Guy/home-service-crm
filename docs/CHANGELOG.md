@@ -32,6 +32,7 @@
   `/jobs/[id]` entry JS 16.3 KB (+65 B: one lazy-island stub and the base commit's collect-sheet
   prop; the new buttons are a 1.7 KB lazy chunk); `/jobs` +19 B; `/estimates` and `/invoices`
   14.7 KB (+174 B, the stage colors on the cards).
+
 ### Quote to Paid, Part E: estimates, presenting, signing, price book, photos (2026-10-24)
 - Never bill the same work twice: invoice lines now record their source (migration 0007:
   `line_items.source_type` estimate / change_order / lead_quote / part / manual, and `source_id`).
