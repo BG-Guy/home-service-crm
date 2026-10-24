@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+### Quote to Paid, part J: the job's money card, color by stage, sign-off, alerts, glowing buttons (2026-10-24)
+- Money card on the job page (main column, phones and desktop, right after the header): the
+  rail Estimate → Present → Deposit → Invoice → Paid (done = green check, the next step in the
+  stage color with a ring, skipped = a dash), where the money stands ("Approved · $450.73",
+  "$90 deposit paid", "Paid in full · $450.73") and ONE main button: Create estimate, Finish
+  estimate, Present to <first name>, Collect $90 deposit, Invoice now, Get paid, Send receipt
+  (each needs the viewer's permission). "All money" opens the Invoice tab at the payments. A
+  quick job with no estimate (a lockout billed directly) skips Estimate and Present; no deposit
+  rule skips Deposit. The rules are the pure `moneyStage()` (`src/features/jobs/money-stage.ts`,
+  `tests/golden/money-stage.test.ts`); the reads are `src/features/jobs/money-reads.ts` (one
+  estimates query with tax-inclusive option totals, `getJobMoney`, a line check that ignores the
+  lead's quote placeholder). The desktop rail's separate money card is gone (one money card).
+- Color by stage: a soft wash of the stage color behind the top of the job page and the card in
+  that color; job cards and their peek show a small stage pill ("Estimate sent", "Deposit due",
+  "$360.73 due", "Paid") from one batched read per page; estimate and invoice cards and peeks
+  wear the document's color (violet, blue, green once paid). Status pills keep their tones.
+- Customer sign-off: once the work is under way the card offers "Get customer sign-off" (the
+  existing signature sheet and `signJobCompletion`, loaded on tap); once signed it says "Signed
+  off by Sophia Taylor · 4:02 PM". The Complete sheet keeps its own row.
+- Alerts: Estimate viewed reaches the estimate's author and the job's techs; Estimate approved
+  the author, the office and the job's techs (one push per person). New Invoice viewed
+  (`staff.invoice_viewed`, automation `invoice_viewed_staff`, Money group) to the job's techs and
+  the office, on `invoice.viewed`.
+- Main buttons: `.btn-primary` glows softly in its own fill (the stage color in the money card),
+  lighter in dark mode, settling when pressed, none when disabled.
+- `DocLinkStrip` (`src/app/(app)/_components/`): EST → J → INV chips for other screens to adopt.
+- Budgets (production build, gzip -9): global CSS 25,466 B (the glow +56 B; nothing else new);
+  `/jobs/[id]` entry JS 16.3 KB (+65 B: one lazy-island stub and the base commit's collect-sheet
+  prop; the new buttons are a 1.7 KB lazy chunk); `/jobs` +19 B; `/estimates` and `/invoices`
+  14.7 KB (+174 B, the stage colors on the cards).
+
 ### Notifications: type icons, cards, filters, sort and a peek (2026-10-23)
 - Every notification shows its type's icon on its color (`src/features/notify/kinds.ts`: new
   lead blue, unconfirmed job orange, estimate approved green, new text green, chargeback red…),
