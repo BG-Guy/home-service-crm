@@ -112,9 +112,8 @@ describe("money stage: estimate and present", () => {
     const viewed = run({
       estimates: [est({ status: "viewed", viewedAt: SIGNED })],
     });
-    expect(viewed.detail).toBe(
-      "From $310.36 · Better recommended · viewed 2:41 PM",
-    );
+    // Two facts at most (fits a phone): opened first, then the price.
+    expect(viewed.detail).toBe("Viewed 2:41 PM · from $310.36");
     expect(viewed.badge).toBe("Estimate viewed");
   });
 

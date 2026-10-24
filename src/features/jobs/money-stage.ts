@@ -33,6 +33,16 @@ const STAGE_COLOR: Record<MoneyStageKey, StageColor> = {
   paid: "paid",
 };
 
+/**
+ * The pill tone of a stage color (job cards): the same AA inks stageStyle uses
+ * (--ink-indigo / --ink-blue / --ink-green), so a small pill needs no new style.
+ */
+export const STAGE_TONE: Record<StageColor, "indigo" | "blue" | "green"> = {
+  estimate: "indigo",
+  invoice: "blue",
+  paid: "green",
+};
+
 /** Estimates still in play. Every other status (declined, expired, superseded…) is closed. */
 const OPEN_ESTIMATE = new Set(["draft", "sent", "viewed"]);
 const DEPOSIT_DUE = new Set(["required", "requested"]);
@@ -281,14 +291,22 @@ export function moneyStage(
     summary = many
       ? `${open.number} · ${open.optionCount} options`
       : `${open.number} · ${money(open.totalCents)}`;
+    // Two facts at most, so the line fits a phone: whether the customer has
+    // it (opened, sent) comes first, then the price.
+    const seen =
+      open.status === "viewed" && open.viewedAt
+        ? `viewed ${when(open.viewedAt)}`
+        : open.status === "sent" && open.sentAt
+          ? `sent ${when(open.sentAt)}`
+          : null;
     detail =
       join([
+        seen,
         many && `from ${money(open.fromCents)}`,
-        many && open.recommendedLabel && `${open.recommendedLabel} recommended`,
-        open.status === "viewed" &&
-          open.viewedAt &&
-          `viewed ${when(open.viewedAt)}`,
-        open.status === "sent" && open.sentAt && `sent ${when(open.sentAt)}`,
+        many &&
+          !seen &&
+          open.recommendedLabel &&
+          `${open.recommendedLabel} recommended`,
       ]) || "Ready to present";
     const name = f.customerFirstName?.trim();
     next = {

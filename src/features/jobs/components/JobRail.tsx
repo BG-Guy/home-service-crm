@@ -1,14 +1,12 @@
-import Link from "next/link";
 import { formatDayShort, formatInTz } from "@/lib/time";
-import { MoneyText } from "@/ui/components/MoneyText";
 import { TechCard } from "@/ui/components/TechCard";
 import { type TripStep, TripTimeline } from "@/ui/components/Timeline";
 import type { JobDetail } from "../types";
 
 // Right-rail cards of the job screen on desktop (DESIGN.md §6 "Detail page"):
-// a trip-style progress timeline, the money summary and the tech cards. Server
-// components, no JS; DetailLayout hides them below 1200 px, where the hero and
-// the bottom bar carry the same facts.
+// a trip-style progress timeline and the tech cards. Server components, no JS;
+// DetailLayout hides them below 1200 px, where the hero and the bottom bar carry
+// the same facts. The money is the main column's money card (MoneyCard.tsx).
 
 const ORDER = [
   "unscheduled",
@@ -94,58 +92,6 @@ export function JobProgressCard({ job, tz }: { job: JobDetail; tz: string }) {
         Progress
       </h2>
       <TripTimeline steps={steps} label="Job progress" live={live} />
-    </section>
-  );
-}
-
-/** Invoice total, paid and balance, with a link to the Invoice tab. */
-export function JobMoneyCard({
-  jobId,
-  invoice,
-}: {
-  jobId: string;
-  invoice: { number: string; totalCents: number; balanceCents: number } | null;
-}) {
-  const paid = invoice ? invoice.totalCents - invoice.balanceCents : 0;
-  return (
-    <section aria-labelledby="job-money" className="card p-5">
-      <div className="mb-3 flex items-baseline justify-between gap-3">
-        <h2 id="job-money" className="text-headline">
-          Money
-        </h2>
-        <Link
-          href={`/jobs/${jobId}?tab=invoice`}
-          replace
-          scroll={false}
-          className="hit-44 text-subhead font-semibold text-accent-text"
-        >
-          {invoice ? invoice.number : "Invoice"}
-        </Link>
-      </div>
-      {invoice ? (
-        <dl className="flex flex-col gap-2 text-subhead">
-          <div className="flex justify-between gap-3">
-            <dt className="text-label-2">Total</dt>
-            <dd>
-              <MoneyText cents={invoice.totalCents} />
-            </dd>
-          </div>
-          <div className="flex justify-between gap-3">
-            <dt className="text-label-2">Paid</dt>
-            <dd>
-              <MoneyText cents={paid} />
-            </dd>
-          </div>
-          <div className="mt-1 flex items-baseline justify-between gap-3 border-t border-hairline pt-3">
-            <dt className="font-semibold">Balance</dt>
-            <dd className="text-title3">
-              <MoneyText cents={invoice.balanceCents} />
-            </dd>
-          </div>
-        </dl>
-      ) : (
-        <p className="text-subhead text-label-2">No invoice yet.</p>
-      )}
     </section>
   );
 }

@@ -24,7 +24,6 @@ import { AssignJobButton } from "@/features/jobs/components/AssignJobButton";
 import { JobHeaderCard } from "@/features/jobs/components/JobHeaderCard";
 import { JobOfficeMenuButton } from "@/features/jobs/components/JobOfficeMenuButton";
 import {
-  JobMoneyCard,
   JobProgressCard,
   JobTechCards,
 } from "@/features/jobs/components/JobRail";
@@ -37,6 +36,11 @@ import {
   LazyRequestReviewButton as RequestReviewButton,
   LazyTagEditor as TagEditor,
 } from "@/features/jobs/components/lazy-islands";
+import {
+  MoneyCard,
+  type MoneyCardSignOff,
+  StageWash,
+} from "@/features/jobs/components/MoneyCard";
 import { StatusEventList } from "@/features/jobs/components/StatusEventList";
 import { hubHrefForJob } from "@/features/jobs/dispatch/href";
 import type { GuardMiss } from "@/features/jobs/machine";
@@ -45,6 +49,8 @@ import {
   CANCEL_REASON_LABEL,
   HOLD_REASON_LABEL,
 } from "@/features/jobs/machine";
+import { loadJobMoneyFacts } from "@/features/jobs/money-reads";
+import { moneyStage } from "@/features/jobs/money-stage";
 import {
   getJobDetail,
   getStatusEvents,
@@ -64,6 +70,7 @@ import {
   getEntityTags,
   listServiceTypes,
 } from "@/features/settings/api";
+import { getLatestSignature } from "@/features/signatures/api";
 import { actorOf, requireAnyPerm } from "@/lib/auth/current";
 import { formatMoney } from "@/lib/money";
 import { getCurrentPolicy } from "@/lib/policies";
@@ -241,6 +248,15 @@ export default async function JobPage({
       has("jobs.cancel") ||
       has("jobs.reopen"));
 
+  // The money card (Quote to Paid): where the money stands and its one next step,
+  // plus the customer's sign-off once the work is under way.
+  const moneyOn = has("invoices.view");
+  const signOffOffered =
+    moneyOn &&
+    fieldPerm &&
+    (job.status === "in_progress" || job.status === "completed") &&
+    !job.custom.completion_signature_id;
+
   const ua = (await headers()).get("user-agent") ?? "";
   const [
     startMissing,
@@ -260,7 +276,9 @@ export default async function JobPage({
       ? previewMissing(user, job.id, "completed")
       : null,
     getCustomerBrief(job.customerId, user, { jobId: job.id }).catch(() => null),
-    showActionBar ? getCurrentPolicy("esign_consent").catch(() => null) : null,
+    showActionBar || signOffOffered
+      ? getCurrentPolicy("esign_consent").catch(() => null)
+      : null,
     showActionBar && job.status === "completed"
       ? nextJobAfter(user, job.id)
       : null,
@@ -277,16 +295,64 @@ export default async function JobPage({
   // invoice yet" warning and the recommended-photos row of the Complete sheet.
   const inProgressBar = showActionBar && job.status === "in_progress";
   // The invoice feeds the in-progress sign-off total, the completed bar's
-  // balance and the desktop money card (one summary read, no lines).
-  const wantInvoice = inProgressBar || has("invoices.view");
-  const [jobLines, draftInvoice, photoCounts] = await Promise.all([
-    inProgressBar ? listJobLines(job.id).catch(() => null) : null,
-    wantInvoice ? getInvoiceForJob(job.id).catch(() => null) : null,
-    inProgressBar && photosOn ? jobPhotoCounts(job.id).catch(() => null) : null,
-  ]);
+  // balance and the money card (one summary read, no lines).
+  const wantInvoice = inProgressBar || moneyOn;
+  const invoiceRead = wantInvoice
+    ? getInvoiceForJob(job.id).catch(() => null)
+    : Promise.resolve(null);
+  const [jobLines, draftInvoice, photoCounts, moneyFacts, signature] =
+    await Promise.all([
+      inProgressBar || signOffOffered
+        ? listJobLines(job.id).catch(() => null)
+        : null,
+      invoiceRead,
+      inProgressBar && photosOn
+        ? jobPhotoCounts(job.id).catch(() => null)
+        : null,
+      moneyOn
+        ? invoiceRead
+            .then((invoice) => loadJobMoneyFacts(job, { estimatesOn, invoice }))
+            .catch(() => null)
+        : null,
+      moneyOn && job.custom.completion_signature_id
+        ? getLatestSignature("completion", job.id).catch(() => null)
+        : null,
+    ]);
   const invoiceSummary = jobLines ? summarizeLines(jobLines) : null;
   const esignText = esign?.body ?? DEFAULT_ESIGN;
   const todayKey = dateKey(new Date(), tz);
+  const stage = moneyFacts ? moneyStage(moneyFacts, { tz }) : null;
+  // A cancelled job keeps the card only when money moved.
+  const showMoney =
+    !!stage &&
+    (job.status !== "cancelled" ||
+      (moneyFacts?.paidCents ?? 0) > 0 ||
+      (moneyFacts?.invoice != null && moneyFacts.invoice.status !== "draft"));
+  const signedClock = (d: Date) =>
+    `${dateKey(d, tz) === todayKey ? "" : `${formatDayShort(d, tz)}, `}${formatInTz(d, tz, { hour: "numeric", minute: "2-digit" })}`;
+  const signOffTotal =
+    draftInvoice?.totalCents ??
+    (jobLines ?? []).reduce((a, l) => a + l.totalCents, 0);
+  const signOff: MoneyCardSignOff | null = signature
+    ? {
+        signed: true,
+        text: `Signed off by ${signature.signerName} · ${signedClock(signature.signedAt)}`,
+      }
+    : signOffOffered
+      ? {
+          signed: false,
+          customerName: job.customerName,
+          consentText: esignText,
+          summaryLines: [
+            `${job.number} — work completed`,
+            job.customerName,
+            ...(invoiceSummary ?? []),
+            ...(invoiceSummary?.length
+              ? [`Total ${formatMoney(signOffTotal)}`]
+              : []),
+          ],
+        }
+      : null;
   const canCollect = has("payments.collect") || has("payments.record_manual");
   const backHref = techView ? "/today" : "/jobs";
   const custom = job.custom;
@@ -703,13 +769,8 @@ export default async function JobPage({
       hasChecklist={job.checklist.length > 0}
       signed={!!custom.completion_signature_id}
       invoice={
-        invoiceSummary
-          ? {
-              lines: invoiceSummary,
-              totalCents:
-                draftInvoice?.totalCents ??
-                (jobLines ?? []).reduce((a, l) => a + l.totalCents, 0),
-            }
+        inProgressBar && invoiceSummary
+          ? { lines: invoiceSummary, totalCents: signOffTotal }
           : null
       }
       photoCounts={photoCounts}
@@ -804,136 +865,143 @@ export default async function JobPage({
     />
   ) : null;
 
+  // The money lives in the main column's money card (phones and desktop alike).
   const rail = (
     <>
       <JobProgressCard job={job} tz={tz} />
-      {has("invoices.view") && (
-        <JobMoneyCard
-          jobId={job.id}
-          invoice={
-            draftInvoice
-              ? {
-                  number: draftInvoice.number,
-                  totalCents: draftInvoice.totalCents,
-                  balanceCents: draftInvoice.balanceCents,
-                }
-              : null
-          }
-        />
-      )}
       <JobTechCards job={job} />
     </>
   );
 
   return (
     <PageTransition>
-      <NavBar
-        title={job.number}
-        back={{ href: backHref, label: techView ? "Today" : "Jobs" }}
-        trailing={
-          office ? (
-            <JobOfficeMenuButton
-              job={{
-                id: job.id,
-                number: job.number,
-                status: job.status,
-                title: job.title,
-                description: job.description,
-                customerNotes: job.customerNotes,
-                priority: job.priority,
-                afterHours: job.afterHours,
-                serviceTypeId: job.serviceTypeId,
-                recurrence: job.recurrence,
-                arrivedAt: job.arrivedAt,
-                windowStart: job.windowStart,
-                confirmedAt: job.confirmedAt,
-              }}
-              serviceTypes={serviceTypes.map((s) => ({
-                id: s.id,
-                name: s.name,
-              }))}
-              can={{
-                edit: has("jobs.edit"),
-                assign: has("jobs.assign") || has("jobs.reschedule"),
-                cancel: has("jobs.cancel"),
-                cancelAfterArrival: has("jobs.cancel_after_arrival"),
-                reviewCancellations: has("jobs.review_cancellations"),
-                reopen: has("jobs.reopen"),
-                statusAny: has("jobs.status_any"),
-                create: has("jobs.create"),
-                evidence: canEvidence,
-              }}
-              policy={settings.jobs.cancellation_policy}
-              windowLengths={settings.jobs.window_lengths_min}
-              defaultWindow={settings.jobs.default_window_min}
-              todayKey={todayKey}
-              initial={action === "assign" ? "assign" : null}
+      {/* `relative`: the stage wash sits behind the bar and the header card. */}
+      <div className="relative">
+        {showMoney && stage && <StageWash color={stage.color} />}
+        <NavBar
+          title={job.number}
+          back={{ href: backHref, label: techView ? "Today" : "Jobs" }}
+          trailing={
+            office ? (
+              <JobOfficeMenuButton
+                job={{
+                  id: job.id,
+                  number: job.number,
+                  status: job.status,
+                  title: job.title,
+                  description: job.description,
+                  customerNotes: job.customerNotes,
+                  priority: job.priority,
+                  afterHours: job.afterHours,
+                  serviceTypeId: job.serviceTypeId,
+                  recurrence: job.recurrence,
+                  arrivedAt: job.arrivedAt,
+                  windowStart: job.windowStart,
+                  confirmedAt: job.confirmedAt,
+                }}
+                serviceTypes={serviceTypes.map((s) => ({
+                  id: s.id,
+                  name: s.name,
+                }))}
+                can={{
+                  edit: has("jobs.edit"),
+                  assign: has("jobs.assign") || has("jobs.reschedule"),
+                  cancel: has("jobs.cancel"),
+                  cancelAfterArrival: has("jobs.cancel_after_arrival"),
+                  reviewCancellations: has("jobs.review_cancellations"),
+                  reopen: has("jobs.reopen"),
+                  statusAny: has("jobs.status_any"),
+                  create: has("jobs.create"),
+                  evidence: canEvidence,
+                }}
+                policy={settings.jobs.cancellation_policy}
+                windowLengths={settings.jobs.window_lengths_min}
+                defaultWindow={settings.jobs.default_window_min}
+                todayKey={todayKey}
+                initial={action === "assign" ? "assign" : null}
+              />
+            ) : undefined
+          }
+        />
+        <Page className="relative pt-3">
+          <DetailLayout
+            rail={rail}
+            bar={bar}
+            railOnPhone="hide"
+            railLabel="Job summary"
+          >
+            <JobHeaderCard
+              job={job}
+              tz={tz}
+              navHref={job.addressMasked ? null : navUrl(ua, job)}
+              chips={
+                <>
+                  <Suspense fallback={null}>
+                    <JobRiskChip jobId={job.id} showWhy={!techView} />
+                  </Suspense>
+                  {/* The money card's rail carries the deposit when it shows. */}
+                  {!showMoney && (
+                    <Suspense fallback={null}>
+                      <DepositChip jobId={job.id} />
+                    </Suspense>
+                  )}
+                </>
+              }
+              readiness={
+                job.status === "in_progress" ||
+                job.status === "completed" ||
+                job.status === "closed" ? (
+                  <Suspense fallback={null}>
+                    <JobReadinessRing jobId={job.id} size={44} showWhy />
+                  </Suspense>
+                ) : null
+              }
+              assign={
+                canAssign && !assignBar ? (
+                  <AssignJobButton
+                    jobId={job.id}
+                    label={job.assignees.length ? "Reassign" : "Assign"}
+                    variant="gray"
+                  />
+                ) : null
+              }
+              evidenceHref={
+                canEvidence &&
+                (job.status === "completed" || job.status === "closed")
+                  ? `/jobs/${job.id}/evidence`
+                  : null
+              }
             />
-          ) : undefined
-        }
-      />
-      <Page className="pt-3">
-        <DetailLayout
-          rail={rail}
-          bar={bar}
-          railOnPhone="hide"
-          railLabel="Job summary"
-        >
-          <JobHeaderCard
-            job={job}
-            tz={tz}
-            navHref={job.addressMasked ? null : navUrl(ua, job)}
-            chips={
-              <>
-                <Suspense fallback={null}>
-                  <JobRiskChip jobId={job.id} showWhy={!techView} />
-                </Suspense>
-                <Suspense fallback={null}>
-                  <DepositChip jobId={job.id} />
-                </Suspense>
-              </>
-            }
-            readiness={
-              job.status === "in_progress" ||
-              job.status === "completed" ||
-              job.status === "closed" ? (
-                <Suspense fallback={null}>
-                  <JobReadinessRing jobId={job.id} size={44} showWhy />
-                </Suspense>
-              ) : null
-            }
-            assign={
-              canAssign && !assignBar ? (
-                <AssignJobButton
-                  jobId={job.id}
-                  label={job.assignees.length ? "Reassign" : "Assign"}
-                  variant="gray"
-                />
-              ) : null
-            }
-            evidenceHref={
-              canEvidence &&
-              (job.status === "completed" || job.status === "closed")
-                ? `/jobs/${job.id}/evidence`
-                : null
-            }
-          />
-          {banners.length > 0 && (
-            <div className="flex flex-col gap-2">{banners}</div>
-          )}
-          {visibleTabs.length > 1 && (!techView || tab !== "overview") && (
-            <JobTabs
-              active={tab}
-              tabs={visibleTabs.map((t) => ({
-                key: t,
-                label: TAB_LABEL[t],
-                href: `/jobs/${job.id}${t === "overview" ? "" : `?tab=${t}`}`,
-              }))}
-            />
-          )}
-          {content[tab]}
-        </DetailLayout>
-      </Page>
+            {showMoney && stage && (
+              <MoneyCard
+                jobId={job.id}
+                stage={stage}
+                can={{
+                  estimate: estimatesOn && has("estimates.create"),
+                  present: estimatesOn && has("estimates.send"),
+                  collect: canCollect,
+                  invoice: has("invoices.view"),
+                }}
+                signOff={signOff}
+              />
+            )}
+            {banners.length > 0 && (
+              <div className="flex flex-col gap-2">{banners}</div>
+            )}
+            {visibleTabs.length > 1 && (!techView || tab !== "overview") && (
+              <JobTabs
+                active={tab}
+                tabs={visibleTabs.map((t) => ({
+                  key: t,
+                  label: TAB_LABEL[t],
+                  href: `/jobs/${job.id}${t === "overview" ? "" : `?tab=${t}`}`,
+                }))}
+              />
+            )}
+            {content[tab]}
+          </DetailLayout>
+        </Page>
+      </div>
     </PageTransition>
   );
 }
