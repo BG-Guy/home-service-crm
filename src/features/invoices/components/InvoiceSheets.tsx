@@ -29,9 +29,10 @@ import {
   LineEditor,
   tempLineId,
 } from "./LineEditor";
+import { type QueuedOutcome, SendResultView } from "./SendResult";
 
-// The overlays of the invoice action bar (more menu, send, revise, void, write-off,
-// credit note, notes & warranty): a lazy chunk, fetched on hover/focus or first tap.
+// The invoice's overlays (send, revise, void, write-off, credit note, notes &
+// warranty): a lazy chunk, fetched on hover/focus or the first tap.
 
 type Result = { ok: true; data?: unknown } | { ok: false; error: string };
 
@@ -60,13 +61,6 @@ export default function InvoiceSheets({
         onOpenChange={(o) => !o && setSheet(null)}
         title={p.number}
         items={more}
-      />
-      <SendSheet
-        open={sheet === "send"}
-        onClose={() => setSheet(null)}
-        invoiceId={p.invoiceId}
-        number={p.number}
-        balanceCents={p.balanceCents}
       />
       {sheet === "revise" && (
         <ReviseSheet
@@ -124,40 +118,54 @@ export default function InvoiceSheets({
 
 /* ------------------------------------------------------------------ send */
 
-function SendSheet({
+const newClientId = () =>
+  typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${Date.now().toString(16).padStart(8, "0")}-0000-4000-8000-${Math.random().toString(16).slice(2, 14).padEnd(12, "0")}`;
+
+export function SendSheet({
   open,
   onClose,
   invoiceId,
   number,
+  status,
   balanceCents,
+  customerFirstName,
 }: {
   open: boolean;
   onClose: () => void;
   invoiceId: string;
   number: string;
+  status: string;
   balanceCents: number;
+  customerFirstName: string;
 }) {
   const [pending, start] = useTransition();
   const [url, setUrl] = useState<string | null>(null);
+  const [outcome, setOutcome] = useState<QueuedOutcome | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const draft = status === "draft";
   const send = (channel: "customer_preferred" | "sms" | "email") =>
     start(async () => {
-      const r = await sendInvoice({ invoiceId, channel });
-      if (r.ok) {
-        toast({
-          title:
-            r.data?.status === "pending_tap"
-              ? "Ready in your outbox — tap to send"
-              : "Invoice sent",
-          tone: "success",
-        });
-        setUrl(r.data?.url ?? null);
-      } else toast({ title: r.error, tone: "error" });
+      setError(null);
+      const r = await sendInvoice({
+        invoiceId,
+        channel,
+        clientId: newClientId(),
+      });
+      if (r.ok && r.data) {
+        setOutcome(r.data.outcome);
+        setUrl(r.data.url ?? null);
+      } else if (!r.ok) setError(r.error);
     });
   const link = () =>
     start(async () => {
-      const r = await getInvoiceLink({ invoiceId });
-      if (!r.ok || !r.data)
-        return void toast({ title: r.ok ? "No link" : r.error, tone: "error" });
+      setError(null);
+      const r = await getInvoiceLink({ invoiceId, issueDraft: true });
+      if (!r.ok || !r.data) {
+        setError(r.ok ? "No link" : r.error);
+        return;
+      }
       setUrl(r.data.url);
       try {
         if (navigator.share)
@@ -181,42 +189,75 @@ function SendSheet({
           Done
         </Button>
       }
+      onClosed={() => {
+        setOutcome(null);
+        setError(null);
+      }}
     >
-      <div className="flex flex-col gap-4 px-[var(--gutter)] pb-6">
-        <p className="px-1 text-subhead text-label-2">
-          The customer gets a secure link to view, print and pay
-          {balanceCents > 0 ? ` the ${formatMoney(balanceCents)} balance` : ""}.
-        </p>
-        <ListSection>
-          <ListRow
-            icon={<Send size={17} />}
-            title="Preferred channel"
-            subtitle="Text or email, whichever they chose"
-            onClick={() => send("customer_preferred")}
-            disabled={pending}
-          />
-          <ListRow
-            icon={<MessageSquare size={17} />}
-            iconTone="green"
-            title="Text message"
-            onClick={() => send("sms")}
-            disabled={pending}
-          />
-          <ListRow
-            icon={<Mail size={17} />}
-            iconTone="blue"
-            title="Email"
-            onClick={() => send("email")}
-            disabled={pending}
-          />
-          <ListRow
-            icon={<Share2 size={17} />}
-            iconTone="gray"
-            title="Share or copy link"
-            onClick={link}
-            disabled={pending}
-          />
-        </ListSection>
+      <div className="flex flex-col gap-4 pb-6">
+        {outcome ? (
+          <>
+            <SendResultView
+              outcome={outcome}
+              firstName={customerFirstName}
+              templateKey="invoice.sent"
+              templateLabel={`Invoice ${number}`}
+            />
+            <Button variant="secondary" onClick={() => setOutcome(null)}>
+              Send another way
+            </Button>
+          </>
+        ) : (
+          <>
+            {draft ? (
+              <Banner tone="info">
+                Sending issues {number}. It can&apos;t be edited after.
+              </Banner>
+            ) : null}
+            <p className="px-1 text-subhead text-label-2">
+              {customerFirstName} gets a secure link to view, print and pay
+              {balanceCents > 0
+                ? ` the ${formatMoney(balanceCents)} balance`
+                : " it"}
+              .
+            </p>
+            <ListSection>
+              <ListRow
+                icon={<Send size={17} />}
+                title="Preferred channel"
+                subtitle="Text or email, whichever they chose"
+                onClick={() => send("customer_preferred")}
+                disabled={pending}
+              />
+              <ListRow
+                icon={<MessageSquare size={17} />}
+                iconTone="green"
+                title="Text message"
+                onClick={() => send("sms")}
+                disabled={pending}
+              />
+              <ListRow
+                icon={<Mail size={17} />}
+                iconTone="blue"
+                title="Email"
+                onClick={() => send("email")}
+                disabled={pending}
+              />
+              <ListRow
+                icon={<Share2 size={17} />}
+                iconTone="gray"
+                title="Share or copy link"
+                onClick={link}
+                disabled={pending}
+              />
+            </ListSection>
+          </>
+        )}
+        {error ? (
+          <Banner tone="error" title="Not sent">
+            {error}
+          </Banner>
+        ) : null}
         {url && (
           <div className="flex items-center gap-2 rounded-card bg-card px-3 py-2 shadow-card">
             <span className="min-w-0 flex-1 truncate text-footnote text-label-2">

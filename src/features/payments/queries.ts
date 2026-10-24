@@ -678,6 +678,7 @@ export async function getCollectContext(
     ? await db
         .select({
           name: customers.displayName,
+          firstName: customers.firstName,
           phone: customers.phone,
           email: customers.email,
           prepay: customers.prepayRequired,
@@ -686,17 +687,19 @@ export async function getCollectContext(
         .where(eq(customers.id, customerId))
         .limit(1)
     : [];
+  // Fee lines (no tips on them by default) and the line count (an empty draft has
+  // nothing to collect yet).
   const feeLines = inv
     ? await db
         .select({
-          n: sql<number>`coalesce(sum(${lineItems.totalCents}), 0)::bigint`,
+          n: sql<number>`coalesce(sum(${lineItems.totalCents}) filter (where ${or(eq(lineItems.type, "fee"), eq(lineItems.isServiceFee, true))}), 0)::bigint`,
+          lines: sql<number>`count(*)::int`,
         })
         .from(lineItems)
         .where(
           and(
             eq(lineItems.parentType, "invoice"),
             eq(lineItems.parentId, inv.id),
-            or(eq(lineItems.type, "fee"), eq(lineItems.isServiceFee, true)),
           ),
         )
     : [];
@@ -712,7 +715,11 @@ export async function getCollectContext(
   );
   const paidDeposits = jobId
     ? await db
-        .select({ amount: payments.amountCents, at: payments.succeededAt })
+        .select({
+          amount: payments.amountCents,
+          at: payments.succeededAt,
+          invoiceId: payments.invoiceId,
+        })
         .from(payments)
         .where(
           and(
@@ -744,6 +751,11 @@ export async function getCollectContext(
     invoiceId: inv?.id ?? null,
     invoiceNumber: inv?.number ?? null,
     invoiceStatus: inv?.status ?? null,
+    invoiceHasLines: Number(feeLines[0]?.lines ?? 0) > 0,
+    issuesDraft: inv?.status === "draft" && user.perms.has("invoices.create"),
+    manualInstructions: s.payments.manual_instructions,
+    customerFirstName:
+      cust?.firstName?.trim() || cust?.name?.split(" ")[0] || null,
     customerId,
     customerName: cust?.name ?? null,
     customerHasPhone: !!cust?.phone,
@@ -755,6 +767,8 @@ export async function getCollectContext(
       ? {
           amountCents: paidDeposits.reduce((x, d) => x + d.amount, 0),
           at: paidDeposits[0]?.at?.toISOString() ?? null,
+          // Every paid deposit is linked to this invoice: it's already off the balance.
+          applied: !!inv && paidDeposits.every((d) => d.invoiceId === inv.id),
         }
       : null,
     openDeposit:

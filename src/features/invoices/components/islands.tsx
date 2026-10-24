@@ -12,9 +12,23 @@ export const LazyCreateInvoiceButton = dynamic(() =>
 export const LazyDraftLines = dynamic(() =>
   import("./InvoiceControls").then((m) => m.DraftLines),
 );
-export const LazyInvoiceActionBar = dynamic(() =>
-  import("./InvoiceControls").then((m) => m.InvoiceActionBar),
+// The invoice screen (Quote to Paid, Part I): one chunk for its small islands.
+const actions = () => import("./InvoiceActions");
+export const LazyInvoicePayBar = dynamic(() =>
+  actions().then((m) => m.InvoicePayBar),
 );
-export const LazyInvoicePhotosForm = dynamic(() =>
-  import("./InvoicePhotosForm").then((m) => m.InvoicePhotosForm),
+export const LazyInvoiceMoreActions = dynamic(() =>
+  actions().then((m) => m.InvoiceMoreActions),
+);
+export const LazyChoosePhotosButton = dynamic(() =>
+  actions().then((m) => m.ChoosePhotosButton),
+);
+export const LazySignOffButton = dynamic(() =>
+  actions().then((m) => m.SignOffButton),
+);
+export const LazyPreviewButton = dynamic(() =>
+  actions().then((m) => m.PreviewButton),
+);
+export const LazyReceiptButton = dynamic(() =>
+  actions().then((m) => m.ReceiptButton),
 );

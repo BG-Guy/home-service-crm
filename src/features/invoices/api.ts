@@ -474,16 +474,35 @@ export const EMPTY_INVOICE_MESSAGE =
  * (ValidationError): a no-charge visit is an explicit $0 line, and only such an
  * explicitly no-charge invoice goes straight to paid (+ invoice.paid). The job's
  * payment_status cache is re-derived through B4 → B2 (`setJobPaymentStatus`).
+ * The row is locked first, so two issues at once (Get paid on two phones, or Send
+ * and Get paid together) can't both pass the draft check: the later one finds it
+ * issued and returns `issued: false`.
  */
 export async function issueDraftInvoice(
   tx: Tx,
   invoiceId: string,
-  via: "job_completed" | "manual",
+  via: "job_completed" | "manual" | "collect" | "send",
   actor: Actor,
-): Promise<{ invoiceId: string; number: string; totalCents: number }> {
+): Promise<{
+  invoiceId: string;
+  number: string;
+  totalCents: number;
+  /** False when it wasn't a draft any more (nothing was done). */
+  issued: boolean;
+}> {
+  await tx
+    .select({ id: invoices.id })
+    .from(invoices)
+    .where(eq(invoices.id, invoiceId))
+    .for("update");
   const inv = await loadInvoice(tx, invoiceId);
   if (inv.status !== "draft")
-    return { invoiceId, number: inv.number, totalCents: inv.totalCents };
+    return {
+      invoiceId,
+      number: inv.number,
+      totalCents: inv.totalCents,
+      issued: false,
+    };
   if ((await invoiceLines(tx, invoiceId)).length === 0)
     throw new ValidationError(
       { lines: [EMPTY_INVOICE_MESSAGE] },
@@ -580,7 +599,12 @@ export async function issueDraftInvoice(
     if (j && !["paid", "disputed", "refunded"].includes(j.paymentStatus))
       await setJobPaymentStatus(tx, inv.jobId, "paid");
   }
-  return { invoiceId, number: inv.number, totalCents: totals.totalCents };
+  return {
+    invoiceId,
+    number: inv.number,
+    totalCents: totals.totalCents,
+    issued: true,
+  };
 }
 
 /**

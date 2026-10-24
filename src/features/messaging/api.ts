@@ -22,8 +22,11 @@ import type { SmsStatus } from "@/features/customers/contracts";
 import { writeActivity } from "@/lib/activity";
 import { NotFoundError } from "@/lib/errors";
 import { emit } from "@/lib/events";
+import { maskEmail, maskPhone } from "@/lib/mask";
 import type { Perm } from "@/lib/permissions";
 import { listUsersWithPerm } from "@/lib/permissions-db";
+import { formatPhoneDisplay } from "@/lib/phone-display";
+import { formatTime } from "@/lib/time";
 import type { Actor, EntityRef } from "@/lib/types";
 import type {
   ConsentStatus,
@@ -32,6 +35,7 @@ import type {
   ScheduledStatus,
 } from "./contracts";
 import { enqueueCore } from "./enqueue";
+import { reasonLabel } from "./labels";
 import { kickSender } from "./sender";
 
 // B5 messaging API (BUILD_PLAN §6.5) — THE ONLY way to message a customer, tech or
@@ -57,6 +61,81 @@ export async function enqueueMessage(
   const res = await enqueueCore(tx, input, actor);
   if (res.status === "scheduled") kickSender();
   return res;
+}
+
+const QUEUED_OK = new Set<string>([
+  "pending_tap",
+  "scheduled",
+  "sent",
+  "sent_manual",
+  "delivered",
+]);
+
+/**
+ * What a send just queued by a person did, for that person (Quote to Paid, Part I:
+ * "sending says what happened"): the status, the channel it resolved to, where it
+ * goes (masked when the sender may not see the customer's contact details), why it
+ * didn't go in plain words, when a held send goes out, and whether its text card
+ * waits in the sender's own outbox (then `body` / `rawTo` feed the tap-to-text link).
+ */
+export async function queuedOutcome(
+  tx: Tx,
+  scheduledMessageId: string,
+  status: ScheduledStatus,
+  viewer: { userId: string | null; revealed: boolean; timeZone: string },
+): Promise<{
+  scheduledMessageId: string;
+  status: ScheduledStatus;
+  channel: string;
+  to: string | null;
+  reason: string | null;
+  sendAtLabel: string | null;
+  mine: boolean;
+  body: string | null;
+  rawTo: string | null;
+}> {
+  const [row] = await tx
+    .select({
+      channel: scheduledMessages.channel,
+      to: scheduledMessages.toAddress,
+      reason: scheduledMessages.lastError,
+      sendAt: scheduledMessages.sendAt,
+      assignedUserId: scheduledMessages.assignedUserId,
+      body: scheduledMessages.renderedBody,
+    })
+    .from(scheduledMessages)
+    .where(eq(scheduledMessages.id, scheduledMessageId))
+    .limit(1);
+  const channel = row?.channel ?? "customer_preferred";
+  const raw = row?.to ?? null;
+  const email = !!raw?.includes("@");
+  const to = !raw
+    ? null
+    : viewer.revealed
+      ? email
+        ? raw
+        : formatPhoneDisplay(raw)
+      : email
+        ? maskEmail(raw)
+        : maskPhone(raw);
+  const mine =
+    status === "pending_tap" &&
+    !!viewer.userId &&
+    row?.assignedUserId === viewer.userId;
+  return {
+    scheduledMessageId,
+    status,
+    channel,
+    to,
+    reason: QUEUED_OK.has(status) ? null : reasonLabel(row?.reason),
+    sendAtLabel:
+      status === "deferred_quiet" && row?.sendAt
+        ? formatTime(row.sendAt, viewer.timeZone)
+        : null,
+    mine,
+    body: mine ? (row?.body ?? null) : null,
+    rawTo: mine && viewer.revealed ? raw : null,
+  };
 }
 
 /** Cancel queued / outbox sends matching the filter (refuses an empty filter). */

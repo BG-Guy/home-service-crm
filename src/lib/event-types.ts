@@ -190,7 +190,12 @@ export interface EventMap {
     invoice_id: Id;
     total_cents: number;
     due_at: Nullable<Iso>;
-    via: "job_completed" | "manual";
+    /**
+     * `manual`: Issue invoice (the `invoice_sent` automation texts it). `collect`:
+     * "Get paid" on a draft; `send`: Send on a draft (it's texted or emailed right
+     * there). Neither of those two triggers `invoice_sent`.
+     */
+    via: "job_completed" | "manual" | "collect" | "send";
   };
   "invoice.revised": { invoice_id: Id; version: number; reason: string };
   /** A DRAFT invoice's lines changed (added, edited or removed); deposits re-check (T6-09). */

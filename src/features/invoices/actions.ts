@@ -10,14 +10,22 @@ import {
   lineItems,
   payments,
 } from "@/db/schema";
+import { contactRevealedFor } from "@/features/customers/api";
 import { assertJobAccess } from "@/features/jobs/api";
-import { lockEvidenceMedia } from "@/features/media/api";
-import { enqueueMessage } from "@/features/messaging/api";
+import { invoicePickableIds, lockEvidenceMedia } from "@/features/media/api";
+import { enqueueMessage, queuedOutcome } from "@/features/messaging/api";
 import { action, zf } from "@/lib/action";
+import { writeAudit } from "@/lib/audit";
 import { ConflictError, NotFoundError } from "@/lib/errors";
 import { sha256Json } from "@/lib/hash";
+import { newId } from "@/lib/ids";
 import { formatMoney } from "@/lib/money";
-import { mintPublicToken, TOKEN_TTL } from "@/lib/tokens";
+import { getCompanyTimezone } from "@/lib/settings";
+import {
+  mintOrReusePublicToken,
+  mintPublicToken,
+  TOKEN_TTL,
+} from "@/lib/tokens";
 import {
   assertInvoiceAccess,
   createCreditNote,
@@ -186,9 +194,11 @@ export const updateInvoiceInfo = action({
 });
 
 /**
- * Photos on the invoice (presentation, not part of the signed snapshot): the
- * show_photos toggle and an ordered selection (S25 PhotoPicker). On an issued
- * invoice, newly selected photos are evidence-locked.
+ * Photos on the invoice (presentation, not part of the signed snapshot): an ordered
+ * selection of the job's photos. Picking is what shows them (Quote to Paid I5): an
+ * empty pick means no photos (show_photos off), never a silent fallback. Only live
+ * photos of this invoice's job with an invoice tag are kept (no "goal" photos, no
+ * other jobs' media). On an issued invoice, newly picked photos are evidence-locked.
  */
 export const setInvoicePhotos = action({
   perm: "invoices.create",
@@ -207,17 +217,19 @@ export const setInvoicePhotos = action({
       .limit(1);
     if (!inv) throw new NotFoundError("Invoice");
     if (inv.status === "void") throw new ConflictError("invoice_void");
+    const ids = inv.jobId
+      ? await invoicePickableIds(tx, inv.jobId, input.photoMediaIds)
+      : [];
     await tx
       .update(invoices)
       .set({
-        showPhotos: input.showPhotos,
-        photoMediaIds: input.photoMediaIds,
+        showPhotos: input.showPhotos && ids.length > 0,
+        photoMediaIds: ids,
         updatedAt: new Date(),
       })
       .where(eq(invoices.id, inv.id));
-    if (inv.status !== "draft" && input.photoMediaIds.length)
-      await lockEvidenceMedia(tx, input.photoMediaIds);
-    return { invoiceId: inv.id, jobId: inv.jobId };
+    if (inv.status !== "draft" && ids.length) await lockEvidenceMedia(tx, ids);
+    return { invoiceId: inv.id, jobId: inv.jobId, photoMediaIds: ids };
   },
   auditEntity: ({ input }) => ({ type: "invoice", id: input.invoiceId }),
   revalidate: ({ data }) => paths(data.invoiceId, data.jobId),
@@ -546,59 +558,157 @@ async function mintInvoiceLink(
   });
 }
 
-/** Mint a customer link (/i/…, optionally a payment's receipt) to copy or share. */
+/**
+ * A DRAFT being sent or shared is issued first (Quote to Paid: Send on a draft, like
+ * "Get paid", has no separate "Issue?" step). `via: "send"`: the person is sending it
+ * right now, so the built-in `invoice_sent` automation doesn't text it a second time.
+ */
+async function issueForSend(
+  tx: Tx,
+  inv: typeof invoices.$inferSelect,
+  user: Parameters<typeof assertInvoiceAccess>[0],
+  actor: Parameters<typeof issueDraftInvoice>[3],
+): Promise<{ inv: typeof invoices.$inferSelect; issued: boolean }> {
+  if (inv.status !== "draft") return { inv, issued: false };
+  // Locked re-read: a Get paid on another phone may have issued it a moment ago.
+  const [cur] = await tx
+    .select({ status: invoices.status })
+    .from(invoices)
+    .where(eq(invoices.id, inv.id))
+    .for("update");
+  let issued = false;
+  if (cur?.status === "draft") {
+    if (!user.perms.has("invoices.create"))
+      throw new ConflictError(
+        "invoice_draft",
+        "Issue the invoice before sharing it.",
+      );
+    await assertInvoiceAccess(user, inv.id, "write");
+    const r = await issueDraftInvoice(tx, inv.id, "send", actor);
+    issued = r.issued;
+    // Its own audit row: the action's row is the send's (or the link's).
+    if (issued)
+      await writeAudit(tx, {
+        actor,
+        action: "invoice.issued",
+        entity: { type: "invoice", id: inv.id },
+        after: { via: "send", total_cents: r.totalCents },
+        full: true,
+      });
+  }
+  const [fresh] = await tx
+    .select()
+    .from(invoices)
+    .where(eq(invoices.id, inv.id))
+    .limit(1);
+  if (!fresh) throw new NotFoundError("Invoice");
+  return { inv: fresh, issued };
+}
+
+/**
+ * Mint a customer link (/i/…, optionally a payment's receipt) to copy or share. A
+ * draft is issued first when `issueDraft` is set (the send sheet's "Share or copy
+ * link" says so); otherwise drafts are refused.
+ */
 export const getInvoiceLink = action({
   perm: "invoices.view",
   input: z.object({
     invoiceId: z.uuid(),
     receiptPaymentId: z.uuid().optional(),
+    issueDraft: z.boolean().optional(),
   }),
   audit: "invoice.link_created",
-  async run({ input, user, tx }) {
+  async run({ input, user, tx, actor }) {
     await assertInvoiceAccess(user, input.invoiceId, "read");
-    const [inv] = await tx
+    const [row] = await tx
       .select()
       .from(invoices)
       .where(eq(invoices.id, input.invoiceId))
       .limit(1);
-    if (!inv) throw new NotFoundError("Invoice");
-    if (inv.status === "draft")
+    if (!row) throw new NotFoundError("Invoice");
+    if (row.status === "draft" && !input.issueDraft)
       throw new ConflictError(
         "invoice_draft",
         "Issue the invoice before sharing it.",
       );
+    const { inv, issued } = await issueForSend(tx, row, user, actor);
     const { url } = await mintInvoiceLink(tx, inv);
     return {
       url: input.receiptPaymentId
         ? `${url}?receipt=${input.receiptPaymentId}`
         : url,
+      issued,
+      jobId: inv.jobId,
     };
   },
   auditEntity: ({ input }) => ({ type: "invoice", id: input.invoiceId }),
+  revalidate: ({ input, data }) =>
+    data.issued ? paths(input.invoiceId, data.jobId) : [],
 });
 
-/** Send / resend (template `invoice.sent`, via B5 enqueueMessage — consent, quiet hours, caps). */
+/** How long a preview link lives (reused per half: 12–24 h left). */
+const PREVIEW_TTL_MS = 86_400_000;
+
+/**
+ * "Preview" (Quote to Paid I6): the customer's own /i page, opened by staff with
+ * `?preview=1` (no access-log row, no "viewed", Pay off, drafts allowed). The link
+ * is reused per invoice for a while (mintOrReusePublicToken), short-lived, and never
+ * sent to anyone.
+ */
+export const previewInvoice = action({
+  perm: "invoices.view",
+  input: z.object({ invoiceId: z.uuid() }),
+  async run({ input, user, tx }) {
+    await assertInvoiceAccess(user, input.invoiceId, "read");
+    const [inv] = await tx
+      .select({
+        id: invoices.id,
+        customerId: invoices.customerId,
+        jobId: invoices.jobId,
+        status: invoices.status,
+      })
+      .from(invoices)
+      .where(eq(invoices.id, input.invoiceId))
+      .limit(1);
+    if (!inv) throw new NotFoundError("Invoice");
+    if (inv.status === "void")
+      throw new ConflictError("invoice_void", "This invoice was voided.");
+    const link = await mintOrReusePublicToken(tx, {
+      kind: "invoice",
+      entity: { type: "invoice", id: inv.id },
+      customerId: inv.customerId,
+      jobId: inv.jobId,
+      purpose: "invoice.preview",
+      ttlMs: PREVIEW_TTL_MS,
+    });
+    return { href: `${new URL(link.url).pathname}?preview=1` };
+  },
+});
+
+/**
+ * Send / resend (template `invoice.sent`, via B5 enqueueMessage: consent, quiet hours,
+ * caps). A draft is issued first (`via: "send"`). The text card goes to the sender's
+ * own outbox (like the composer) when they may see the customer's number, and the
+ * result says what happened: status, channel, where, why not, when (Quote to Paid I4).
+ */
 export const sendInvoice = action({
   perm: "invoices.create",
   input: z.object({
     invoiceId: z.uuid(),
     channel: z.enum(["customer_preferred", "sms", "email"]),
+    clientId: z.uuid().optional(),
   }),
   audit: "invoice.sent",
   async run({ input, user, tx, actor, activity }) {
     await assertInvoiceAccess(user, input.invoiceId, "write");
-    const [inv] = await tx
+    const [row] = await tx
       .select()
       .from(invoices)
       .where(eq(invoices.id, input.invoiceId))
       .limit(1);
-    if (!inv) throw new NotFoundError("Invoice");
-    if (inv.status === "draft")
-      throw new ConflictError(
-        "invoice_draft",
-        "Issue the invoice before sending it.",
-      );
-    if (inv.status === "void") throw new ConflictError("invoice_void");
+    if (!row) throw new NotFoundError("Invoice");
+    if (row.status === "void") throw new ConflictError("invoice_void");
+    const { inv, issued } = await issueForSend(tx, row, user, actor);
     const { url } = await mintInvoiceLink(tx, inv);
     const [b] = await tx
       .select()
@@ -610,6 +720,7 @@ export const sendInvoice = action({
       Number(b?.paidCents ?? 0) +
       Number(b?.refundedCents ?? 0) -
       Number(b?.creditedCents ?? 0);
+    const { revealed } = await contactRevealedFor(user, inv.customerId);
     const res = await enqueueMessage(
       tx,
       {
@@ -626,8 +737,17 @@ export const sendInvoice = action({
           "invoice.balance": formatMoney(balance),
           link: url,
         },
+        dedupeKey: `manual:${input.clientId ?? newId()}`,
+        // Outside the contact window the number stays hidden: the office sends it.
+        outboxAssigneeUserId: revealed ? user.id : null,
       },
       actor,
+    );
+    const outcome = await queuedOutcome(
+      tx,
+      res.scheduledMessageId,
+      res.status,
+      { userId: user.id, revealed, timeZone: await getCompanyTimezone() },
     );
     await activity({
       entity: { type: "invoice", id: inv.id },
@@ -640,8 +760,18 @@ export const sendInvoice = action({
         status: res.status,
       },
     });
-    return { invoiceId: inv.id, jobId: inv.jobId, status: res.status, url };
+    return {
+      invoiceId: inv.id,
+      jobId: inv.jobId,
+      status: res.status,
+      url,
+      issued,
+      outcome,
+    };
   },
   auditEntity: ({ input }) => ({ type: "invoice", id: input.invoiceId }),
-  revalidate: ({ data }) => paths(data.invoiceId, data.jobId),
+  revalidate: ({ data }) => [
+    ...paths(data.invoiceId, data.jobId),
+    "/messages/outbox",
+  ],
 });

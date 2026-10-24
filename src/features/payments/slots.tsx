@@ -166,10 +166,18 @@ export async function JobPaymentsPanel({
   const openDeposit = data.deposits.find((d) =>
     ["required", "requested"].includes(d.status),
   );
-  const due =
-    (data.invoice?.balanceCents ?? 0) > 0 ||
-    !!openDeposit ||
-    (!data.invoice && data.payments.length === 0);
+  // The invoice's balance is collected by the invoice panel's "Get paid" (one main
+  // action per view, Quote to Paid I1); this panel's button is for a deposit, or a
+  // prepayment before there's an invoice.
+  const invoicePanelCollects =
+    !!data.invoice &&
+    user.perms.has("invoices.view") &&
+    ["draft", "issued", "partially_paid"].includes(data.invoice.status);
+  const due = openDeposit
+    ? true
+    : data.invoice
+      ? !invoicePanelCollects && data.invoice.balanceCents > 0
+      : data.payments.length === 0;
   const deposits = depositsOn ? data.deposits : [];
   const openRefunds = data.refunds.filter((r) =>
     ["scheduled", "pending"].includes(r.status),
@@ -321,17 +329,21 @@ export async function JobPaymentsPanel({
         </ListSection>
       )}
 
-      {!hideCollect && canCollect && due && data.job.status !== "cancelled" && (
+      {/* Rendered (hidden) even when nothing is due, so a payment that settles it
+          keeps its success screen up instead of unmounting the sheet. */}
+      {!hideCollect && canCollect && data.job.status !== "cancelled" && (
         <CollectPaymentButton
           jobId={jobId}
           invoiceId={data.invoice?.id}
           size="lg"
           fullWidth
+          hidden={!due}
+          defaultTarget={openDeposit ? "deposit" : undefined}
           label={
-            data.invoice && data.invoice.balanceCents > 0
-              ? `Collect ${formatMoney(data.invoice.balanceCents)}`
-              : openDeposit
-                ? `Collect ${formatMoney(openDeposit.amountCents)} deposit`
+            openDeposit
+              ? `Collect ${formatMoney(openDeposit.amountCents)} deposit`
+              : data.invoice && data.invoice.balanceCents > 0
+                ? `Collect ${formatMoney(data.invoice.balanceCents)}`
                 : "Collect payment"
           }
         />

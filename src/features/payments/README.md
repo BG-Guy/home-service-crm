@@ -7,12 +7,25 @@ always derived (`invoice_balances` view); ledgers are append-only.
 
 ## Flows
 
-- **Collect (S19, `CollectPaymentButton`)**: lazy sheet → method tiles (card link, cash,
-  check, Zelle, Venmo, other), tip presets (never on fee lines unless `tip_on_fees`),
-  overpayment guard (UI + `recordPayment`), reference # / check-photo rules, risk-band
-  card restrictions (High: 3DS link only; Critical + `cash_only`: no card/Venmo), split
-  payments ("Collect the remaining $X"), receipt send. Manual methods go through the
-  offline outbox (`payments.recordManual`, idempotent on `clientId`).
+- **Get paid (S19, `CollectPaymentButton`)**: lazy sheet ("Get paid"): the amount big with
+  "Includes a $X tip", one-tap tip chips (never on fee lines unless `tip_on_fees`), method
+  tiles ("Pay on their phone" = the pay link's QR + "Text the link" with a card processor,
+  Card off with its reason without one; cash, check, Zelle, Venmo; Zelle/Venmo show
+  `payments.manual_instructions` to read out), the main button in the sheet's sticky footer
+  (the body portals it into the sheet's footer slot), overpayment guard (UI +
+  `recordPayment`), reference # / check-photo rules, risk-band card restrictions (High: 3DS
+  link only; Critical + `cash_only`: no card/Venmo), split payments ("Collect the remaining
+  $X"). On a DRAFT invoice getting paid issues it first, in the same transaction
+  (`issueDraft` on `recordManualPayment` / `createPayLink` / `sendPayLink`, `via: "collect"`;
+  the row is locked first); picking "Pay on their phone" on a draft waits for "Show the QR
+  code" or "Text the link" before issuing it. The QR's link (`createPayLink`) is reused for a
+  while (`mintOrReusePublicToken`, purpose `pay.collect`); a texted link is fresh. An empty
+  draft has nothing to collect. Manual methods go through the offline outbox
+  (`payments.recordManual`, idempotent on `clientId`). Success: the invoice's payments, "Send
+  the receipt: Text / Email" (`sendReceipt` with a channel; the result is said in place),
+  "Receipt emailed to …" (`receiptStatus`), View receipt (`ReceiptSheet`, `loadReceipt`; its
+  share link is reused per payment, `receiptLink`). The sheet's owner stays mounted when the
+  payment settles what was due (`CollectPaymentButton hidden`, the invoice page's bar).
 - **Manual payments** are `succeeded` but **Unverified** until the office verifies them in
   the bank (`/payments?tab=unverified`, `payments.verify_manual`). Cron
   `payments.manual_unverified` emits `payment.manual_unverified` once per payment.
