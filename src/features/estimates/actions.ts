@@ -1,6 +1,6 @@
 "use server";
 
-import { and, asc, eq, isNull, ne } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne } from "drizzle-orm";
 import { z } from "zod";
 import type { Tx } from "@/db";
 import {
@@ -8,6 +8,7 @@ import {
   estimateOptions,
   estimates,
   lineItems,
+  media,
   properties,
 } from "@/db/schema";
 import { assertCustomerAccess } from "@/features/customers/api";
@@ -45,7 +46,9 @@ import {
   loadChangeOrder,
   loadEstimate,
   markEstimateSent,
+  moveEstimateBackTx,
   recomputeChangeOrder,
+  scheduleEstimateLaterTx,
 } from "./api";
 import { isEstimateOpen } from "./logic";
 
@@ -684,6 +687,101 @@ export const reopenEstimate = action({
       summary: `Estimate ${e.number} reopened`,
     });
     return { estimateId: e.id, jobId: e.jobId };
+  },
+  auditEntity: ({ input }) => ({ type: "estimate", id: input.estimateId }),
+  revalidate: ({ data }) => estPaths(data.estimateId, data.jobId),
+});
+
+// ------------------------------------------------------------------ after signing
+
+const workPaths = (estimateId: string, jobIds: string[]) => [
+  `/estimates/${estimateId}`,
+  "/estimates",
+  "/jobs",
+  "/dispatch",
+  "/today",
+  ...jobIds.map((j) => `/jobs/${j}`),
+];
+
+/**
+ * "When is the work?" → Schedule later (Quote to Paid E5): the approved lines and
+ * the open deposit request move to a new unscheduled follow-up job.
+ */
+export const scheduleEstimateLater = action({
+  perm: "estimates.send",
+  feature: F,
+  input: z.object({ estimateId: uuid }),
+  audit: "estimate.work_later",
+  async run({ input, user, tx, actor }) {
+    await assertEstimateAccess(user, input.estimateId, "read");
+    const r = await scheduleEstimateLaterTx(tx, input.estimateId, actor);
+    return { estimateId: input.estimateId, ...r };
+  },
+  auditEntity: ({ input }) => ({ type: "estimate", id: input.estimateId }),
+  revalidate: ({ data }) =>
+    workPaths(data.estimateId, [data.jobId, data.fromJobId]),
+});
+
+/** "Move it back to this job": undo Schedule later while the follow-up is unbooked and unpaid. */
+export const moveEstimateBack = action({
+  perm: "estimates.send",
+  feature: F,
+  input: z.object({ estimateId: uuid }),
+  audit: "estimate.work_now",
+  async run({ input, user, tx, actor }) {
+    await assertEstimateAccess(user, input.estimateId, "read");
+    const r = await moveEstimateBackTx(tx, input.estimateId, actor);
+    return { estimateId: input.estimateId, ...r };
+  },
+  auditEntity: ({ input }) => ({ type: "estimate", id: input.estimateId }),
+  revalidate: ({ data }) =>
+    workPaths(data.estimateId, [data.jobId, data.followUpJobId]),
+});
+
+/**
+ * The photos on the estimate the customer sees (Quote to Paid E6, modeled on
+ * setInvoicePhotos): an ordered selection of the job's photos (Problem / Goal
+ * labels come from each photo's tag). Presentation only, never in the signed
+ * snapshot; approving locks them as evidence.
+ */
+export const setEstimatePhotos = action({
+  perm: "estimates.create",
+  feature: F,
+  input: z.object({
+    estimateId: uuid,
+    photoMediaIds: zf.array(uuid).pipe(z.array(uuid).max(8)),
+  }),
+  audit: "estimate.photos_updated",
+  async run({ input, user, tx }) {
+    await assertEstimateAccess(user, input.estimateId, "write");
+    const e = await openEstimateOrThrow(tx, input.estimateId);
+    if (!e.jobId && input.photoMediaIds.length > 0)
+      throw new ValidationError({
+        photoMediaIds: ["Photos come from the job: link a job first."],
+      });
+    const ids = [...new Set(input.photoMediaIds)];
+    if (ids.length > 0) {
+      const ok = await tx
+        .select({ id: media.id })
+        .from(media)
+        .where(
+          and(
+            inArray(media.id, ids),
+            eq(media.jobId, e.jobId as string),
+            eq(media.kind, "photo"),
+            isNull(media.deletedAt),
+          ),
+        );
+      if (ok.length !== ids.length)
+        throw new ValidationError({
+          photoMediaIds: ["Pick photos of this job."],
+        });
+    }
+    await tx
+      .update(estimates)
+      .set({ photoMediaIds: ids, updatedAt: new Date() })
+      .where(eq(estimates.id, e.id));
+    return { estimateId: e.id, jobId: e.jobId, count: ids.length };
   },
   auditEntity: ({ input }) => ({ type: "estimate", id: input.estimateId }),
   revalidate: ({ data }) => estPaths(data.estimateId, data.jobId),

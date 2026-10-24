@@ -1,6 +1,6 @@
 import "server-only";
 import { and, eq, type SQL, sql } from "drizzle-orm";
-import { db } from "@/db";
+import { db, execRows } from "@/db";
 import { changeOrders, estimates, jobAssignments } from "@/db/schema";
 import { ForbiddenError, NotFoundError } from "@/lib/errors";
 import type { SessionUser } from "@/lib/types";
@@ -26,6 +26,24 @@ export function canSeeAllEstimates(user: SessionUser): boolean {
   return user.perms.has("jobs.view_all");
 }
 
+/**
+ * "Schedule later" (Quote to Paid E5) moved the estimate to an unassigned follow-up
+ * job: the techs on the visit it was signed on still see it (and can move it back).
+ */
+async function assignedToOrigin(
+  userId: string,
+  estimateId: string,
+): Promise<boolean> {
+  const [r] = await execRows<{ ok: boolean }>(sql`
+    select exists (
+      select 1 from activity a
+      join job_assignments ja on ja.job_id = (a.data->>'from_job_id')::uuid
+      where a.entity_type = 'estimate' and a.entity_id = ${estimateId}
+        and a.kind = 'estimate.work_later' and ja.user_id = ${userId}
+    ) as ok`);
+  return !!r?.ok;
+}
+
 /** SQL predicate on alias `e` (estimates). */
 export function estimateScopeSql(user: SessionUser): SQL {
   if (canSeeAllEstimates(user)) return sql`true`;
@@ -49,6 +67,8 @@ export async function assertEstimateAccess(
   if (canSeeAllEstimates(user)) return e;
   if (e.createdBy === user.id) return e;
   if (e.jobId && (await assignedTo(user.id, e.jobId))) return e;
+  if (e.status === "approved" && (await assignedToOrigin(user.id, e.id)))
+    return e;
   throw new ForbiddenError();
 }
 

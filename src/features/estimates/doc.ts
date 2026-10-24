@@ -2,7 +2,7 @@ import "server-only";
 import { and, desc, eq, ne } from "drizzle-orm";
 import { cache } from "react";
 import { db } from "@/db";
-import { estimates, properties, signatures } from "@/db/schema";
+import { estimates, properties, signatures, users } from "@/db/schema";
 import { contactRevealedFor } from "@/features/customers/api";
 import {
   addressLines,
@@ -58,12 +58,21 @@ export interface EstimateDoc extends LoadedEstimate {
   consentText: string;
   deposits: Record<string, EstimateDepositPreview | null>;
   signature: EstimateSignatureView | null;
+  /**
+   * The estimate's photos: the ones staff attached (estimates.photo_media_ids, in
+   * that order, each with its Problem / Goal label), else the job's problem photos.
+   */
   problemPhotos: {
     id: string;
     url: string;
     thumbUrl: string;
     caption: string | null;
+    tag: string | null;
   }[];
+  /** True when the photos above were attached to this estimate by staff. */
+  photosAttached: boolean;
+  /** The author's first name ("Prepared by Derek"), when known. */
+  preparedBy: string | null;
   timezone: string;
 }
 
@@ -102,7 +111,7 @@ export const loadEstimateDoc = cache(
     const est = loaded.estimate;
     const coolingOff = estimateNeedsCoolingOff(loaded);
     const propertyId = est.propertyId ?? loaded.job?.propertyId ?? null;
-    const [company, policies, prop, tz, sig, photos, ...deps] =
+    const [company, policies, prop, tz, sig, photos, author, ...deps] =
       await Promise.all([
         loadDocCompany(),
         estimatePolicies(coolingOff),
@@ -132,6 +141,14 @@ export const loadEstimateDoc = cache(
                 () => [],
               )
           : Promise.resolve([]),
+        est.createdBy
+          ? db
+              .select({ name: users.name })
+              .from(users)
+              .where(eq(users.id, est.createdBy))
+              .limit(1)
+              .then((r) => r[0]?.name ?? null)
+          : Promise.resolve(null),
         ...loaded.options.map((o) =>
           previewDeposit({ estimateId: est.id, optionId: o.id }).catch(
             () => null,
@@ -166,7 +183,10 @@ export const loadEstimateDoc = cache(
         url: p.url,
         thumbUrl: p.thumbUrl,
         caption: p.caption,
+        tag: p.tag,
       })),
+      photosAttached: est.photoMediaIds.length > 0 && photos.length > 0,
+      preparedBy: author?.trim().split(/\s+/)[0] || null,
       timezone: tz,
     };
   },

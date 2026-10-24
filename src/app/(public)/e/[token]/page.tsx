@@ -1,5 +1,5 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Eye } from "lucide-react";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { db } from "@/db";
@@ -10,9 +10,11 @@ import {
   markEstimateViewed,
 } from "@/features/estimates/api";
 import { EstimateDocument } from "@/features/estimates/components/EstimateDocument";
-import { loadEstimateDoc } from "@/features/estimates/doc";
+import { EstimatePhotos } from "@/features/estimates/components/EstimatePhotos";
+import { type EstimateDoc, loadEstimateDoc } from "@/features/estimates/doc";
 import { canApproveEstimate } from "@/features/estimates/logic";
 import type { DocLineType } from "@/features/invoices/math";
+import { TAG_LABEL } from "@/features/media/labels";
 import { payDepositFromPortal } from "@/features/portal/actions";
 import {
   EstimateApproval,
@@ -24,14 +26,19 @@ import {
   PortalFooter,
 } from "@/features/portal/components/PortalChrome";
 import { PrintButton } from "@/features/portal/components/PrintButton";
-import { presentingUser } from "@/features/portal/present";
-import { openPortalToken, portalActor } from "@/features/portal/token";
+import { type Presenter, presentingUser } from "@/features/portal/present";
+import {
+  openPortalToken,
+  peekPublicToken,
+  portalActor,
+} from "@/features/portal/token";
 import { getLatestSignature } from "@/features/signatures/api";
 import { formatMoney } from "@/lib/money";
 import { getCurrentPolicy } from "@/lib/policies";
+import { stageStyle } from "@/lib/stage-colors";
 import { formatDate, formatDateTime } from "@/lib/time";
+import type { PublicTokenRow } from "@/lib/tokens";
 import { Button } from "@/ui/components/Button";
-import { PhotoGrid } from "@/ui/components/PhotoGrid";
 import { SuccessCheck } from "@/ui/components/SuccessCheck";
 
 export const metadata: Metadata = {
@@ -66,53 +73,75 @@ const toPortalLine = (l: LineRowLike): PortalLine => ({
   isServiceFee: l.isServiceFee,
 });
 
-// /e/[token] (SPEC M07, M23): view the options, pick one + add-ons, agree to sign
-// electronically, type a name, draw a signature, then pay the deposit (B4 /p/).
-// Every hit is logged (portal_access_log); the first view flips sent → viewed.
-// `?present=1` with a staff session that may present it: the same page, full
-// screen on the staff tablet (present mode, `PresentMode`); the approval is
-// then recorded as signed in person.
+/** An estimate photo's label: its caption, else its tag (Problem / Goal). */
+const photoLabel = (p: { caption: string | null; tag: string | null }) =>
+  p.caption?.trim() ||
+  (p.tag ? TAG_LABEL[p.tag as keyof typeof TAG_LABEL] : null) ||
+  "Photo";
+
+// /e/[token] (SPEC M07, M23; Quote to Paid E4): one option per screen, then the
+// one-step signature (consent, name, pad), then the deposit (B4 /p/). Every
+// customer hit is logged (portal_access_log); the first view flips sent → viewed.
+// `?present=1` with a signed-in staff user who may present it: the same page full
+// screen on the staff device (present mode); the approval is then recorded as
+// signed in person. Staff never count as the customer: no access-log row, no
+// "viewed", no alert. `&preview=1`: the builder's Preview, Approve / Decline off.
 export default async function ETokenPage({
   params,
   searchParams,
 }: {
   params: Promise<{ token: string }>;
-  searchParams: Promise<{ present?: string }>;
+  searchParams: Promise<{ present?: string; preview?: string }>;
 }) {
   const [{ token }, sp] = await Promise.all([params, searchParams]);
-  const tok = await openPortalToken("estimate", token, "/e/[token]");
+  // The presenter is checked BEFORE the token is opened: opening logs a view.
+  let tok: PublicTokenRow | null = null;
+  let presenter: Presenter | null = null;
+  if (sp.present === "1") {
+    const peek = await peekPublicToken(["estimate"], token);
+    if (peek?.entityType === "estimate") {
+      presenter = await presentingUser(peek.entityId);
+      if (presenter) tok = peek;
+    }
+  }
+  tok ??= await openPortalToken("estimate", token, "/e/[token]");
   if (!tok) return <PortalExpired what="estimate link" />;
   if (tok.entityType === "change_order")
     return <ChangeOrderView token={token} coId={tok.entityId} />;
   if (tok.entityType !== "estimate") return <PortalExpired />;
-
-  const actor = await portalActor(tok);
-  await db
-    .transaction((tx) => markEstimateViewed(tx, tok.entityId, tok.id, actor))
-    .catch(() => false);
+  if (!presenter) {
+    const row = tok;
+    const actor = await portalActor(row);
+    await db
+      .transaction((tx) => markEstimateViewed(tx, row.entityId, row.id, actor))
+      .catch(() => false);
+  }
   const doc = await loadEstimateDoc(tok.entityId);
   if (!doc) return <PortalExpired what="estimate" />;
   const e = doc.estimate;
   const tz = doc.timezone;
   const first =
-    doc.customer.firstName ?? doc.customer.displayName.split(" ")[0];
-  const presenter = sp.present === "1" ? await presentingUser(e.id) : null;
+    doc.customer.firstName ?? doc.customer.displayName.split(" ")[0] ?? "there";
+  const preview = !!presenter && sp.preview === "1";
   // Present mode wraps every state of the page (it stays mounted when the
   // approval refreshes it into "Approved").
-  const present = (node: ReactNode) =>
-    presenter ? (
+  const present = (node: ReactNode) => {
+    const page = <div style={stageStyle("estimate")}>{node}</div>;
+    return presenter ? (
       <LazyPresentMode
         exitHref={`/estimates/${e.id}`}
         company={doc.company.name}
         heading={`Estimate ${e.number}`}
         customer={first}
         stage={e.status}
+        preview={preview}
       >
-        {node}
+        {page}
       </LazyPresentMode>
     ) : (
-      node
+      page
     );
+  };
 
   if (e.status === "approved") {
     const [dep] = await db
@@ -202,58 +231,32 @@ export default async function ETokenPage({
       ) : null}
     </>
   );
+  const firstPhoto = doc.problemPhotos[0];
   return present(
     <div className="space-y-5 pt-2">
-      <section className="px-1 pt-2">
-        <p className="num text-subhead font-semibold text-label-2">
-          Estimate {e.number}
+      {preview ? (
+        <p className="flex items-center gap-2 rounded-tile bg-[color-mix(in_srgb,var(--accent)_var(--tint-a),transparent)] px-4 py-3 text-subhead font-semibold text-[var(--ink-accent)]">
+          <Eye size={18} aria-hidden className="shrink-0" />
+          Preview: this is what {first} sees. Approve and Decline are off.
         </p>
-        <h1 className="mt-1 text-large-title">
-          {e.title ?? `Hi ${first}, here's your estimate`}
-        </h1>
-        <p className="mt-2 text-subhead text-label-2">
-          {doc.propertyLines[0] ? `${doc.propertyLines[0]} · ` : ""}
-          {e.expiresAt
-            ? approvable
-              ? `Valid until ${formatDate(e.expiresAt, tz)}`
-              : `Expired ${formatDate(e.expiresAt, tz)}`
-            : ""}
-        </p>
-      </section>
+      ) : null}
+      <Hero doc={doc} first={first} approvable={approvable} />
 
       {e.status === "declined" ? (
         <div className="card px-5 py-4 text-subhead">
           You declined this estimate. Changed your mind? Call us and we'll
           reopen it.
         </div>
-      ) : null}
-      {!approvable && e.status !== "declined" ? (
+      ) : e.status === "superseded" ? (
+        <div className="card px-5 py-4 text-subhead">
+          This estimate was replaced by a newer one. Call us and we'll send you
+          the current one.
+        </div>
+      ) : !approvable ? (
         <div className="card px-5 py-4 text-subhead">
           This estimate has expired. Prices may have changed — call us for an
           updated one.
         </div>
-      ) : null}
-
-      {doc.problemPhotos.length > 0 ? (
-        <section aria-label="What we found" className="space-y-2">
-          <h2 className="px-1 text-title3">What we found</h2>
-          <PhotoGrid
-            layout="strip"
-            photos={doc.problemPhotos.map((p) => ({
-              id: p.id,
-              url: p.url,
-              thumbUrl: p.thumbUrl,
-              caption: p.caption,
-              alt: p.caption ?? "Photo of the problem",
-            }))}
-          />
-        </section>
-      ) : null}
-
-      {e.notes ? (
-        <p className="whitespace-pre-line px-1 text-body text-label-2">
-          {e.notes}
-        </p>
       ) : null}
 
       {approvable ? (
@@ -275,7 +278,19 @@ export default async function ETokenPage({
           signerNameDefault={doc.customer.displayName}
           coolingOff={doc.coolingOff}
           present={!!presenter}
+          preview={preview}
+          photo={
+            firstPhoto
+              ? { url: firstPhoto.url, label: photoLabel(firstPhoto) }
+              : null
+          }
         >
+          {e.notes ? (
+            <p className="whitespace-pre-line px-1 text-body text-label-2">
+              {e.notes}
+            </p>
+          ) : null}
+          <EstimatePhotos photos={doc.problemPhotos} />
           {terms}
           <PortalFooter />
         </EstimateApproval>
@@ -288,6 +303,54 @@ export default async function ETokenPage({
 
       {approvable ? null : <PortalFooter />}
     </div>,
+  );
+}
+
+/** The estimate's hero in the stage color: who it's for, what, until when. */
+function Hero({
+  doc,
+  first,
+  approvable,
+}: {
+  doc: EstimateDoc;
+  first: string;
+  approvable: boolean;
+}) {
+  const e = doc.estimate;
+  const n = doc.options.length;
+  const lead =
+    n > 1
+      ? `Hi ${first}, here are ${n === 2 ? "two" : "three"} ways to do it`
+      : `Hi ${first}, here's your estimate`;
+  return (
+    <section
+      className="rounded-[24px] px-5 pb-5 pt-4 text-white shadow-card"
+      style={{
+        background:
+          "linear-gradient(150deg, var(--accent-fill), color-mix(in srgb, var(--accent-fill) 78%, #1e1b4b))",
+      }}
+    >
+      <p className="num text-footnote font-semibold text-white/80">
+        Estimate {e.number}
+      </p>
+      <p className="mt-2 text-subhead text-white/90">{lead}</p>
+      <h1 className="mt-0.5 text-title2 font-bold">
+        {e.title ?? doc.company.name}
+      </h1>
+      <p className="mt-1.5 text-footnote text-white/85">
+        {[
+          doc.preparedBy ? `From ${doc.preparedBy}` : null,
+          doc.propertyLines[0] ?? null,
+          e.expiresAt
+            ? approvable
+              ? `Valid until ${formatDate(e.expiresAt, doc.timezone)}`
+              : `Expired ${formatDate(e.expiresAt, doc.timezone)}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" · ")}
+      </p>
+    </section>
   );
 }
 
@@ -308,7 +371,7 @@ async function ChangeOrderView({
   const co = loaded.changeOrder;
   const open = co.status === "draft" || co.status === "sent";
   return (
-    <div className="space-y-5 pt-2">
+    <div className="space-y-5 pt-2" style={stageStyle("estimate")}>
       <section className="px-1">
         <p className="num text-subhead font-semibold text-label-2">
           Change order {co.number} · Job {loaded.job.number}

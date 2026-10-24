@@ -3,14 +3,16 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CustomerCard } from "@/features/customers/slots";
 import { assertEstimateAccess } from "@/features/estimates/access";
-import { draftInvoiceImpact } from "@/features/estimates/api";
+import { draftInvoiceImpact, workState } from "@/features/estimates/api";
 import { complianceNotes } from "@/features/estimates/compliance";
+import { ApprovedSummary } from "@/features/estimates/components/ApprovedSummary";
 import {
   EstimateActionsProvider,
   EstimateBar,
   EstimateBuilder,
 } from "@/features/estimates/components/EstimateBuilder";
 import { EstimateDocument } from "@/features/estimates/components/EstimateDocument";
+import { LazyAfterSigning } from "@/features/estimates/components/islands";
 import { PreviewEstimateButton } from "@/features/estimates/components/PresentEstimateButton";
 import {
   loadEstimateDocForViewer,
@@ -63,13 +65,15 @@ export default async function EstimatesIdPage({
   if (!doc) notFound();
   const e = doc.estimate;
   const open = isEstimateOpen(e.status);
-  const [settings, company, tagMap, impact, replacedBy] = await Promise.all([
-    getSettings(),
-    findCompany(),
-    getEntityTags([{ type: "estimate", id }]).catch(() => ({})),
-    open && doc.job ? draftInvoiceImpact(doc.job.id) : Promise.resolve(null),
-    e.status === "superseded" ? replacementFor(e) : Promise.resolve(null),
-  ]);
+  const [settings, company, tagMap, impact, replacedBy, work] =
+    await Promise.all([
+      getSettings(),
+      findCompany(),
+      getEntityTags([{ type: "estimate", id }]).catch(() => ({})),
+      open && doc.job ? draftInvoiceImpact(doc.job.id) : Promise.resolve(null),
+      e.status === "superseded" ? replacementFor(e) : Promise.resolve(null),
+      e.status === "approved" ? workState(e.id) : Promise.resolve(null),
+    ]);
   const tz = doc.timezone;
   const canCreate = user.perms.has("estimates.create");
   const canSend = user.perms.has("estimates.send");
@@ -259,30 +263,47 @@ export default async function EstimatesIdPage({
                     </Banner>
                   ))
                 : null}
-              {approvedOption && doc.signature ? (
-                <ListSection
-                  header="Approval"
-                  footer={`Document fingerprint SHA-256 ${doc.signature.docSha256.slice(0, 16)}… · policies v${doc.policies.map((p) => p.version).join("/")}`}
+              {approvedOption ? (
+                <ApprovedSummary
+                  number={e.number}
+                  optionLabel={approvedOption.label}
+                  multi={doc.options.length > 1}
+                  totalCents={approvedOption.totals.totalCents}
+                  signature={doc.signature}
+                  policyVersions={doc.policies.map((p) => p.version)}
+                  timezone={tz}
+                  job={work?.job ?? doc.job}
+                  invoice={work?.invoice ?? null}
+                />
+              ) : null}
+              {work?.linesSkipped && work.invoice ? (
+                <Banner
+                  tone="warning"
+                  title={`${work.invoice.number} was already sent`}
+                  action={
+                    <Link
+                      href={`/invoices/${work.invoice.id}`}
+                      className="whitespace-nowrap text-subhead font-semibold text-accent-text"
+                    >
+                      Open {work.invoice.number}
+                    </Link>
+                  }
                 >
-                  <ListRow
-                    title={`${doc.signature.signerName} · ${doc.signature.channel === "verbal" ? "verbal approval" : doc.signature.channel === "remote_link" ? "signed online" : "signed in person"}`}
-                    subtitle={[
-                      formatDateTime(doc.signature.signedAt, tz),
-                      doc.signature.ip ? `IP ${doc.signature.ip}` : null,
-                      doc.signature.lat != null ? "location captured" : null,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                    multiline
-                  />
-                  {doc.job ? (
-                    <ListRow
-                      href={`/jobs/${doc.job.id}?tab=invoice`}
-                      title={`Job ${doc.job.number}`}
-                      subtitle="Approved lines were added to the job's invoice"
-                    />
-                  ) : null}
-                </ListSection>
+                  So these lines weren't added. The office can revise it.
+                </Banner>
+              ) : null}
+              {work ? (
+                <LazyAfterSigning
+                  estimateId={e.id}
+                  mode={work.mode}
+                  job={work.job}
+                  originJob={work.originJob}
+                  canScheduleLater={work.canScheduleLater && canSend}
+                  canMoveBack={work.canMoveBack && canSend}
+                  locked={work.linesSkipped ? null : work.locked}
+                  deposit={work.deposit}
+                  canCollect={user.perms.has("payments.collect")}
+                />
               ) : null}
 
               <EstimateBuilder

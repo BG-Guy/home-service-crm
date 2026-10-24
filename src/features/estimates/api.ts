@@ -4,11 +4,13 @@ import { db, execRows, type Tx } from "@/db";
 import {
   changeOrders,
   customers,
+  depositRequests,
   estimateOptions,
   estimates,
   invoices,
   jobs,
   lineItems,
+  payments,
   properties,
   serviceTypes,
   signatures,
@@ -1643,4 +1645,411 @@ export async function countOpenEstimates(customerId: string): Promise<number> {
     sql`select count(*)::int as n from estimates where customer_id = ${customerId} and status in ('draft','sent','viewed')`,
   );
   return Number(r?.n ?? 0);
+}
+
+// ------------------------------------------------------------------ after signing: now or later
+
+const OPEN_DEPOSIT = ["required", "requested"];
+const PAID_DEPOSIT = ["paid", "held", "applied"];
+const CLOSED_JOB = ["completed", "closed", "cancelled"];
+
+/**
+ * "When is the work?" after signing (Quote to Paid E5). `now`: the approved lines
+ * are on this visit's invoice. `later`: they moved to an unscheduled follow-up job
+ * for the same customer and address (the office books it), recorded in the
+ * estimate's activity (`estimate.work_later` / `estimate.work_now`, like the lead
+ * link rides on `estimate.created`). The choice locks once a deposit is paid.
+ */
+export interface WorkState {
+  mode: "now" | "later";
+  /** The job the work is billed on now. */
+  job: { id: string; number: string; status: string } | null;
+  /** Later: the visit it was signed on. */
+  originJob: { id: string; number: string } | null;
+  /** That job's latest invoice. */
+  invoice: { id: string; number: string; status: string } | null;
+  /** Lines from this estimate on that invoice (line_items.source). */
+  linesOnInvoice: number;
+  /** The invoice was already issued when it was approved: nothing was added. */
+  linesSkipped: boolean;
+  /** An open deposit request for this estimate. */
+  deposit: { id: string; amountCents: number; status: string } | null;
+  depositPaid: boolean;
+  canScheduleLater: boolean;
+  canMoveBack: boolean;
+  /** Why the choice can't change, in plain words. */
+  locked: string | null;
+}
+
+async function latestWorkMove(
+  exec: Tx,
+  estimateId: string,
+): Promise<{ kind: string; from: string; to: string } | null> {
+  const [r] = await execRows<{ kind: string; f: string; t: string }>(
+    sql`select kind, data->>'from_job_id' as f, data->>'to_job_id' as t from activity
+        where entity_type = 'estimate' and entity_id = ${estimateId}
+          and kind in ('estimate.work_later', 'estimate.work_now')
+        order by created_at desc limit 1`,
+    exec,
+  );
+  return r ? { kind: r.kind, from: r.f, to: r.t } : null;
+}
+
+async function latestJobInvoice(exec: Tx, jobId: string) {
+  const [inv] = await exec
+    .select({
+      id: invoices.id,
+      number: invoices.number,
+      status: invoices.status,
+    })
+    .from(invoices)
+    .where(and(eq(invoices.jobId, jobId), ne(invoices.status, "void")))
+    .orderBy(desc(invoices.createdAt))
+    .limit(1);
+  return inv ?? null;
+}
+
+const estimateLinesOn = (invoiceId: string, estimateId: string) =>
+  and(
+    eq(lineItems.parentType, "invoice"),
+    eq(lineItems.parentId, invoiceId),
+    eq(lineItems.sourceType, "estimate"),
+    eq(lineItems.sourceId, estimateId),
+  );
+
+/** Where an approved estimate's work is billed, and what may change (E5). */
+export async function workState(
+  estimateId: string,
+  exec: Tx = db,
+): Promise<WorkState | null> {
+  const [est] = await exec
+    .select({
+      id: estimates.id,
+      status: estimates.status,
+      jobId: estimates.jobId,
+    })
+    .from(estimates)
+    .where(eq(estimates.id, estimateId))
+    .limit(1);
+  if (!est || est.status !== "approved") return null;
+  const move = await latestWorkMove(exec, est.id);
+  const later =
+    move?.kind === "estimate.work_later" &&
+    !!est.jobId &&
+    move.to === est.jobId;
+  const [job] = est.jobId
+    ? await exec
+        .select({ id: jobs.id, number: jobs.number, status: jobs.status })
+        .from(jobs)
+        .where(eq(jobs.id, est.jobId))
+        .limit(1)
+    : [];
+  const [origin] =
+    later && move
+      ? await exec
+          .select({ id: jobs.id, number: jobs.number })
+          .from(jobs)
+          .where(eq(jobs.id, move.from))
+          .limit(1)
+      : [];
+  const invoice = job ? await latestJobInvoice(exec, job.id) : null;
+  const [count] = invoice
+    ? await exec
+        .select({ n: sql<number>`count(*)::int` })
+        .from(lineItems)
+        .where(estimateLinesOn(invoice.id, est.id))
+    : [];
+  const linesOnInvoice = Number(count?.n ?? 0);
+  const deps = await exec
+    .select({
+      id: depositRequests.id,
+      amountCents: depositRequests.amountCents,
+      status: depositRequests.status,
+    })
+    .from(depositRequests)
+    .where(eq(depositRequests.estimateId, est.id))
+    .orderBy(desc(depositRequests.createdAt));
+  const deposit = deps.find((d) => OPEN_DEPOSIT.includes(d.status)) ?? null;
+  const depositPaid = deps.some((d) => PAID_DEPOSIT.includes(d.status));
+  let canMoveBack = false;
+  if (later && job && origin && !depositPaid) {
+    const [paid] = await exec
+      .select({ n: sql<number>`count(*)::int` })
+      .from(payments)
+      .where(and(eq(payments.jobId, job.id), eq(payments.status, "succeeded")));
+    const back = await latestJobInvoice(exec, origin.id);
+    canMoveBack =
+      job.status === "unscheduled" &&
+      Number(paid?.n ?? 0) === 0 &&
+      (invoice?.status ?? "draft") === "draft" &&
+      (back?.status ?? "draft") === "draft";
+  }
+  const canScheduleLater =
+    !later &&
+    !!job &&
+    !CLOSED_JOB.includes(job.status) &&
+    invoice?.status === "draft" &&
+    linesOnInvoice > 0 &&
+    !depositPaid;
+  const locked = depositPaid
+    ? "The deposit is paid, so the work stays where it is."
+    : later && !canMoveBack
+      ? "The follow-up is booked or paid, so the work stays on it."
+      : !later && invoice && invoice.status !== "draft"
+        ? `${invoice.number} was already sent, so the work stays on this job.`
+        : null;
+  return {
+    mode: later ? "later" : "now",
+    job: job ?? null,
+    originJob: origin ?? null,
+    invoice,
+    linesOnInvoice,
+    linesSkipped:
+      !!invoice && invoice.status !== "draft" && linesOnInvoice === 0,
+    deposit,
+    depositPaid,
+    canScheduleLater,
+    canMoveBack,
+    locked,
+  };
+}
+
+/** Move this estimate's lines (by source) between two draft invoices. */
+async function moveEstimateLines(
+  tx: Tx,
+  estimateId: string,
+  fromInvoiceId: string,
+  toInvoiceId: string,
+): Promise<{ count: number; cents: number }> {
+  const rows = await tx
+    .update(lineItems)
+    .set({ parentId: toInvoiceId, updatedAt: new Date() })
+    .where(estimateLinesOn(fromInvoiceId, estimateId))
+    .returning({ total: lineItems.totalCents });
+  await recomputeInvoice(tx, fromInvoiceId);
+  await recomputeInvoice(tx, toInvoiceId);
+  return {
+    count: rows.length,
+    cents: rows.reduce((a, r) => a + r.total, 0),
+  };
+}
+
+/** The estimate, its work, its open deposit: from one job to another. */
+async function pointEstimateAt(
+  tx: Tx,
+  est: { id: string },
+  from: string,
+  to: string,
+): Promise<void> {
+  const now = new Date();
+  await tx
+    .update(depositRequests)
+    .set({ jobId: to })
+    .where(
+      and(
+        eq(depositRequests.estimateId, est.id),
+        inArray(depositRequests.status, OPEN_DEPOSIT),
+      ),
+    );
+  await tx
+    .update(estimates)
+    .set({ jobId: to, updatedAt: now })
+    .where(eq(estimates.id, est.id));
+  await setJobEstimate(tx, to, est.id);
+  // The visit it left no longer sells this estimate (payroll's "sold by").
+  await tx
+    .update(jobs)
+    .set({ estimateId: null, updatedAt: now })
+    .where(and(eq(jobs.id, from), eq(jobs.estimateId, est.id)));
+}
+
+/**
+ * "Schedule later" (E5): this estimate's lines and its open deposit request move
+ * to a new unscheduled follow-up job for the same customer and address ("Follow-up:
+ * <title>", with the estimate), which shows in the Assign hub's undated list.
+ * Allowed while the work is on this visit's DRAFT invoice and no deposit is paid.
+ */
+export async function scheduleEstimateLaterTx(
+  tx: Tx,
+  estimateId: string,
+  actor: Actor,
+): Promise<{ jobId: string; number: string; fromJobId: string }> {
+  await tx
+    .select({ id: estimates.id })
+    .from(estimates)
+    .where(eq(estimates.id, estimateId))
+    .for("update");
+  const state = await workState(estimateId, tx);
+  if (!state)
+    throw new ConflictError(
+      "estimate_not_approved",
+      "Only an approved estimate's work can be scheduled.",
+    );
+  if (!state.canScheduleLater || !state.job || !state.invoice)
+    throw new ConflictError(
+      "work_locked",
+      state.locked ?? "This work can't be moved to a follow-up now.",
+    );
+  const [est] = await tx
+    .select()
+    .from(estimates)
+    .where(eq(estimates.id, estimateId))
+    .limit(1);
+  const [from] = await tx
+    .select()
+    .from(jobs)
+    .where(eq(jobs.id, state.job.id))
+    .limit(1);
+  if (!est || !from) throw new NotFoundError("Job");
+  const created = await createJob(
+    tx,
+    {
+      customerId: from.customerId,
+      propertyId: from.propertyId,
+      serviceTypeId: from.serviceTypeId,
+      title: `Follow-up: ${est.title ?? from.title}`.slice(0, 200),
+      estimateId: est.id,
+    },
+    actor,
+  );
+  const { invoiceId: toInvoice } = await getOrCreateDraftInvoice(
+    tx,
+    created.jobId,
+    actor,
+  );
+  const moved = await moveEstimateLines(
+    tx,
+    est.id,
+    state.invoice.id,
+    toInvoice,
+  );
+  await pointEstimateAt(tx, est, from.id, created.jobId);
+  const what = `${lineCount(moved.count)} (${formatMoney(moved.cents)})`;
+  await writeActivity(tx, {
+    entity: { type: "estimate", id: est.id },
+    customerId: est.customerId,
+    jobId: created.jobId,
+    kind: "estimate.work_later",
+    summary: `Work scheduled for later: ${what} moved to follow-up ${created.number}`,
+    data: { from_job_id: from.id, to_job_id: created.jobId },
+    actorUserId: actor.userId,
+  });
+  await writeActivity(tx, {
+    entity: { type: "job", id: from.id },
+    customerId: est.customerId,
+    jobId: from.id,
+    kind: "job.work_moved",
+    summary: `${est.number}'s work moved to follow-up ${created.number} (${what})`,
+    data: { estimate_id: est.id, to_job_id: created.jobId },
+    actorUserId: actor.userId,
+  });
+  await writeActivity(tx, {
+    entity: { type: "job", id: created.jobId },
+    customerId: est.customerId,
+    jobId: created.jobId,
+    kind: "job.work_moved",
+    summary: `Follow-up of ${from.number} for ${est.number} (${what})`,
+    data: { estimate_id: est.id, from_job_id: from.id },
+    actorUserId: actor.userId,
+  });
+  await emitLinesChanged(tx, state.invoice.id, from.id, actor);
+  await emitLinesChanged(tx, toInvoice, created.jobId, actor);
+  return { jobId: created.jobId, number: created.number, fromJobId: from.id };
+}
+
+/**
+ * "Move it back to this job" (E5): undoes Schedule later while the follow-up is
+ * still unscheduled and unpaid. The follow-up was made by this flow and never
+ * booked, so it is cancelled quietly (no job.cancelled: the customer was never
+ * told about it) and its empty draft invoice voided.
+ */
+export async function moveEstimateBackTx(
+  tx: Tx,
+  estimateId: string,
+  actor: Actor,
+): Promise<{ jobId: string; followUpJobId: string }> {
+  await tx
+    .select({ id: estimates.id })
+    .from(estimates)
+    .where(eq(estimates.id, estimateId))
+    .for("update");
+  const state = await workState(estimateId, tx);
+  if (!state?.canMoveBack || !state.job || !state.originJob)
+    throw new ConflictError(
+      "work_locked",
+      state?.locked ?? "This work can't be moved back now.",
+    );
+  const [est] = await tx
+    .select()
+    .from(estimates)
+    .where(eq(estimates.id, estimateId))
+    .limit(1);
+  if (!est) throw new NotFoundError("Estimate");
+  const follow = state.job;
+  const origin = state.originJob;
+  const { invoiceId: back } = await getOrCreateDraftInvoice(
+    tx,
+    origin.id,
+    actor,
+  );
+  const moved = state.invoice
+    ? await moveEstimateLines(tx, est.id, state.invoice.id, back)
+    : { count: 0, cents: 0 };
+  await pointEstimateAt(tx, est, follow.id, origin.id);
+  const now = new Date();
+  await tx
+    .update(jobs)
+    .set({
+      status: "cancelled",
+      cancelledAt: now,
+      cancelReason: "duplicate",
+      cancelNote: `Work moved back to ${origin.number}`,
+      updatedAt: now,
+    })
+    .where(and(eq(jobs.id, follow.id), eq(jobs.status, "unscheduled")));
+  if (state.invoice) {
+    const left = await invoiceLines(tx, state.invoice.id);
+    if (left.length === 0)
+      await tx
+        .update(invoices)
+        .set({
+          status: "void",
+          voidedAt: now,
+          voidReason: `Work moved back to ${origin.number}`,
+          updatedAt: now,
+        })
+        .where(
+          and(eq(invoices.id, state.invoice.id), eq(invoices.status, "draft")),
+        );
+  }
+  const what = `${lineCount(moved.count)} (${formatMoney(moved.cents)})`;
+  await writeActivity(tx, {
+    entity: { type: "estimate", id: est.id },
+    customerId: est.customerId,
+    jobId: origin.id,
+    kind: "estimate.work_now",
+    summary: `Work moved back to ${origin.number}: ${what}`,
+    data: { from_job_id: follow.id, to_job_id: origin.id },
+    actorUserId: actor.userId,
+  });
+  await writeActivity(tx, {
+    entity: { type: "job", id: origin.id },
+    customerId: est.customerId,
+    jobId: origin.id,
+    kind: "job.work_moved",
+    summary: `${est.number}'s work moved back from ${follow.number} (${what})`,
+    data: { estimate_id: est.id, from_job_id: follow.id },
+    actorUserId: actor.userId,
+  });
+  await writeActivity(tx, {
+    entity: { type: "job", id: follow.id },
+    customerId: est.customerId,
+    jobId: follow.id,
+    kind: "job.work_moved",
+    summary: `Follow-up cancelled: ${est.number}'s work moved back to ${origin.number}`,
+    data: { estimate_id: est.id, to_job_id: origin.id },
+    actorUserId: actor.userId,
+  });
+  await emitLinesChanged(tx, back, origin.id, actor);
+  return { jobId: origin.id, followUpJobId: follow.id };
 }

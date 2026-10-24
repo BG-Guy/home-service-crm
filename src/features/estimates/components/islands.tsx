@@ -9,3 +9,8 @@ import dynamic from "next/dynamic";
 export const LazyNewChangeOrderButton = dynamic(() =>
   import("./NewChangeOrderButton").then((m) => m.NewChangeOrderButton),
 );
+
+/** After signing (E5): only approved estimates load it. */
+export const LazyAfterSigning = dynamic(() =>
+  import("./AfterSigning").then((m) => m.AfterSigning),
+);
