@@ -451,6 +451,11 @@ export const staffTemplates: T[] = [
     "{{customer.display_name}} approved {{estimate.total}}.",
   ),
   push(
+    "staff.invoice_viewed",
+    "Invoice {{invoice.number}} viewed",
+    "{{customer.display_name}} opened the {{invoice.total}} invoice.",
+  ),
+  push(
     "staff.deposit_paid",
     "Deposit paid: {{deposit.amount}}",
     "{{customer.display_name}} paid the deposit for {{job.number}}.",

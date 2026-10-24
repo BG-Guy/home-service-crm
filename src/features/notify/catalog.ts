@@ -81,6 +81,7 @@ export const NOTIFICATION_TYPES: readonly NotificationTypeDef[] = [
     label: "Failed messages",
     group: "Leads & jobs",
   },
+  { key: "staff.invoice_viewed", label: "Invoice viewed", group: "Money" },
   { key: "staff.deposit_paid", label: "Deposit paid", group: "Money" },
   { key: "staff.payment_failed", label: "Payment failed", group: "Money" },
   {

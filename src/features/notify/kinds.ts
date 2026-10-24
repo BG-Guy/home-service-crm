@@ -131,6 +131,7 @@ const KINDS: Record<string, NotifyKind> = {
   ),
   "staff.message_failed": K(TriangleAlert, "red", "messages", "Text failed"),
   "staff.low_rating": K(Star, "red", "messages", "Low rating"),
+  "staff.invoice_viewed": K(Eye, "blue", "money", "Invoice viewed"),
   "staff.deposit_paid": K(BadgeDollarSign, "green", "money", "Deposit paid"),
   "staff.payment_failed": K(CreditCard, "red", "money", "Payment failed"),
   "staff.manual_unverified": K(

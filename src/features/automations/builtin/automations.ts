@@ -648,6 +648,9 @@ export const builtinAutomationList: AutomationSeed[] = [
     ],
     featureFlag: "estimates",
   },
+  // Customer alerts (Quote to Paid): the estimate's author and the job's techs
+  // hear when the customer opens or signs (one push each, even when the author
+  // is also on the job). Staff previews and present mode emit no event.
   {
     key: "estimate_viewed_staff",
     name: "Estimate viewed",
@@ -655,7 +658,7 @@ export const builtinAutomationList: AutomationSeed[] = [
     triggerEvent: "estimate.viewed",
     steps: steps({
       channel: "push",
-      audience: "creator",
+      audience: "creator+assigned_techs",
       template_key: "staff.estimate_viewed",
     }),
     featureFlag: "estimates",
@@ -666,10 +669,21 @@ export const builtinAutomationList: AutomationSeed[] = [
     triggerEvent: "estimate.approved",
     steps: steps({
       channel: "push",
-      audience: "creator+office",
+      audience: "creator+office+assigned_techs",
       template_key: "staff.estimate_approved",
     }),
     featureFlag: "estimates",
+  },
+  {
+    key: "invoice_viewed_staff",
+    name: "Invoice viewed",
+    description: "First view by the customer only.",
+    triggerEvent: "invoice.viewed",
+    steps: steps({
+      channel: "push",
+      audience: "assigned_techs+office",
+      template_key: "staff.invoice_viewed",
+    }),
   },
   // ------------------------------------------------------------ reviews & after-care
   {

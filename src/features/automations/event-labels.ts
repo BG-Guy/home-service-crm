@@ -44,6 +44,7 @@ const LABELS: Record<string, string> = {
   "invoice.overdue": "Invoice overdue",
   "invoice.paid": "Invoice paid",
   "invoice.voided": "Invoice voided",
+  "invoice.viewed": "Invoice opened",
   "signature.captured": "Signature captured",
   "deposit.required": "Deposit needed",
   "deposit.paid": "Deposit paid",
