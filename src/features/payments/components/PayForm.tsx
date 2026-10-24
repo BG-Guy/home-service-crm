@@ -17,6 +17,7 @@ export function PayForm({
   tipPresets,
   tipOnFees,
   allowTip,
+  initialTipPct = 0,
 }: {
   token: string;
   dueCents: number;
@@ -24,9 +25,11 @@ export function PayForm({
   tipPresets: number[];
   tipOnFees: boolean;
   allowTip: boolean;
+  /** The tip picked on the tech's phone (one of the presets), else none. */
+  initialTipPct?: number;
 }) {
   const [state, formAction] = useActionState(startCheckout, null);
-  const [pct, setPct] = useState(0);
+  const [pct, setPct] = useState(initialTipPct);
   const tip = allowTip
     ? tipForPreset({ amountCents: dueCents, feeLinesCents, pct, tipOnFees })
     : 0;

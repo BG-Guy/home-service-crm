@@ -1,6 +1,14 @@
+import { Eye } from "lucide-react";
 import type { Metadata } from "next";
+import type { CSSProperties } from "react";
+import { db } from "@/db";
 import { InvoiceDocument } from "@/features/invoices/components/InvoiceDocument";
 import { loadInvoiceDoc, paymentMethodLabel } from "@/features/invoices/doc";
+import {
+  invoicePreviewer,
+  isStaffViewer,
+  markInvoiceViewed,
+} from "@/features/invoices/viewed";
 import { InvoicePhotoGrid } from "@/features/media/slots";
 import { getPaymentReceiptData } from "@/features/payments/api";
 import { payInvoiceFromPortal } from "@/features/portal/actions";
@@ -10,11 +18,13 @@ import {
   PortalFooter,
 } from "@/features/portal/components/PortalChrome";
 import { PrintButton } from "@/features/portal/components/PrintButton";
-import { openPortalToken } from "@/features/portal/token";
+import { openPortalToken, portalActor } from "@/features/portal/token";
+import { processEventsSoon } from "@/lib/events";
 import { isUuid } from "@/lib/ids";
 import { formatMoney } from "@/lib/money";
 import { getSettings } from "@/lib/settings";
 import { formatDate, formatDateTime } from "@/lib/time";
+import { Banner } from "@/ui/components/Banner";
 import { Button } from "@/ui/components/Button";
 import { KeyValueList } from "@/ui/components/KeyValueList";
 import { SuccessCheck } from "@/ui/components/SuccessCheck";
@@ -30,6 +40,12 @@ const ENTRY_LABEL: Record<string, string> = {
   wallet: "Mobile wallet",
 };
 
+/** The amount card's soft wash (the brand accent). */
+const WASH: CSSProperties = {
+  background:
+    "linear-gradient(180deg, color-mix(in srgb, var(--accent) 8%, var(--card)), var(--card) 75%)",
+};
+
 export const metadata: Metadata = {
   title: "Your invoice",
   referrer: "no-referrer",
@@ -38,22 +54,53 @@ export const metadata: Metadata = {
 
 // /i/[token] (SPEC M08, M23): view, print and pay the invoice. `?receipt={payment}`
 // opens that payment's receipt with "Wrong amount? / I didn't pay this" (S28).
+// `?preview=1` with a staff session (Quote to Paid I6): the same page as the customer
+// sees it, drafts included, with Pay off and a banner; checked BEFORE the token is
+// opened, so a preview logs no access row and never counts as "viewed". The
+// customer's first view of an issued invoice emits `invoice.viewed` (I7); a staff
+// member opening a link isn't the customer.
 export default async function ITokenPage({
   params,
   searchParams,
 }: {
   params: Promise<{ token: string }>;
-  searchParams: Promise<{ receipt?: string }>;
+  searchParams: Promise<{ receipt?: string; preview?: string }>;
 }) {
   const [{ token }, sp] = await Promise.all([params, searchParams]);
-  const tok = await openPortalToken("invoice", token, "/i/[token]");
+  const previewer = sp.preview === "1" ? await invoicePreviewer(token) : null;
+  const tok = previewer
+    ? previewer.tok
+    : await openPortalToken("invoice", token, "/i/[token]");
   if (!tok || tok.entityType !== "invoice")
     return <PortalExpired what="invoice link" />;
   const doc = await loadInvoiceDoc(tok.entityId);
-  if (!doc || doc.invoice.status === "draft")
+  if (!doc || (doc.invoice.status === "draft" && !previewer))
     return <PortalExpired what="invoice" />;
   const inv = doc.invoice;
   const tz = doc.timezone;
+  const first = doc.customer.displayName.trim().split(/\s+/)[0] ?? "";
+
+  if (!previewer && !(await isStaffViewer())) {
+    const actor = await portalActor(tok);
+    const firstView = await db
+      .transaction((tx) => markInvoiceViewed(tx, inv.id, tok.id, actor))
+      .catch(() => false);
+    if (firstView) await processEventsSoon();
+  }
+
+  const banner = previewer ? (
+    <Banner
+      tone="info"
+      icon={<Eye size={20} aria-hidden />}
+      title={`Preview: this is what ${first || "the customer"} sees`}
+      className="print:hidden"
+    >
+      Nothing is sent or tracked, and Pay is off.
+      {inv.status === "draft"
+        ? " This invoice is still a draft: they'll see it once you send it or get paid."
+        : ""}
+    </Banner>
+  ) : null;
 
   // ----- receipt view
   if (sp.receipt && isUuid(sp.receipt)) {
@@ -68,6 +115,7 @@ export default async function ITokenPage({
       const entry = r.entryMode ? ENTRY_LABEL[r.entryMode] : undefined;
       return (
         <div className="space-y-5 pt-2">
+          {banner}
           <section className="card flex flex-col items-center px-6 py-8 text-center">
             <SuccessCheck size={64} label="Paid" />
             <p className="num mt-4 text-subhead font-semibold text-label-2">
@@ -109,20 +157,25 @@ export default async function ITokenPage({
             />
           ) : null}
           <div className="flex flex-wrap justify-center gap-2 print:hidden">
-            <Button href={`/i/${token}`} variant="secondary">
+            <Button
+              href={previewer ? `/i/${token}?preview=1` : `/i/${token}`}
+              variant="secondary"
+            >
               View invoice
             </Button>
             <PrintButton label="Save receipt" />
           </div>
-          <section className="card px-5 py-4 print:hidden">
-            <p className="text-subhead text-label-2">
-              Something wrong with this payment? Tell us right away and a
-              manager will call you.
-            </p>
-            <div className="mt-2 -ml-3">
-              <LazyReceiptFlag token={token} paymentId={r.paymentId} />
-            </div>
-          </section>
+          {previewer ? null : (
+            <section className="card px-5 py-4 print:hidden">
+              <p className="text-subhead text-label-2">
+                Something wrong with this payment? Tell us right away and a
+                manager will call you.
+              </p>
+              <div className="mt-2 -ml-3">
+                <LazyReceiptFlag token={token} paymentId={r.paymentId} />
+              </div>
+            </section>
+          )}
           <PortalFooter />
         </div>
       );
@@ -132,10 +185,13 @@ export default async function ITokenPage({
   const open =
     (inv.status === "issued" || inv.status === "partially_paid") &&
     inv.balanceCents > 0;
+  // In a preview a draft reads as it will once it's issued.
+  const due = open || (previewer != null && inv.status === "draft");
   return (
     <div className="space-y-5 pt-2">
-      <section className="card px-5 pb-5 pt-6 print:hidden">
-        {open ? (
+      {banner}
+      <section className="card px-5 pb-5 pt-6 print:hidden" style={WASH}>
+        {due ? (
           <>
             <p
               className={cx(
@@ -144,7 +200,9 @@ export default async function ITokenPage({
               )}
             >
               {inv.overdue ? "Past due" : "Amount due"}
-              {inv.dueAt ? ` · ${formatDate(inv.dueAt, tz)}` : ""}
+              {inv.dueAt && inv.status !== "draft"
+                ? ` · ${formatDate(inv.dueAt, tz)}`
+                : ""}
             </p>
             <h1 className="num mt-1 text-[44px] font-bold leading-[1.05] tracking-[-0.03em]">
               {formatMoney(inv.balanceCents)}
@@ -152,13 +210,24 @@ export default async function ITokenPage({
             <p className="mt-1 text-subhead text-label-2">
               Invoice {inv.number}
             </p>
-            <form action={payInvoiceFromPortal} className="mt-5">
-              <input type="hidden" name="token" value={token} />
-              <input type="hidden" name="from" value="i" />
-              <Button type="submit" size="lg" block>
-                Pay {formatMoney(inv.balanceCents)}
-              </Button>
-            </form>
+            {previewer ? (
+              <div className="mt-5">
+                <Button size="lg" block disabled>
+                  Pay {formatMoney(inv.balanceCents)}
+                </Button>
+                <p className="mt-2 text-center text-footnote text-label-2">
+                  Pay is off in preview.
+                </p>
+              </div>
+            ) : (
+              <form action={payInvoiceFromPortal} className="mt-5">
+                <input type="hidden" name="token" value={token} />
+                <input type="hidden" name="from" value="i" />
+                <Button type="submit" size="lg" block>
+                  Pay {formatMoney(inv.balanceCents)}
+                </Button>
+              </form>
+            )}
           </>
         ) : (
           <div className="flex items-center gap-4">
@@ -187,13 +256,11 @@ export default async function ITokenPage({
       <InvoiceDocument
         doc={doc}
         photos={
-          inv.showPhotos ? (
-            <InvoicePhotoGrid
-              invoiceId={inv.id}
-              variant="portal"
-              tokenId={tok.id}
-            />
-          ) : null
+          <InvoicePhotoGrid
+            invoiceId={inv.id}
+            variant="invoice"
+            tokenId={tok.id}
+          />
         }
       />
       <PortalFooter />

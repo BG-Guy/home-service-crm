@@ -1,14 +1,16 @@
 import "server-only";
-import { eq } from "drizzle-orm";
-import { db } from "@/db";
-import { invoices } from "@/db/schema";
 import { assertInvoiceAccess } from "@/features/invoices/api";
+import {
+  INVOICE_PHOTO_TONE,
+  invoicePhotoLabel,
+} from "@/features/invoices/photo-labels";
 import { assertJobAccess } from "@/features/jobs/api";
 import { getServiceType } from "@/features/settings/api";
 import { getCurrentUser } from "@/lib/auth/current";
 import { getCompanyTimezone, isEnabled } from "@/lib/settings";
 import { formatDateTime } from "@/lib/time";
 import { PhotoGrid } from "@/ui/components/PhotoGrid";
+import { Pill } from "@/ui/components/StatusPill";
 import {
   listJobPhotos,
   type MediaItem,
@@ -22,7 +24,7 @@ import type {
   PortalPhotoGalleryProps,
 } from "./contracts";
 import { TAG_LABEL } from "./labels";
-import { getGalleryPhotos, stampContext } from "./queries";
+import { getGalleryPhotos } from "./queries";
 
 // Server UI slots produced by B4 (BUILD_PLAN §5.1). Each checks its own permission,
 // row scope and feature flag and returns null when the viewer may not see it.
@@ -71,30 +73,6 @@ export async function JobPhotosPanel({
   );
 }
 
-function Stamp({
-  at,
-  jobNumber,
-  address,
-}: {
-  at: string;
-  jobNumber: string | null;
-  address: string | null;
-}) {
-  // Stamped derivative via CSS overlay at print time (SPEC M11): no image re-encode.
-  return (
-    <span className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col bg-gradient-to-t from-black/70 to-transparent px-2 pt-4 pb-1.5 text-[10px] leading-tight text-white print:text-[9pt]">
-      <span className="num font-semibold">{at}</span>
-      {(jobNumber || address) && (
-        <span className="truncate opacity-90">
-          {[jobNumber && `Job ${jobNumber}`, address]
-            .filter(Boolean)
-            .join(" · ")}
-        </span>
-      )}
-    </span>
-  );
-}
-
 async function canSeeInvoice(invoiceId: string, tokenId?: string) {
   if (tokenId) return publicTokenCovers(tokenId, { invoiceId });
   const user = await getCurrentUser();
@@ -119,15 +97,7 @@ export async function InvoicePhotoGrid({
   if (!(await canSeeInvoice(invoiceId, tokenId))) return null;
   const photos = await selectInvoicePhotos(invoiceId, variant);
   if (photos.length === 0) return null;
-  const [inv] = await db
-    .select({ jobId: invoices.jobId })
-    .from(invoices)
-    .where(eq(invoices.id, invoiceId))
-    .limit(1);
-  const [tz, ctx] = await Promise.all([
-    getCompanyTimezone(),
-    stampContext(inv?.jobId ?? null),
-  ]);
+  const tz = await getCompanyTimezone();
   const at = (p: MediaItem) => formatDateTime(p.capturedAt ?? p.createdAt, tz);
 
   if (variant === "receipt")
@@ -139,10 +109,11 @@ export async function InvoicePhotoGrid({
             id: p.id,
             url: p.url,
             thumbUrl: p.thumbUrl,
-            tag: p.tag,
+            // The receipt reads like the invoice: Before / During / After.
+            tag: invoicePhotoLabel(p.tag),
             caption: p.caption,
             takenAt: at(p),
-            alt: p.tag ? `${TAG_LABEL[p.tag]} photo` : "Job photo",
+            alt: `${invoicePhotoLabel(p.tag)} photo`,
           }))}
         />
       </section>
@@ -164,44 +135,43 @@ export async function InvoicePhotoGrid({
       />
     );
 
+  // The invoice (detail, print, the customer's /i page and its printout): the photos
+  // the tech picked, plain (no stamps or overlays), each with a clear Before /
+  // During / After chip under it (Quote to Paid I5). Staff copies add when it was
+  // taken; the customer's copy doesn't.
+  const staff = !tokenId;
   return (
-    <section aria-label="Job photos" className="break-inside-avoid">
-      <ul className="grid grid-cols-2 gap-2">
-        {photos.slice(0, 8).map((p) => (
-          <li key={p.id} className="break-inside-avoid">
-            <figure className="flex flex-col gap-1">
-              <div className="relative aspect-[4/3] overflow-hidden rounded-[10px] bg-fill-2">
+    <section aria-labelledby="inv-doc-photos-h" className="break-inside-avoid">
+      <h3
+        id="inv-doc-photos-h"
+        className="text-footnote font-semibold text-label-2"
+      >
+        Photos
+      </h3>
+      <ul className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {photos.slice(0, 8).map((p) => {
+          const label = invoicePhotoLabel(p.tag);
+          return (
+            <li key={p.id} className="break-inside-avoid">
+              <figure className="flex flex-col gap-1.5">
                 {/* biome-ignore lint/performance/noImgElement: signed URLs, print */}
                 <img
                   src={p.url}
-                  alt={
-                    p.caption ??
-                    (p.tag ? `${TAG_LABEL[p.tag]} photo` : "Job photo")
-                  }
-                  className="size-full object-cover"
+                  alt={p.caption ? `${label}: ${p.caption}` : label}
+                  className="aspect-[4/3] w-full rounded-[10px] bg-fill-2 object-cover"
                   loading="lazy"
                 />
-                <Stamp
-                  at={at(p)}
-                  jobNumber={ctx.jobNumber}
-                  address={ctx.address}
-                />
-              </div>
-              <figcaption className="text-footnote text-label-2">
-                <strong className="text-label">
-                  {p.tag === "before"
-                    ? "Before"
-                    : p.tag === "after"
-                      ? "After"
-                      : p.tag
-                        ? TAG_LABEL[p.tag]
-                        : "Photo"}
-                </strong>
-                {p.caption ? ` · ${p.caption}` : ""}
-              </figcaption>
-            </figure>
-          </li>
-        ))}
+                <figcaption className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-footnote text-label-2">
+                  <Pill tone={INVOICE_PHOTO_TONE[label]} size="sm">
+                    {label}
+                  </Pill>
+                  {staff ? <span className="num">{at(p)}</span> : null}
+                  {p.caption ? <span>{p.caption}</span> : null}
+                </figcaption>
+              </figure>
+            </li>
+          );
+        })}
       </ul>
     </section>
   );

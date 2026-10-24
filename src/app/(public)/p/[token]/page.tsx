@@ -101,6 +101,12 @@ export default async function PayPage({
     );
 
   const allowTip = t.kind === "invoice" && s.payments.tips_enabled;
+  // "Pay on their phone" (the tech's QR) carries the tip picked there as the
+  // starting choice (?tip=15); the customer can still change it.
+  const tipParam = Number(Array.isArray(sp.tip) ? sp.tip[0] : sp.tip);
+  const initialTipPct = s.payments.tip_presets_pct.includes(tipParam)
+    ? tipParam
+    : 0;
   return (
     <div className="flex flex-col gap-5">
       {status === "cancel" && (
@@ -208,6 +214,7 @@ export default async function PayPage({
           tipPresets={s.payments.tip_presets_pct}
           tipOnFees={s.payments.tip_on_fees}
           allowTip={allowTip}
+          initialTipPct={initialTipPct}
         />
       ) : (
         <section className="card flex flex-col gap-2 p-5">
