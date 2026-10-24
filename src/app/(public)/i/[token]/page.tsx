@@ -4,6 +4,7 @@ import type { CSSProperties } from "react";
 import { db } from "@/db";
 import { InvoiceDocument } from "@/features/invoices/components/InvoiceDocument";
 import { loadInvoiceDoc, paymentMethodLabel } from "@/features/invoices/doc";
+import { customerShortName } from "@/features/invoices/screen-copy";
 import {
   invoicePreviewer,
   isStaffViewer,
@@ -78,7 +79,7 @@ export default async function ITokenPage({
     return <PortalExpired what="invoice" />;
   const inv = doc.invoice;
   const tz = doc.timezone;
-  const first = doc.customer.displayName.trim().split(/\s+/)[0] ?? "";
+  const first = customerShortName(doc.customer);
 
   if (!previewer && !(await isStaffViewer())) {
     const actor = await portalActor(tok);

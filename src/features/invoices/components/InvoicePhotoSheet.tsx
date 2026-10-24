@@ -212,8 +212,10 @@ export function InvoicePhotoSheet({
                             onClick={() => relabel(p, t)}
                             className={cx(
                               "pressable flex min-h-11 items-center justify-center rounded-[10px] px-3 text-subhead font-semibold",
+                              // Picked = ink, like a selected chip: the sheet's
+                              // one filled button stays Save.
                               tag === t
-                                ? "bg-accent-fill text-on-accent"
+                                ? "bg-label text-bg"
                                 : "bg-fill-2 text-label",
                             )}
                           >

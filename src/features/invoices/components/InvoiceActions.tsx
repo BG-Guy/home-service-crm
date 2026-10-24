@@ -114,11 +114,14 @@ export function InvoicePayBar(p: InvoicePayBarProps) {
   const open = !paid && !closed;
   const warmPay = warm(loadPaySheets);
   const warmSend = warm(loadInvoiceSheets);
+  // On the job's Invoice tab the job's own bar has the view's one filled button.
+  const mainVariant = p.layout === "panel" ? "tinted" : "primary";
 
   const getPaid =
     open && p.canCollect ? (
       <Button
         size="lg"
+        variant={mainVariant}
         fullWidth
         icon={<CreditCard size={20} aria-hidden />}
         onClick={() => s.show("collect")}
@@ -133,6 +136,7 @@ export function InvoicePayBar(p: InvoicePayBarProps) {
     paid && p.latestPaymentId ? (
       <Button
         size="lg"
+        variant={mainVariant}
         fullWidth
         icon={<ReceiptText size={19} aria-hidden />}
         onClick={() => s.show("receipt")}
@@ -252,7 +256,7 @@ export function InvoiceMoreActions(p: InvoiceBarProps) {
             icon={<FileCheck2 size={17} />}
             iconTone="gray"
             title="Issue invoice"
-            subtitle="Lock it now, without sending or getting paid"
+            subtitle="Locks it for edits"
             onClick={issue}
             disabled={!p.hasLines || pending}
             multiline

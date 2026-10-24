@@ -18,7 +18,7 @@ import {
 } from "@/features/invoices/components/islands";
 import type { EditorLine } from "@/features/invoices/components/LineEditor";
 import { loadInvoiceForViewer } from "@/features/invoices/page-data";
-import { qtyName } from "@/features/invoices/screen-copy";
+import { customerShortName, qtyName } from "@/features/invoices/screen-copy";
 import { loadInvoiceScreenData } from "@/features/invoices/screen-data";
 import { InvoicePhotoGrid } from "@/features/media/slots";
 import { JobPaymentsPanel } from "@/features/payments/slots";
@@ -70,7 +70,7 @@ export default async function InvoicesIdPage({
   const canCreate = has("invoices.create");
   const canCollect = has("payments.collect") || has("payments.record_manual");
   const showCost = user.baseRole !== "tech" || has("jobs.view_financials");
-  const firstName = doc.customer.displayName.trim().split(/\s+/)[0] ?? "";
+  const firstName = customerShortName(doc.customer);
   const lines: EditorLine[] = doc.lines.map((l) => ({
     id: l.id,
     type: l.type as EditorLine["type"],
@@ -308,7 +308,15 @@ export default async function InvoicesIdPage({
                 ) : null}
               </section>
             ) : (
-              <InvoiceWorkCard doc={doc} className="lg:hidden" />
+              <>
+                <InvoiceWorkCard doc={doc} className="lg:hidden" />
+                {/* Desktop and print: the paper itself, in the Work card's place. */}
+                <InvoiceDocument
+                  doc={doc}
+                  photos={photos}
+                  className="hidden lg:block print:block"
+                />
+              </>
             )}
 
             {doc.job && !data.photos.blocked ? (
@@ -330,16 +338,14 @@ export default async function InvoicesIdPage({
               />
             ) : null}
 
-            {/* The paper itself: desktop and print (drafts: print only). */}
-            <InvoiceDocument
-              doc={doc}
-              photos={photos}
-              className={
-                draft && canCreate
-                  ? "hidden print:block"
-                  : "hidden lg:block print:block"
-              }
-            />
+            {/* A draft being edited prints as the paper (shown only in print). */}
+            {draft && canCreate ? (
+              <InvoiceDocument
+                doc={doc}
+                photos={photos}
+                className="hidden print:block"
+              />
+            ) : null}
           </DetailLayout>
         </Page>
       </div>

@@ -224,7 +224,12 @@ export interface CollectContext {
   totalCents: number;
   balanceCents: number;
   feeLinesCents: number;
-  depositPaid: { amountCents: number; at: string | null } | null;
+  depositPaid: {
+    amountCents: number;
+    at: string | null;
+    /** Linked to this invoice, so already off its balance. */
+    applied: boolean;
+  } | null;
   openDeposit: {
     id: string;
     amountCents: number;

@@ -8,12 +8,28 @@ import {
 } from "@/features/invoices/photo-labels";
 import {
   balanceParts,
+  customerShortName,
   describeSend,
   minusMoney,
   qtyName,
   type SendOutcome,
 } from "@/features/invoices/screen-copy";
 import { nothingDueMessage } from "@/features/payments/collect-copy";
+
+describe("the customer in a sentence", () => {
+  it("a person's first name; a business keeps its whole name", () => {
+    expect(
+      customerShortName({ displayName: "Sophia Taylor", type: "residential" }),
+    ).toBe("Sophia");
+    expect(customerShortName({ displayName: "Sophia Taylor" })).toBe("Sophia");
+    expect(
+      customerShortName({
+        displayName: "Highlands Rentals LLC",
+        type: "property_manager",
+      }),
+    ).toBe("Highlands Rentals LLC");
+  });
+});
 
 describe("balance line", () => {
   it("names the approved option while the invoice bills exactly what was signed", () => {

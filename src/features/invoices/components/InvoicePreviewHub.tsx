@@ -42,7 +42,9 @@ export function InvoicePreviewHub({
       onExit={() => setFramed(false)}
       browserFullscreen={false}
       closeLabel="Close preview"
-      className="absolute"
+      // `visible`: the slot sits in the nav bar, which full screen hides
+      // ([data-chrome]); the hub must not inherit that.
+      className="visible absolute"
     >
       {framed ? (
         <iframe

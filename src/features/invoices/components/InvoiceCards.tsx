@@ -8,6 +8,7 @@ import { Pill, StatusPill } from "@/ui/components/StatusPill";
 import { cx } from "@/ui/cx";
 import { Morph } from "@/ui/motion/Morph";
 import type { InvoiceDoc } from "../doc";
+import { TERMS_LABEL } from "../math";
 import { invoiceTotalRows } from "../money-lines";
 import { INVOICE_PHOTO_TONE } from "../photo-labels";
 import { balanceParts, qtyName } from "../screen-copy";
@@ -76,7 +77,7 @@ export function InvoiceBalanceCard({
               ? `Issued ${formatDate(inv.issuedAt, tz)}`
               : null
             : inv.dueAt
-              ? `${inv.overdue ? "Past due since" : "Due"} ${formatDate(inv.dueAt, tz)}${inv.terms ? ` · ${inv.terms}` : ""}`
+              ? `${inv.overdue ? "Past due since" : "Due"} ${formatDate(inv.dueAt, tz)}${inv.terms && inv.terms !== TERMS_LABEL.due_on_receipt ? ` · ${inv.terms}` : ""}`
               : (inv.terms ?? null);
   return (
     <Card

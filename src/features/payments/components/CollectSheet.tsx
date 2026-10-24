@@ -427,10 +427,17 @@ function CollectForm({
               : (ctx.customerName ?? "")}
         </p>
         {ctx.depositPaid && target !== "deposit" ? (
-          <p className="text-footnote font-semibold text-success">
-            Deposit {formatMoney(ctx.depositPaid.amountCents)} paid · already
-            off the balance
-          </p>
+          ctx.depositPaid.applied ? (
+            <p className="text-footnote font-semibold text-success">
+              Deposit {formatMoney(ctx.depositPaid.amountCents)} paid · already
+              off the balance
+            </p>
+          ) : (
+            <p className="text-footnote font-semibold text-warning">
+              Deposit {formatMoney(ctx.depositPaid.amountCents)} paid, but not
+              on this invoice · don&apos;t charge it twice
+            </p>
+          )
         ) : null}
         {due != null && !editAmount ? (
           <Button variant="plain" size="sm" onClick={() => setEditAmount(true)}>

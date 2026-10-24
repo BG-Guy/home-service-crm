@@ -19,6 +19,7 @@ import type { EditorLine } from "./components/LineEditor";
 import type { JobInvoicePanelProps } from "./contracts";
 import { loadInvoiceDoc } from "./doc";
 import { invoiceTotalRows } from "./money-lines";
+import { customerShortName } from "./screen-copy";
 import { latestPaymentId } from "./screen-data";
 
 // Server UI slots produced by B3 (BUILD_PLAN §5.1). Each checks its own permission
@@ -156,9 +157,7 @@ export async function JobInvoicePanel({ jobId }: JobInvoicePanelProps) {
           hasLines={doc.lines.length > 0}
           canCollect={canCollect}
           canSend={canCreate}
-          customerFirstName={
-            doc.customer.displayName.trim().split(/\s+/)[0] ?? ""
-          }
+          customerFirstName={customerShortName(doc.customer)}
           latestPaymentId={paymentId}
         />
       ) : null}

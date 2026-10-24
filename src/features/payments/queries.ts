@@ -715,7 +715,11 @@ export async function getCollectContext(
   );
   const paidDeposits = jobId
     ? await db
-        .select({ amount: payments.amountCents, at: payments.succeededAt })
+        .select({
+          amount: payments.amountCents,
+          at: payments.succeededAt,
+          invoiceId: payments.invoiceId,
+        })
         .from(payments)
         .where(
           and(
@@ -763,6 +767,8 @@ export async function getCollectContext(
       ? {
           amountCents: paidDeposits.reduce((x, d) => x + d.amount, 0),
           at: paidDeposits[0]?.at?.toISOString() ?? null,
+          // Every paid deposit is linked to this invoice: it's already off the balance.
+          applied: !!inv && paidDeposits.every((d) => d.invoiceId === inv.id),
         }
       : null,
     openDeposit:

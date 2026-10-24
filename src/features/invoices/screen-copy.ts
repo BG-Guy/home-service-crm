@@ -42,6 +42,19 @@ export function balanceParts(i: {
   return parts;
 }
 
+/**
+ * How the screens name the customer in a sentence ("What Sophia sees", "Sophia
+ * opted out of texts"): a person's first name; a business keeps its whole name.
+ */
+export function customerShortName(c: {
+  displayName: string;
+  type?: string | null;
+}): string {
+  const name = c.displayName.trim();
+  if (c.type && c.type !== "residential") return name;
+  return name.split(/\s+/)[0] || name;
+}
+
 /** "2 × Grade 1 deadbolt" (no "1 ×"; up to 3 decimals for hours). */
 export function qtyName(qty: number, name: string): string {
   if (qty === 1) return name;
