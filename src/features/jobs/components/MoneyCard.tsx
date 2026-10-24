@@ -1,4 +1,5 @@
 import {
+  Banknote,
   Check,
   ChevronRight,
   CircleCheck,
@@ -34,12 +35,13 @@ import {
 // Present and the sign-off are small lazy islands; Collect reuses the payments
 // slot already on the page.
 
+// A check means done, so a stage still ahead never shows one.
 const STEP_ICON: Record<MoneyStageKey, LucideIcon> = {
   estimate: FileText,
   present: Sparkles,
   deposit: CreditCard,
   invoice: Receipt,
-  paid: Check,
+  paid: Banknote,
 };
 
 const STATE_WORD: Record<MoneyStepState, string> = {
@@ -275,7 +277,8 @@ export function MoneyCard({
           <ChevronRight size={16} aria-hidden />
         </Link>
       </div>
-      {main}
+      {/* Full width on a phone; a 288 px pill on wider screens. */}
+      {main && <div className="sm:max-w-72">{main}</div>}
       {signOff?.signed ? (
         <p className="flex min-h-11 items-center gap-3 border-hairline border-t pt-3 text-subhead">
           <CircleCheck
