@@ -106,11 +106,13 @@ function Rail({ stage }: { stage: MoneyStage }) {
             <span
               className={cx(
                 "whitespace-nowrap text-footnote",
+                // AA text for every stage that applies; a skipped one reads as
+                // not applicable (its state is also in the screen-reader text).
                 s.state === "now"
                   ? "font-semibold text-label"
-                  : s.state === "done"
-                    ? "text-label-2"
-                    : "text-label-3",
+                  : s.state === "skipped"
+                    ? "text-label-3"
+                    : "text-label-2",
               )}
             >
               {s.label}
