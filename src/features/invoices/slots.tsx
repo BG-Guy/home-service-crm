@@ -118,7 +118,7 @@ export async function JobInvoicePanel({ jobId }: JobInvoicePanelProps) {
             draft
               ? doc.lines.length === 0
                 ? "Draft · no items yet. Add items, then get paid."
-                : "Draft · Get paid or Send issues it"
+                : "Draft · issued when you send it or get paid"
               : [
                   inv.issuedAt
                     ? `Issued ${formatDate(inv.issuedAt, doc.timezone)}`
