@@ -323,7 +323,7 @@ describe("never bill twice: replacing the draft invoice's lines (E1)", () => {
   it("keeps parts used on the job and fees; a kept part covers one approved line", () => {
     const plan = planInvoiceReplace(
       [
-        D("stock", { type: "part", pricebookItemId: "pb-1", partTied: true }),
+        D("stock", { type: "part", pricebookItemId: "book-1", partTied: true }),
         D("flow", {
           type: "part",
           name: "Door reinforcer",
@@ -333,8 +333,8 @@ describe("never bill twice: replacing the draft invoice's lines (E1)", () => {
         D("labor", { type: "labor", name: "Install" }),
       ],
       [
-        A("Grade 1 deadbolt", "part", "pb-1"),
-        A("Grade 1 deadbolt", "part", "pb-1"),
+        A("Grade 1 deadbolt", "part", "book-1"),
+        A("Grade 1 deadbolt", "part", "book-1"),
         A("door reinforcer ", "part"),
         A("Install", "labor"),
       ],
@@ -358,11 +358,11 @@ describe("never bill twice: replacing the draft invoice's lines (E1)", () => {
         D("p", {
           type: "part",
           name: "Strike",
-          pricebookItemId: "pb-9",
+          pricebookItemId: "book-9",
           partTied: true,
         }),
       ],
-      [A("Strike", "part", "pb-2"), A("Strike", "material")],
+      [A("Strike", "part", "book-2"), A("Strike", "material")],
     );
     expect(plan.covered).toEqual([]);
     expect(plan.add).toHaveLength(2);

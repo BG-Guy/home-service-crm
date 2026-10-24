@@ -200,9 +200,10 @@ export function EstimateApproval({
           className={cx(
             // `relative`: the cards' offsetLeft is measured from the scroller.
             multi &&
-              "relative -mx-[var(--gutter)] flex snap-x snap-mandatory items-start gap-3 overflow-x-auto px-[var(--gutter)] [scrollbar-width:none]",
+              "relative -mx-[var(--gutter)] flex items-start gap-3 overflow-x-auto px-[var(--gutter)] [scrollbar-width:none]",
             "pt-4 pb-3",
           )}
+          style={multi ? { scrollSnapType: "x mandatory" } : undefined}
         >
           {options.map((o, i) => (
             <OptionCard
@@ -234,9 +235,15 @@ export function EstimateApproval({
                   <span
                     aria-hidden
                     className={cx(
-                      "block h-2 rounded-pill transition-[width,background-color] duration-[var(--dur-quick)]",
-                      i === index ? "w-6 bg-label" : "w-2 bg-label-3",
+                      "block rounded-pill",
+                      i === index ? "bg-label" : "bg-label-3",
                     )}
+                    style={{
+                      width: i === index ? 24 : 8,
+                      height: 8,
+                      transition:
+                        "width var(--dur-quick), background-color var(--dur-quick)",
+                    }}
                   />
                 </button>
               ))}
@@ -379,13 +386,21 @@ function OptionCard({
       aria-label={`${o.label}, option ${index + 1} of ${count}`}
       aria-roledescription={multi ? "slide" : undefined}
       className={cx(
-        "relative flex flex-col rounded-[24px] bg-card p-4 shadow-card transition-shadow duration-[var(--dur-quick)] sm:p-5",
-        multi && "w-[86%] max-w-[440px] shrink-0 snap-center",
+        "relative flex flex-col rounded-modal bg-card p-4 shadow-card transition-shadow duration-[var(--dur-quick)] sm:p-5",
+        multi && "shrink-0",
         multi && active && "shadow-[var(--shadow-raised)] ring-2 ring-accent",
       )}
+      style={
+        multi
+          ? { width: "86%", maxWidth: 440, scrollSnapAlign: "center" }
+          : undefined
+      }
     >
       {o.recommended && multi ? (
-        <span className="absolute -top-3 right-5 rounded-pill bg-accent-fill px-3 py-1 text-footnote font-semibold text-on-accent shadow-card">
+        <span
+          className="absolute rounded-pill bg-accent-fill px-3 py-1 text-footnote font-semibold text-on-accent shadow-card"
+          style={{ top: -12, right: 20 }}
+        >
           Recommended
         </span>
       ) : null}
@@ -396,7 +411,8 @@ function OptionCard({
             src={photo.url}
             alt={photo.label}
             loading={index === 0 ? "eager" : "lazy"}
-            className="aspect-[2/1] w-full object-cover"
+            className="w-full object-cover"
+            style={{ aspectRatio: "2" }}
           />
           <figcaption className="absolute bottom-2 left-2 rounded-pill bg-black/60 px-2.5 py-0.5 text-footnote font-semibold text-white">
             {photo.label}

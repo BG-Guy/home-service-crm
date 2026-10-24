@@ -110,7 +110,8 @@ export default function LineCards({
           <Button
             variant="tinted"
             icon={<Plus size={19} />}
-            className="flex-1 basis-36"
+            className="flex-1"
+            style={{ flexBasis: 144 }}
             onClick={onAdd}
             onPointerEnter={onPrefetch}
             onFocus={onPrefetch}

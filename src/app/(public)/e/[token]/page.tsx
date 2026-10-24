@@ -324,7 +324,7 @@ function Hero({
       : `Hi ${first}, here's your estimate`;
   return (
     <section
-      className="rounded-[24px] px-5 pb-5 pt-4 text-white shadow-card"
+      className="rounded-modal px-5 pb-5 pt-4 text-white shadow-card"
       style={{
         background:
           "linear-gradient(150deg, var(--accent-fill), color-mix(in srgb, var(--accent-fill) 78%, #1e1b4b))",
@@ -333,11 +333,11 @@ function Hero({
       <p className="num text-footnote font-semibold text-white/80">
         Estimate {e.number}
       </p>
-      <p className="mt-2 text-subhead text-white/90">{lead}</p>
+      <p className="mt-2 text-subhead text-white">{lead}</p>
       <h1 className="mt-0.5 text-title2 font-bold">
         {e.title ?? doc.company.name}
       </h1>
-      <p className="mt-1.5 text-footnote text-white/85">
+      <p className="mt-1.5 text-footnote text-white/80">
         {[
           doc.preparedBy ? `From ${doc.preparedBy}` : null,
           doc.propertyLines[0] ?? null,

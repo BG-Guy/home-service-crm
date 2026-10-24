@@ -68,7 +68,7 @@ export function StartEstimateFromJob({
       </div>
     );
   return (
-    <output className="flex flex-col items-center gap-3 py-20 text-center">
+    <output className="flex flex-col items-center gap-3 py-16 text-center">
       <Spinner size={28} />
       <span className="text-headline text-label-2">Starting the estimate</span>
     </output>

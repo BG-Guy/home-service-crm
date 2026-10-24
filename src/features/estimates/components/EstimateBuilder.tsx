@@ -529,19 +529,17 @@ function OptionPills({
             aria-checked={on}
             onClick={() => onSelect(o.id)}
             className={cx(
-              "pressable flex min-h-16 min-w-0 flex-col items-center justify-center gap-0.5 rounded-[18px] px-2 py-2 text-center outline-offset-2 transition-[background-color,box-shadow] duration-[var(--dur-quick)]",
+              "pressable flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-[18px] px-2 py-2 text-center outline-offset-2 transition-colors duration-[var(--dur-quick)]",
               on
                 ? "bg-accent-fill text-on-accent"
                 : "bg-card text-label shadow-card",
             )}
-            style={
-              on
-                ? {
-                    boxShadow:
-                      "0 8px 22px -8px color-mix(in srgb, var(--accent) 70%, transparent)",
-                  }
-                : undefined
-            }
+            style={{
+              minHeight: 64,
+              boxShadow: on
+                ? "0 8px 22px -8px color-mix(in srgb, var(--accent) 70%, transparent)"
+                : undefined,
+            }}
           >
             <span className="flex max-w-full items-center gap-1 text-headline">
               {o.recommended ? (
@@ -557,7 +555,7 @@ function OptionPills({
             <span
               className={cx(
                 "num whitespace-nowrap text-subhead font-medium",
-                on ? "opacity-85" : "text-label-2",
+                on ? "opacity-90" : "text-label-2",
               )}
             >
               {formatMoney(totals[o.id] ?? 0)}
@@ -570,7 +568,8 @@ function OptionPills({
           type="button"
           onClick={onAdd}
           disabled={adding}
-          className="pressable flex min-h-16 items-center justify-center gap-1 rounded-[18px] bg-fill-2 px-3.5 text-subhead font-semibold text-accent-text outline-offset-2 disabled:opacity-50"
+          className="pressable flex items-center justify-center gap-1 rounded-[18px] bg-fill-2 px-3.5 text-subhead font-semibold text-accent-text outline-offset-2 disabled:opacity-50"
+          style={{ minHeight: 64 }}
         >
           <Plus size={17} aria-hidden strokeWidth={2.4} />
           Option

@@ -94,7 +94,8 @@ export function AfterSigning({
       <section aria-labelledby="work-when" className="flex flex-col gap-2">
         <h2
           id="work-when"
-          className="px-1 text-footnote font-semibold uppercase tracking-wide text-label-2"
+          className="px-1 text-footnote font-semibold uppercase text-label-2"
+          style={{ letterSpacing: "0.04em" }}
         >
           When is the work?
         </h2>
@@ -115,7 +116,7 @@ export function AfterSigning({
                 disabled={!on && (!c.onPick || pending)}
                 onClick={on ? undefined : c.onPick}
                 className={cx(
-                  "pressable flex min-h-16 items-center gap-3 rounded-card bg-card px-4 py-3 text-left shadow-card outline-offset-2 disabled:opacity-60",
+                  "pressable flex min-h-14 items-center gap-3 rounded-card bg-card px-4 py-3 text-left shadow-card outline-offset-2 disabled:opacity-60",
                   on && "ring-2 ring-accent",
                 )}
               >

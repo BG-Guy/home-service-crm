@@ -35,6 +35,11 @@
 - Estimate photos: take or upload a Problem / Goal photo and attach it, or choose up to 8 job
   photos (`setEstimatePhotos`); the customer page, the cards and the PDF show them with their
   labels; approving locks them as evidence.
+- Budgets (production build, route JS gz = entry chunks minus layouts): `/estimates/[id]` 25.1 →
+  22.7 KB, `/estimates/new` 15.8 → 2.3, `/estimates/co/[id]` 28.5 → 23.1, `/e/[token]` 13.5 →
+  10.6, `/estimates` and `/jobs/[id]` unchanged, `/invoices/[id]` 25.93 → 26.00 (the shared line
+  editor; an icon module moved between shared chunks). Global CSS 25,507 → 25,391 B gz: new
+  one-off sizes are inline styles, and the old option cards' utilities are gone.
 
 ### Notifications: type icons, cards, filters, sort and a peek (2026-10-23)
 - Every notification shows its type's icon on its color (`src/features/notify/kinds.ts`: new
