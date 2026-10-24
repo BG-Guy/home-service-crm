@@ -23,7 +23,29 @@ export type PricebookPickerProps = {
   /** Optional (B3 addition): controlled open state (render without a trigger). */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /**
+   * Optional (Quote to Paid E3): one-tap add. With `onAddItem` a tap adds the item
+   * at once (qty 1), a second tap adds one more and picked rows show a − n +
+   * stepper; the sheet stays open until "Done". `picked` = the document's lines
+   * that came from the price book (their current quantities).
+   */
+  title?: string;
+  picked?: { pricebookItemId: string; lineId: string; qty: number }[];
+  /** Add a new line; resolves to its id when known, else true/false. */
+  onAddItem?: (item: PricebookPick, qty: number) => Promise<string | boolean>;
+  /** Set a line's quantity (0 removes it). */
+  onSetQty?: (lineId: string, qty: number) => Promise<boolean>;
+  /** "Custom item": the caller opens its own line sheet. */
+  onCustom?: () => void;
 };
+
+/** The picker's chips and the "Recent" list (S14 addition, Quote to Paid E3). */
+export interface PricebookFacets {
+  /** Distinct categories, A–Z. */
+  categories: string[];
+  /** Items this user added lately, newest first. */
+  recent: PricebookPick[];
+}
 export interface PricebookUpsertRow {
   sku?: string | null;
   name: string;

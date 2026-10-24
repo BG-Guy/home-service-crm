@@ -15,6 +15,8 @@ import {
 } from "./LineEditor";
 
 // The add / edit line sheet of LineEditor, a lazy chunk loaded on the first tap.
+// Name, price and quantity first; the rest under "More details" (Quote to Paid E3:
+// a custom item is three fields). Editing an existing line opens with it shown.
 
 const TYPE_LABEL: Record<DocLineType, string> = {
   service: "Service",
@@ -55,6 +57,7 @@ export default function LineSheet({
     line ?? { type: "service", name: "", qty: 1, unitPriceCents: 0 },
   );
   const [qtyText, setQtyText] = useState(String(line?.qty ?? 1));
+  const [more, setMore] = useState(!!line?.id);
   const [dirty, setDirty] = useState(false);
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -85,11 +88,120 @@ export default function LineSheet({
       else setDirty(false);
     });
 
+  const details = (
+    <>
+      <Select
+        label="Type"
+        value={l.type}
+        onChange={(e) => set({ type: e.currentTarget.value as DocLineType })}
+        options={(["service", "labor", "part", "material", "fee"] as const).map(
+          (t) => ({ value: t, label: TYPE_LABEL[t] }),
+        )}
+      />
+      <TextArea
+        label="Description (shown to the customer)"
+        value={l.description ?? ""}
+        onChange={(e) => set({ description: e.currentTarget.value })}
+        rows={2}
+      />
+      {(showCost || allowDiscount) && (
+        <div className="grid grid-cols-2 gap-3">
+          {showCost && (
+            <MoneyField
+              label="Unit cost"
+              valueCents={l.unitCostCents ?? null}
+              onChangeCents={(c) => set({ unitCostCents: c })}
+              hint="Internal only"
+            />
+          )}
+          {allowDiscount && (
+            <MoneyField
+              label="Line discount"
+              valueCents={l.discountCents ?? 0}
+              onChangeCents={(c) => set({ discountCents: Math.abs(c ?? 0) })}
+            />
+          )}
+        </div>
+      )}
+      <div className="list-card">
+        <ToggleRow
+          title="Taxable"
+          checked={l.taxable ?? false}
+          onChange={(e) => set({ taxable: e.currentTarget.checked })}
+        />
+        {l.type === "service" && (
+          <ToggleRow
+            title="Service-call fee"
+            subtitle="“Credited if you approve the repair”"
+            checked={l.isServiceFee ?? false}
+            onChange={(e) => set({ isServiceFee: e.currentTarget.checked })}
+          />
+        )}
+        {variant === "estimate" && (
+          <ToggleRow
+            title="Optional add-on"
+            subtitle="The customer can tick it on or off"
+            checked={l.isOptional ?? false}
+            onChange={(e) =>
+              set({
+                isOptional: e.currentTarget.checked,
+                isSelected: !e.currentTarget.checked,
+              })
+            }
+          />
+        )}
+        {variant !== "invoice" && (
+          <ToggleRow
+            title="Beyond the requested repair"
+            subtitle="⚖️ Counts toward the 3-day cooling-off notice"
+            checked={l.isUpsell ?? false}
+            onChange={(e) => set({ isUpsell: e.currentTarget.checked })}
+          />
+        )}
+      </div>
+      {isPart && (
+        <Select
+          label="Part source"
+          value={l.partSource ?? "company_stock"}
+          onChange={(e) =>
+            set({
+              partSource: e.currentTarget.value as EditorLine["partSource"],
+            })
+          }
+          options={Object.entries(SOURCE_LABEL).map(([value, label]) => ({
+            value,
+            label,
+          }))}
+        />
+      )}
+      <div className="grid grid-cols-2 gap-3">
+        <TextField
+          label="Warranty (days)"
+          inputMode="numeric"
+          value={l.warrantyDays == null ? "" : String(l.warrantyDays)}
+          onChange={(e) => {
+            const n = Number.parseInt(e.currentTarget.value, 10);
+            set({ warrantyDays: Number.isFinite(n) && n >= 0 ? n : null });
+          }}
+        />
+        {isPart ? (
+          <TextField
+            label="Serial #"
+            value={l.serial ?? ""}
+            onChange={(e) => set({ serial: e.currentTarget.value || null })}
+          />
+        ) : (
+          <span />
+        )}
+      </div>
+    </>
+  );
+
   return (
     <Sheet
       open={line != null}
       onOpenChange={(o) => !o && onClose()}
-      title={line?.id ? "Edit line" : isDiscount ? "Discount" : "New line"}
+      title={line?.id ? "Edit item" : isDiscount ? "Discount" : "Custom item"}
       dirty={dirty}
       desktop="panel"
       leading={
@@ -111,18 +223,6 @@ export default function LineSheet({
       }
     >
       <div className="flex flex-col gap-4 px-[var(--gutter)] pb-8">
-        {!isDiscount && (
-          <Select
-            label="Type"
-            value={l.type}
-            onChange={(e) =>
-              set({ type: e.currentTarget.value as DocLineType })
-            }
-            options={(
-              ["service", "labor", "part", "material", "fee"] as const
-            ).map((t) => ({ value: t, label: TYPE_LABEL[t] }))}
-          />
-        )}
         <TextField
           label={isDiscount ? "Label" : "Name"}
           value={l.name}
@@ -131,14 +231,6 @@ export default function LineSheet({
           autoFocus={!line?.name}
           placeholder={isDiscount ? "Discount" : "What was done or sold"}
         />
-        {!isDiscount && (
-          <TextArea
-            label="Description (shown to the customer)"
-            value={l.description ?? ""}
-            onChange={(e) => set({ description: e.currentTarget.value })}
-            rows={2}
-          />
-        )}
         {isDiscount ? (
           <MoneyField
             label="Amount off"
@@ -148,6 +240,11 @@ export default function LineSheet({
           />
         ) : (
           <div className="grid grid-cols-2 gap-3">
+            <MoneyField
+              label="Price"
+              valueCents={l.unitPriceCents}
+              onChangeCents={(c) => set({ unitPriceCents: c ?? 0 })}
+            />
             <TextField
               label="Quantity"
               inputMode="decimal"
@@ -164,106 +261,28 @@ export default function LineSheet({
               }}
               error={qtyValid ? null : "Enter a quantity above 0"}
             />
-            <MoneyField
-              label="Unit price"
-              valueCents={l.unitPriceCents}
-              onChangeCents={(c) => set({ unitPriceCents: c ?? 0 })}
-            />
-          </div>
-        )}
-        {!isDiscount && (showCost || allowDiscount) && (
-          <div className="grid grid-cols-2 gap-3">
-            {showCost && (
-              <MoneyField
-                label="Unit cost"
-                valueCents={l.unitCostCents ?? null}
-                onChangeCents={(c) => set({ unitCostCents: c })}
-                hint="Internal only"
-              />
-            )}
-            {allowDiscount && (
-              <MoneyField
-                label="Line discount"
-                valueCents={l.discountCents ?? 0}
-                onChangeCents={(c) => set({ discountCents: Math.abs(c ?? 0) })}
-              />
-            )}
           </div>
         )}
         {!isDiscount && (
-          <div className="list-card">
-            <ToggleRow
-              title="Taxable"
-              checked={l.taxable ?? false}
-              onChange={(e) => set({ taxable: e.currentTarget.checked })}
-            />
-            {l.type === "service" && (
-              <ToggleRow
-                title="Service-call fee"
-                subtitle="“Credited if you approve the repair”"
-                checked={l.isServiceFee ?? false}
-                onChange={(e) => set({ isServiceFee: e.currentTarget.checked })}
-              />
-            )}
-            {variant === "estimate" && (
-              <ToggleRow
-                title="Optional add-on"
-                subtitle="The customer can tick it on or off"
-                checked={l.isOptional ?? false}
-                onChange={(e) =>
-                  set({
-                    isOptional: e.currentTarget.checked,
-                    isSelected: !e.currentTarget.checked,
-                  })
-                }
-              />
-            )}
-            {variant !== "invoice" && (
-              <ToggleRow
-                title="Beyond the requested repair"
-                subtitle="⚖️ Counts toward the 3-day cooling-off notice"
-                checked={l.isUpsell ?? false}
-                onChange={(e) => set({ isUpsell: e.currentTarget.checked })}
-              />
-            )}
-          </div>
-        )}
-        {isPart && (
-          <Select
-            label="Part source"
-            value={l.partSource ?? "company_stock"}
-            onChange={(e) =>
-              set({
-                partSource: e.currentTarget.value as EditorLine["partSource"],
-              })
-            }
-            options={Object.entries(SOURCE_LABEL).map(([value, label]) => ({
-              value,
-              label,
-            }))}
-          />
-        )}
-        {!isDiscount && (
-          <div className="grid grid-cols-2 gap-3">
-            <TextField
-              label="Warranty (days)"
-              inputMode="numeric"
-              value={l.warrantyDays == null ? "" : String(l.warrantyDays)}
-              onChange={(e) => {
-                const n = Number.parseInt(e.currentTarget.value, 10);
-                set({ warrantyDays: Number.isFinite(n) && n >= 0 ? n : null });
-              }}
-            />
-            {isPart ? (
-              <TextField
-                label="Serial #"
-                value={l.serial ?? ""}
-                onChange={(e) => set({ serial: e.currentTarget.value || null })}
-              />
-            ) : (
-              <span />
-            )}
-          </div>
+          <>
+            <Button
+              variant="plain"
+              size="sm"
+              className="-ml-2 self-start"
+              aria-expanded={more}
+              onClick={() => setMore((m) => !m)}
+            >
+              {more ? "Fewer details" : `More details · ${TYPE_LABEL[l.type]}`}
+            </Button>
+            <div className="disclosure" data-open={more || undefined}>
+              <div
+                inert={!more || undefined}
+                className="flex flex-col gap-4 pb-1"
+              >
+                {details}
+              </div>
+            </div>
+          </>
         )}
         <div className="flex items-baseline justify-between rounded-card bg-card px-4 py-3 shadow-card">
           <span className="text-body text-label-2">Line total</span>

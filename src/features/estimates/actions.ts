@@ -108,6 +108,9 @@ export const createEstimate = action({
     jobId: z.preprocess((v) => (v === "" ? undefined : v), uuid.optional()),
     leadId: z.preprocess((v) => (v === "" ? undefined : v), uuid.optional()),
     title: zf.optionalText(200),
+    // Starting from a job creates the draft at once: a repeated call (a double
+    // effect, a retry) returns the first result (action() receipts).
+    clientId: uuid.optional(),
   }),
   audit: "estimate.created",
   async run({ input, user, tx, actor }) {
@@ -528,12 +531,14 @@ const deviceDate = (s: string) => {
 
 /**
  * "Present to customer": the customer's own /e/ page on this device, full screen
- * (present mode). Mints or reuses a short-lived link; nothing is sent.
+ * (present mode). Mints or reuses a short-lived link; nothing is sent, and the /e
+ * page doesn't count a signed-in presenter as the customer viewing it. `preview`
+ * (the builder's Preview): the same page with a banner and Approve / Decline off.
  */
 export const presentEstimate = action({
   perm: "estimates.send",
   feature: F,
-  input: z.object({ estimateId: uuid }),
+  input: z.object({ estimateId: uuid, preview: z.boolean().optional() }),
   audit: "estimate.presented",
   async run({ input, user, tx }) {
     await assertEstimateAccess(user, input.estimateId, "read");
@@ -542,7 +547,10 @@ export const presentEstimate = action({
     if (!loaded || loaded.options.every((o) => o.lines.length === 0))
       throw new ValidationError({ lines: ["Add at least one item first."] });
     const url = await mintEstimatePresentLink(tx, e);
-    return { estimateId: e.id, href: `${new URL(url).pathname}?present=1` };
+    return {
+      estimateId: e.id,
+      href: `${new URL(url).pathname}?present=1${input.preview ? "&preview=1" : ""}`,
+    };
   },
   auditEntity: ({ input }) => ({ type: "estimate", id: input.estimateId }),
 });

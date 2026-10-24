@@ -1,8 +1,8 @@
 import "server-only";
-import { eq } from "drizzle-orm";
+import { and, desc, eq, ne } from "drizzle-orm";
 import { cache } from "react";
 import { db } from "@/db";
-import { properties, signatures } from "@/db/schema";
+import { estimates, properties, signatures } from "@/db/schema";
 import { contactRevealedFor } from "@/features/customers/api";
 import {
   addressLines,
@@ -171,6 +171,27 @@ export const loadEstimateDoc = cache(
     };
   },
 );
+
+/** The estimate approved on the job instead of a superseded ("Replaced") one. */
+export async function replacementFor(est: {
+  id: string;
+  jobId: string | null;
+}): Promise<{ id: string; number: string } | null> {
+  if (!est.jobId) return null;
+  const [r] = await db
+    .select({ id: estimates.id, number: estimates.number })
+    .from(estimates)
+    .where(
+      and(
+        eq(estimates.jobId, est.jobId),
+        eq(estimates.status, "approved"),
+        ne(estimates.id, est.id),
+      ),
+    )
+    .orderBy(desc(estimates.approvedAt))
+    .limit(1);
+  return r ?? null;
+}
 
 /**
  * The estimate document for a staff viewer: contact details are masked outside
