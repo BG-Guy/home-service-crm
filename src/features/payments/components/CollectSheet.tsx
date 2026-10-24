@@ -97,11 +97,13 @@ export default function CollectSheet({
   jobId,
   invoiceId,
   allowDeposit,
+  defaultTarget,
   onClose,
 }: {
   jobId?: string;
   invoiceId?: string;
   allowDeposit?: boolean;
+  defaultTarget?: "deposit" | "balance";
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -147,6 +149,7 @@ export default function CollectSheet({
     <CollectForm
       key={reload}
       ctx={ctx}
+      defaultTarget={defaultTarget}
       onClose={onClose}
       onMore={() => {
         setCtx(null);
@@ -159,10 +162,12 @@ export default function CollectSheet({
 
 function CollectForm({
   ctx,
+  defaultTarget,
   onClose,
   onMore,
 }: {
   ctx: CollectContext;
+  defaultTarget?: "deposit" | "balance";
   onClose: () => void;
   onMore: () => void;
 }) {
@@ -174,7 +179,11 @@ function CollectForm({
   if (!ctx.invoiceId && !ctx.openDeposit && ctx.jobId)
     targets.push({ value: "prepay", label: "Prepayment" });
   const [target, setTarget] = useState<Target | null>(
-    ctx.openDeposit && !ctx.invoiceId ? "deposit" : (targets[0]?.value ?? null),
+    defaultTarget && targets.some((t) => t.value === defaultTarget)
+      ? defaultTarget
+      : ctx.openDeposit && !ctx.invoiceId
+        ? "deposit"
+        : (targets[0]?.value ?? null),
   );
   const due =
     target === "deposit"

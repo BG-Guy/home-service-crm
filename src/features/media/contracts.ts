@@ -6,6 +6,8 @@ export type MediaTag =
   | "during"
   | "after"
   | "problem"
+  /** On an estimate: how it should look once the job is done. */
+  | "goal"
   | "receipt"
   | "odometer"
   | "document"

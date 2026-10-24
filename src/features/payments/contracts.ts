@@ -98,6 +98,8 @@ export type CollectPaymentButtonProps = {
   size?: "md" | "lg";
   fullWidth?: boolean;
   allowDeposit?: boolean;
+  /** Which amount the sheet starts on when both are open (e.g. "deposit" right after signing). */
+  defaultTarget?: "deposit" | "balance";
 };
 export type RecordPaymentButtonProps = {
   customerId: string;

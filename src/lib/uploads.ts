@@ -76,6 +76,7 @@ const JOB_PHOTO_TAGS = new Set([
   "during",
   "after",
   "problem",
+  "goal",
   "id_check",
   "other",
 ]);

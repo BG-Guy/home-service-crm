@@ -45,6 +45,7 @@ export function CollectPaymentButton({
   size = "md",
   fullWidth,
   allowDeposit,
+  defaultTarget,
 }: CollectPaymentButtonProps) {
   const s = useLazySheet();
   return (
@@ -68,6 +69,7 @@ export function CollectPaymentButton({
           jobId={jobId}
           invoiceId={invoiceId}
           allowDeposit={allowDeposit}
+          defaultTarget={defaultTarget}
         />
       )}
     </>

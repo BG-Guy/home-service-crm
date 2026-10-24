@@ -6,6 +6,7 @@ export const TAG_LABEL: Record<MediaTag, string> = {
   during: "During",
   after: "After",
   problem: "Problem",
+  goal: "Goal",
   receipt: "Receipt",
   odometer: "Odometer",
   document: "Document",

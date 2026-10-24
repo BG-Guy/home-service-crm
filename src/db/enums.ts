@@ -554,6 +554,7 @@ export const MEDIA_TAGS = [
   "during",
   "after",
   "problem",
+  "goal",
   "receipt",
   "odometer",
   "document",

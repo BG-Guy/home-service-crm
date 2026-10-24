@@ -39,7 +39,13 @@ export function CollectPaymentSheet({
   jobId,
   invoiceId,
   allowDeposit,
-}: Ctl & { jobId?: string; invoiceId?: string; allowDeposit?: boolean }) {
+  defaultTarget,
+}: Ctl & {
+  jobId?: string;
+  invoiceId?: string;
+  allowDeposit?: boolean;
+  defaultTarget?: "deposit" | "balance";
+}) {
   const hide = () => onOpenChange(false);
   return (
     <Sheet
@@ -58,6 +64,7 @@ export function CollectPaymentSheet({
           jobId={jobId}
           invoiceId={invoiceId}
           allowDeposit={allowDeposit}
+          defaultTarget={defaultTarget}
           onClose={hide}
         />
       )}

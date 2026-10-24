@@ -198,6 +198,8 @@ export interface EventMap {
   "invoice.overdue": { invoice_id: Id; days_overdue: number };
   "invoice.paid": { invoice_id: Id };
   "invoice.voided": { invoice_id: Id; reason: string };
+  /** The customer opened an issued invoice's link for the first time (staff previews excluded). */
+  "invoice.viewed": { invoice_id: Id; token_id: Id };
   "signature.captured": {
     signature_id: Id;
     doc_type: string;
@@ -422,6 +424,7 @@ export const EVENT_TYPES = [
   "invoice.overdue",
   "invoice.paid",
   "invoice.voided",
+  "invoice.viewed",
   "signature.captured",
   "deposit.required",
   "deposit.paid",
