@@ -46,22 +46,25 @@ export function CollectPaymentButton({
   fullWidth,
   allowDeposit,
   defaultTarget,
+  hidden,
 }: CollectPaymentButtonProps) {
   const s = useLazySheet();
   return (
     <>
-      <Button
-        variant={variant}
-        size={size}
-        fullWidth={fullWidth}
-        icon={<CreditCard size={size === "lg" ? 20 : 18} />}
-        onClick={s.show}
-        onPointerEnter={prefetch}
-        onFocus={prefetch}
-        aria-haspopup="dialog"
-      >
-        {label}
-      </Button>
+      {hidden ? null : (
+        <Button
+          variant={variant}
+          size={size}
+          fullWidth={fullWidth}
+          icon={<CreditCard size={size === "lg" ? 20 : 18} />}
+          onClick={s.show}
+          onPointerEnter={prefetch}
+          onFocus={prefetch}
+          aria-haspopup="dialog"
+        >
+          {label}
+        </Button>
+      )}
       {s.armed && (
         <CollectPaymentSheet
           open={s.open}

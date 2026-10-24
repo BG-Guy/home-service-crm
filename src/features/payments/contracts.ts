@@ -100,6 +100,11 @@ export type CollectPaymentButtonProps = {
   allowDeposit?: boolean;
   /** Which amount the sheet starts on when both are open (e.g. "deposit" right after signing). */
   defaultTarget?: "deposit" | "balance";
+  /**
+   * Nothing is due right now: no button, but an open sheet stays (a payment that
+   * settles the balance keeps its success screen instead of unmounting it).
+   */
+  hidden?: boolean;
 };
 export type RecordPaymentButtonProps = {
   customerId: string;
@@ -158,6 +163,46 @@ export interface RefundListRow {
   createdByName: string | null;
 }
 
+/** In-app receipt (staff): the receipt sheet and the get-paid success screen. */
+export interface ReceiptView {
+  paymentId: string;
+  kind: string;
+  amountCents: number;
+  tipCents: number;
+  /** "Cash", "Visa ••4242", "Check #1001". */
+  methodLabel: string;
+  at: string;
+  /** "4:05 PM" today, else "Oct 24, 4:05 PM" (company time zone). */
+  atLabel: string;
+  collectedByName: string | null;
+  /** Card entry ("Tap to pay", "Online"…), null for manual methods. */
+  entryLabel: string | null;
+  authCode: string | null;
+  invoiceId: string | null;
+  invoiceNumber: string | null;
+  invoiceStatus: string | null;
+  remainingBalanceCents: number | null;
+  jobNumber: string | null;
+  customerFirstName: string;
+  customerHasPhone: boolean;
+  customerHasEmail: boolean;
+  /** Every completed payment on the invoice, oldest first. */
+  invoicePayments: {
+    id: string;
+    label: string;
+    atLabel: string;
+    cents: number;
+  }[];
+}
+
+/** The automatic receipt (built-in `payment_receipt` automation), as queued. */
+export interface ReceiptAutoSend {
+  channel: string;
+  status: string;
+  /** Where it went, masked outside the viewer's contact window. */
+  to: string | null;
+}
+
 /** Collect-payment sheet context (S19/S20). */
 export interface CollectContext {
   jobId: string | null;
@@ -165,6 +210,13 @@ export interface CollectContext {
   invoiceId: string | null;
   invoiceNumber: string | null;
   invoiceStatus: string | null;
+  /** The invoice has at least one line (an empty draft has nothing to collect). */
+  invoiceHasLines: boolean;
+  /** Getting paid on this draft issues it first (the viewer may issue invoices). */
+  issuesDraft: boolean;
+  /** The business's Zelle / Venmo / check instructions (settings.payments.manual_instructions). */
+  manualInstructions: string;
+  customerFirstName: string | null;
   customerId: string | null;
   customerName: string | null;
   customerHasPhone: boolean;

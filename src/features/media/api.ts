@@ -174,15 +174,16 @@ export function pickEmbedPhotos<
   return [...before, ...after].slice(0, max);
 }
 
-/**
- * Embedding cascade §M11: flags → company default → service type →
- * invoice.show_photos/photo_media_ids → starred → latest 2 before + 2 after.
- * invoice ≤ 8, receipt ≤ 4, portal = all starred.
- */
-export async function selectInvoicePhotos(
-  invoiceId: string,
-  variant: "invoice" | "receipt" | "portal",
-): Promise<MediaItem[]> {
+/** Job photo tags an invoice can show ("goal" photos are estimate-only). */
+const INVOICE_TAGS: MediaTag[] = [
+  "before",
+  "during",
+  "after",
+  "problem",
+  "other",
+];
+
+async function invoicePhotoRow(invoiceId: string) {
   const [inv] = await db
     .select({
       jobId: invoices.jobId,
@@ -195,13 +196,84 @@ export async function selectInvoicePhotos(
     .leftJoin(serviceTypes, eq(serviceTypes.id, jobs.serviceTypeId))
     .where(eq(invoices.id, invoiceId))
     .limit(1);
+  return inv ?? null;
+}
+
+/**
+ * Embedding cascade §M11: flags → company default → service type →
+ * invoice.show_photos/photo_media_ids → starred → latest 2 before + 2 after.
+ * invoice ≤ 8, receipt ≤ 4, portal = all starred.
+ */
+export async function selectInvoicePhotos(
+  invoiceId: string,
+  variant: "invoice" | "receipt" | "portal",
+): Promise<MediaItem[]> {
+  const inv = await invoicePhotoRow(invoiceId);
   if (!inv) return [];
   const cfg = await photoEmbedConfig(inv, variant);
   if (!cfg.enabled || !inv.jobId) return [];
-  const all = await listJobPhotos(inv.jobId, {
-    tags: ["before", "during", "after", "problem", "other"],
-  });
+  const all = await listJobPhotos(inv.jobId, { tags: INVOICE_TAGS });
   return pickEmbedPhotos(all, variant, inv.photoMediaIds ?? null);
+}
+
+/**
+ * The invoice's photos as the tech manages them (the invoice page's Photos card):
+ * `blocked` when photos can't go on invoices at all (flags, company default, service
+ * type, no job; the invoice's own show_photos is the tech's "none", not a block), the
+ * photos on it now (the picked ones, else the cascade) and how many job photos could
+ * be picked.
+ */
+export async function invoicePhotoState(invoiceId: string): Promise<{
+  blocked: Exclude<PhotoEmbedConfig["reason"], "ok" | "invoice_off"> | null;
+  photos: MediaItem[];
+  available: number;
+}> {
+  const inv = await invoicePhotoRow(invoiceId);
+  if (!inv?.jobId) return { blocked: "no_job", photos: [], available: 0 };
+  const cfg = await photoEmbedConfig({ ...inv, showPhotos: true }, "invoice");
+  if (!cfg.enabled)
+    return {
+      blocked:
+        cfg.reason === "ok" || cfg.reason === "invoice_off"
+          ? "no_job"
+          : cfg.reason,
+      photos: [],
+      available: 0,
+    };
+  const all = await listJobPhotos(inv.jobId, { tags: INVOICE_TAGS });
+  return {
+    blocked: null,
+    photos: inv.showPhotos
+      ? pickEmbedPhotos(all, "invoice", inv.photoMediaIds ?? null)
+      : [],
+    available: all.length,
+  };
+}
+
+/**
+ * Ids (in order) that may be put on the invoice: live photos of its job with an
+ * invoice tag. Unknown, deleted, other jobs' and "goal" photos are dropped.
+ */
+export async function invoicePickableIds(
+  exec: Tx,
+  jobId: string,
+  ids: readonly string[],
+): Promise<string[]> {
+  if (ids.length === 0) return [];
+  const rows = await exec
+    .select({ id: media.id })
+    .from(media)
+    .where(
+      and(
+        inArray(media.id, [...new Set(ids)]),
+        eq(media.jobId, jobId),
+        eq(media.kind, "photo"),
+        isNull(media.deletedAt),
+        inArray(media.tag, INVOICE_TAGS),
+      ),
+    );
+  const ok = new Set(rows.map((r) => r.id));
+  return [...new Set(ids)].filter((id) => ok.has(id));
 }
 
 /** Signed URLs (10 min) by media id. */

@@ -2,6 +2,7 @@ import "server-only";
 import { Receipt } from "lucide-react";
 import { assertJobAccess } from "@/features/jobs/api";
 import { getCurrentUser } from "@/lib/auth/current";
+import { docStage, stageStyle } from "@/lib/stage-colors";
 import { formatDate } from "@/lib/time";
 import { EmptyState } from "@/ui/components/EmptyState";
 import { ListRow, ListSection } from "@/ui/components/List";
@@ -12,13 +13,13 @@ import { LinesTable, TotalsBlock } from "./components/InvoiceDocument";
 import {
   LazyCreateInvoiceButton as CreateInvoiceButton,
   LazyDraftLines as DraftLines,
-  LazyInvoiceActionBar as InvoiceActionBar,
-  LazyInvoicePhotosForm as InvoicePhotosForm,
+  LazyInvoicePayBar as InvoicePayBar,
 } from "./components/islands";
 import type { EditorLine } from "./components/LineEditor";
 import type { JobInvoicePanelProps } from "./contracts";
 import { loadInvoiceDoc } from "./doc";
 import { invoiceTotalRows } from "./money-lines";
+import { latestPaymentId } from "./screen-data";
 
 // Server UI slots produced by B3 (BUILD_PLAN §5.1). Each checks its own permission
 // and row scope and returns null when the viewer may not see it.
@@ -34,7 +35,12 @@ async function canSeeJob(jobId: string) {
   return user;
 }
 
-/** S11 — Invoice summary, lines, totals, status and actions for the job's Invoice tab. */
+/**
+ * S11 — Invoice summary, lines and totals for the job's Invoice tab, with ONE main
+ * action (Quote to Paid I1): "Get paid" (it issues a draft first) or "Send receipt"
+ * once paid. Everything else (send, revise, photos, print) is on the full invoice,
+ * one tap away on the summary row.
+ */
 export async function JobInvoicePanel({ jobId }: JobInvoicePanelProps) {
   const user = await canSeeJob(jobId);
   if (!user) return null;
@@ -53,13 +59,18 @@ export async function JobInvoicePanel({ jobId }: JobInvoicePanelProps) {
       </ListSection>
     );
   }
-  const [doc, taxBps] = await Promise.all([
+  const [doc, taxBps, paymentId] = await Promise.all([
     loadInvoiceDoc(summary.id),
     defaultTaxBps(),
+    latestPaymentId(summary.id),
   ]);
   if (!doc) return null;
   const inv = doc.invoice;
   const draft = inv.status === "draft";
+  const closed = inv.status === "void" || inv.status === "uncollectible";
+  const canCollect =
+    user.perms.has("payments.collect") ||
+    user.perms.has("payments.record_manual");
   const open =
     (inv.status === "issued" || inv.status === "partially_paid") &&
     inv.balanceCents > 0;
@@ -84,9 +95,11 @@ export async function JobInvoicePanel({ jobId }: JobInvoicePanelProps) {
     isUpsell: l.isUpsell,
     totalCents: l.totalCents,
   }));
-  const credits = doc.credits.filter((c) => c.kind !== "tip_only");
   return (
-    <div className="space-y-4">
+    <div
+      className="space-y-4"
+      style={stageStyle(docStage("invoice", inv.status))}
+    >
       <ListSection header="Invoice">
         <ListRow
           href={`/invoices/${inv.id}`}
@@ -103,8 +116,8 @@ export async function JobInvoicePanel({ jobId }: JobInvoicePanelProps) {
           subtitle={
             draft
               ? doc.lines.length === 0
-                ? "Draft · no items yet. Add items, then issue it."
-                : "Draft · editable until issued"
+                ? "Draft · no items yet. Add items, then get paid."
+                : "Draft · Get paid or Send issues it"
               : [
                   inv.issuedAt
                     ? `Issued ${formatDate(inv.issuedAt, doc.timezone)}`
@@ -132,25 +145,23 @@ export async function JobInvoicePanel({ jobId }: JobInvoicePanelProps) {
         />
       </ListSection>
 
-      <InvoiceActionBar
-        invoiceId={inv.id}
-        number={inv.number}
-        status={inv.status}
-        balanceCents={inv.balanceCents}
-        hasLines={doc.lines.length > 0}
-        canCreate={canCreate}
-        canRevise={user.perms.has("invoices.revise")}
-        canVoid={user.perms.has("invoices.void")}
-        printHref={`/invoices/${inv.id}/print`}
-        lines={lines}
-        notes={inv.notes}
-        warrantyText={inv.warrantyText}
-        taxBps={taxBps}
-        taxExempt={doc.customer.taxExempt}
-        allowDiscount={user.perms.has("estimates.discount")}
-        showCost={showCost}
-        hasPayments={credits.some((c) => c.paymentId)}
-      />
+      {canCollect && !closed ? (
+        <InvoicePayBar
+          layout="panel"
+          invoiceId={inv.id}
+          jobId={jobId}
+          number={inv.number}
+          status={inv.status}
+          balanceCents={inv.balanceCents}
+          hasLines={doc.lines.length > 0}
+          canCollect={canCollect}
+          canSend={canCreate}
+          customerFirstName={
+            doc.customer.displayName.trim().split(/\s+/)[0] ?? ""
+          }
+          latestPaymentId={paymentId}
+        />
+      ) : null}
 
       {draft && canCreate ? (
         <DraftLines
@@ -174,16 +185,6 @@ export async function JobInvoicePanel({ jobId }: JobInvoicePanelProps) {
           />
         </div>
       )}
-
-      {canCreate && inv.status !== "void" ? (
-        <InvoicePhotosForm
-          invoiceId={inv.id}
-          jobId={jobId}
-          showPhotos={inv.showPhotos}
-          selected={inv.photoMediaIds}
-          locked={!draft}
-        />
-      ) : null}
     </div>
   );
 }

@@ -7,8 +7,9 @@ import {
   processorReady,
   providerErrorMessage,
 } from "@/adapters/payments";
-import type { Tx } from "@/db";
+import { db, type Tx } from "@/db";
 import {
+  customers,
   depositRequests,
   depositRules,
   estimates,
@@ -16,21 +17,33 @@ import {
   jobs,
   payments,
   refunds,
+  scheduledMessages,
 } from "@/db/schema";
-import { assertInvoiceAccess } from "@/features/invoices/api";
+import { contactRevealedFor } from "@/features/customers/api";
+import {
+  assertInvoiceAccess,
+  issueDraftInvoice,
+} from "@/features/invoices/api";
+import { paymentMethodLabel } from "@/features/invoices/doc";
 import { assertJobAccess } from "@/features/jobs/api";
-import { enqueueMessage } from "@/features/messaging/api";
+import { enqueueMessage, queuedOutcome } from "@/features/messaging/api";
 import { closeTasksFor } from "@/features/tasks/api";
 import { action, actionFailure } from "@/lib/action";
 import { requireUser } from "@/lib/auth/current";
 import { ConflictError, ForbiddenError, NotFoundError } from "@/lib/errors";
+import { maskEmail, maskPhone } from "@/lib/mask";
 import { formatMoney } from "@/lib/money";
 import { publishPolicyVersion } from "@/lib/policies";
-import { getSettings, updateSettings } from "@/lib/settings";
-import { mintPublicToken } from "@/lib/tokens";
-import type { ActionResult } from "@/lib/types";
-import { recordPayment } from "./api";
-import type { CollectContext } from "./contracts";
+import {
+  getCompanyTimezone,
+  getSettings,
+  updateSettings,
+} from "@/lib/settings";
+import { formatInTz } from "@/lib/time";
+import { mintOrReusePublicToken, mintPublicToken } from "@/lib/tokens";
+import type { ActionResult, Actor, SessionUser } from "@/lib/types";
+import { getPaymentReceiptData, recordPayment } from "./api";
+import type { CollectContext, ReceiptAutoSend, ReceiptView } from "./contracts";
 import { effectiveSurchargeBps } from "./engine/fees";
 import {
   companyState,
@@ -48,6 +61,34 @@ import { getCollectContext } from "./queries";
 const uuid = z.string().uuid();
 // "" (an empty form field) means none.
 const optUuid = z.preprocess((v) => (v === "" ? null : v), uuid.nullish());
+
+/**
+ * "Get paid" on a DRAFT invoice issues it first, in the same transaction (Quote to
+ * Paid I2): no separate "Issue?" confirm, and `via: "collect"` keeps the built-in
+ * `invoice_sent` automation from texting the invoice too. Needs invoices.create and
+ * write access to the invoice; a no-op once it's issued. Returns whether it issued.
+ */
+async function issueForCollect(
+  tx: Tx,
+  user: SessionUser,
+  actor: Actor,
+  invoiceId: string,
+): Promise<boolean> {
+  const [cur] = await tx
+    .select({ status: invoices.status })
+    .from(invoices)
+    .where(eq(invoices.id, invoiceId))
+    .limit(1);
+  if (cur?.status !== "draft") return false;
+  if (!user.perms.has("invoices.create"))
+    throw new ForbiddenError(
+      "Issuing the invoice needs permission to create invoices. Ask the office to issue it first.",
+      "invoices.create",
+    );
+  await assertInvoiceAccess(user, invoiceId, "write");
+  await issueDraftInvoice(tx, invoiceId, "collect", actor);
+  return true;
+}
 
 function jobPaths(jobId: string | null | undefined, extra: string[] = []) {
   return [
@@ -123,6 +164,8 @@ const RecordSchema = z.object({
   proofMediaId: optUuid,
   proofClientId: optUuid,
   collectedByUserId: optUuid,
+  /** A draft invoice is issued first ("Get paid" on a draft, Quote to Paid I2). */
+  issueDraft: z.boolean().optional(),
   clientId: uuid,
   clientTs: z.string().datetime({ offset: true }).nullish(),
 });
@@ -215,6 +258,12 @@ export const recordManualPayment = action({
         ? user.id
         : (input.collectedByUserId ??
           (input.method === "cash" ? user.id : null));
+    // "Get paid" on a draft: issue it in this same transaction, so the payment never
+    // lands on an editable invoice. Offline replays carry the flag and the clientId.
+    const issued =
+      input.issueDraft && input.invoiceId && input.kind !== "deposit"
+        ? await issueForCollect(tx, user, actor, input.invoiceId)
+        : false;
     const r = await recordPayment(
       tx,
       {
@@ -236,7 +285,13 @@ export const recordManualPayment = action({
       },
       actor,
     );
-    return { ...r, jobId, customerId, invoiceId: input.invoiceId ?? null };
+    return {
+      ...r,
+      jobId,
+      customerId,
+      invoiceId: input.invoiceId ?? null,
+      issued,
+    };
   },
   auditEntity: ({ data }) => ({ type: "payment", id: data.paymentId }),
   revalidate: ({ data }) =>
@@ -291,7 +346,13 @@ export const verifyPayments = action({
 
 // ------------------------------------------------------------------ pay links
 
-async function invoicePayLink(tx: Tx, invoiceId: string) {
+async function invoicePayLink(
+  tx: Tx,
+  invoiceId: string,
+  /** "Get paid" on a draft: issue it first (Quote to Paid I2). */
+  issue?: { user: SessionUser; actor: Actor },
+) {
+  if (issue) await issueForCollect(tx, issue.user, issue.actor, invoiceId);
   const [inv] = await tx
     .select()
     .from(invoices)
@@ -316,13 +377,15 @@ export const createPayLink = action({
     .object({
       invoiceId: uuid.optional(),
       depositRequestId: uuid.optional(),
+      /** Issue a draft invoice first ("Get paid" on a draft). */
+      issueDraft: z.boolean().optional(),
       clientId: uuid.optional(),
     })
     .refine((v) => !!v.invoiceId !== !!v.depositRequestId, {
       message: "Pick an invoice or a deposit.",
     }),
   audit: "payment.link_created",
-  async run({ input, tx, user, activity }) {
+  async run({ input, tx, user, actor, activity }) {
     if (input.depositRequestId) {
       const [d] = await tx
         .select({ d: depositRequests, customerId: jobs.customerId })
@@ -348,7 +411,11 @@ export const createPayLink = action({
     }
     const invoiceId = input.invoiceId as string;
     await assertInvoiceAccess(user, invoiceId, "read");
-    const { inv, link } = await invoicePayLink(tx, invoiceId);
+    const { inv, link } = await invoicePayLink(
+      tx,
+      invoiceId,
+      input.issueDraft ? { user, actor } : undefined,
+    );
     await activity({
       entity: { type: "invoice", id: inv.id },
       customerId: inv.customerId,
@@ -362,6 +429,10 @@ export const createPayLink = action({
     input.invoiceId
       ? { type: "invoice", id: input.invoiceId }
       : { type: "deposit_request", id: input.depositRequestId as string },
+  revalidate: ({ input, data }) =>
+    input.issueDraft && input.invoiceId
+      ? jobPaths(data.jobId, [`/invoices/${input.invoiceId}`, "/invoices"])
+      : [],
 });
 
 /** Text/email the pay link (template `invoice.pay_link`). */
@@ -372,13 +443,22 @@ export const sendPayLink = action({
     channel: z
       .enum(["customer_preferred", "sms", "email"])
       .default("customer_preferred"),
+    /** Issue a draft invoice first ("Get paid" on a draft). */
+    issueDraft: z.boolean().optional(),
     clientId: uuid.optional(),
   }),
   audit: "payment.link_sent",
   async run({ input, tx, user, actor, activity }) {
     await assertInvoiceAccess(user, input.invoiceId, "read");
-    const { inv, link } = await invoicePayLink(tx, input.invoiceId);
+    const { inv, link } = await invoicePayLink(
+      tx,
+      input.invoiceId,
+      input.issueDraft ? { user, actor } : undefined,
+    );
     const bal = await (await import("./internal")).balanceOf(tx, inv.id);
+    // The text card goes to the person sending it (like the composer), when they may
+    // see the customer's number; else the office outbox sends it.
+    const { revealed } = await contactRevealedFor(user, inv.customerId);
     const r = await enqueueMessage(
       tx,
       {
@@ -393,9 +473,15 @@ export const sendPayLink = action({
           amount: formatMoney(bal?.balanceCents ?? inv.totalCents),
         },
         dedupeKey: `paylink:${inv.id}:${input.clientId ?? link.tokenId}`,
+        outboxAssigneeUserId: revealed ? user.id : null,
       },
       actor,
     );
+    const outcome = await queuedOutcome(tx, r.scheduledMessageId, r.status, {
+      userId: user.id,
+      revealed,
+      timeZone: await getCompanyTimezone(),
+    });
     await activity({
       entity: { type: "invoice", id: inv.id },
       customerId: inv.customerId,
@@ -404,43 +490,73 @@ export const sendPayLink = action({
       summary: `Pay link sent for invoice ${inv.number}`,
       data: { status: r.status },
     });
-    return { status: r.status, url: link.url, jobId: inv.jobId };
+    return { status: r.status, url: link.url, jobId: inv.jobId, outcome };
   },
   auditEntity: ({ input }) => ({ type: "invoice", id: input.invoiceId }),
-  revalidate: ({ data }) => jobPaths(data.jobId, ["/messages/outbox"]),
+  revalidate: ({ input, data }) =>
+    jobPaths(data.jobId, [
+      "/messages/outbox",
+      `/invoices/${input.invoiceId}`,
+      "/invoices",
+    ]),
 });
 
-/** Re-send a payment receipt (template `payment.receipt`). */
+/** The payment if the viewer may see it (its job, its invoice, or payments.view_all). */
+async function paymentFor(user: SessionUser, paymentId: string) {
+  const [p] = await db
+    .select()
+    .from(payments)
+    .where(eq(payments.id, paymentId))
+    .limit(1);
+  if (!p) throw new NotFoundError("Payment");
+  if (p.jobId) await assertJobAccess(user, p.jobId, "read");
+  else if (p.invoiceId) await assertInvoiceAccess(user, p.invoiceId, "read");
+  else if (!user.perms.has("payments.view_all")) throw new ForbiddenError();
+  return p;
+}
+
+/**
+ * Send (or re-send) a payment receipt (template `payment.receipt`): by the customer's
+ * preferred channel, or Text / Email as picked on the success screen. The text card
+ * goes to the sender's own outbox when they may see the number; the result says what
+ * happened (Quote to Paid I3/I4).
+ */
 export const sendReceipt = action({
   perm: "payments.collect",
-  input: z.object({ paymentId: uuid, clientId: uuid.optional() }),
+  input: z.object({
+    paymentId: uuid,
+    channel: z
+      .enum(["customer_preferred", "sms", "email"])
+      .default("customer_preferred"),
+    clientId: uuid.optional(),
+  }),
   audit: "payment.receipt_sent",
   async run({ input, tx, user, actor, activity }) {
-    const [p] = await tx
-      .select()
-      .from(payments)
-      .where(eq(payments.id, input.paymentId))
-      .limit(1);
-    if (!p) throw new NotFoundError("Payment");
-    if (p.jobId) await assertJobAccess(user, p.jobId, "read");
-    else if (!user.perms.has("payments.view_all")) throw new ForbiddenError();
+    const p = await paymentFor(user, input.paymentId);
     if (!(PAID_STATUSES as readonly string[]).includes(p.status))
       throw new ConflictError(
         "not_paid",
         "Only completed payments have receipts.",
       );
+    const { revealed } = await contactRevealedFor(user, p.customerId);
     const r = await enqueueMessage(
       tx,
       {
         templateKey: "payment.receipt",
-        channel: "customer_preferred",
+        channel: input.channel,
         audience: { type: "customer", customerId: p.customerId },
         entity: { type: "payment", id: p.id },
         jobId: p.jobId,
         dedupeKey: `receipt:${p.id}:${input.clientId ?? Date.now()}`,
+        outboxAssigneeUserId: revealed ? user.id : null,
       },
       actor,
     );
+    const outcome = await queuedOutcome(tx, r.scheduledMessageId, r.status, {
+      userId: user.id,
+      revealed,
+      timeZone: await getCompanyTimezone(),
+    });
     await activity({
       entity: p.jobId
         ? { type: "job", id: p.jobId }
@@ -451,11 +567,213 @@ export const sendReceipt = action({
       summary: `Receipt sent for ${formatMoney(p.amountCents + p.tipCents)}`,
       data: { payment_id: p.id, status: r.status },
     });
-    return { status: r.status, jobId: p.jobId };
+    return { status: r.status, jobId: p.jobId, outcome };
   },
   auditEntity: ({ input }) => ({ type: "payment", id: input.paymentId }),
   revalidate: ({ data }) => jobPaths(data.jobId, ["/messages/outbox"]),
 });
+
+const ENTRY_LABEL: Record<string, string> = {
+  tap: "Tap to pay",
+  chip: "Chip",
+  swipe: "Swipe",
+  keyed: "Card number entered",
+  online: "Online",
+  wallet: "Mobile wallet",
+};
+
+/** "4:05 PM" today, else "Oct 24, 4:05 PM". */
+function atLabel(d: Date, tz: string, now = new Date()): string {
+  const day = (x: Date) =>
+    formatInTz(x, tz, { year: "numeric", month: "numeric", day: "numeric" });
+  return formatInTz(
+    d,
+    tz,
+    day(d) === day(now)
+      ? { hour: "numeric", minute: "2-digit" }
+      : { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" },
+  );
+}
+
+/**
+ * The receipt, in the app (Quote to Paid I3): the receipt sheet and the get-paid
+ * success screen read it instead of opening the customer's page in a new tab.
+ */
+export async function loadReceipt(input: {
+  paymentId: string;
+}): Promise<ActionResult<ReceiptView>> {
+  try {
+    const user = await requireUser();
+    if (
+      !user.perms.has("payments.collect") &&
+      !user.perms.has("payments.record_manual") &&
+      !user.perms.has("payments.view_all") &&
+      !user.perms.has("invoices.view")
+    )
+      throw new ForbiddenError();
+    const p = await paymentFor(user, uuid.parse(input.paymentId));
+    const [r, tz, cust, inv] = await Promise.all([
+      getPaymentReceiptData(p.id),
+      getCompanyTimezone(),
+      db
+        .select({
+          name: customers.displayName,
+          firstName: customers.firstName,
+          phone: customers.phone,
+          email: customers.email,
+        })
+        .from(customers)
+        .where(eq(customers.id, p.customerId))
+        .limit(1)
+        .then((x) => x[0] ?? null),
+      p.invoiceId
+        ? db
+            .select({ number: invoices.number, status: invoices.status })
+            .from(invoices)
+            .where(eq(invoices.id, p.invoiceId))
+            .limit(1)
+            .then((x) => x[0] ?? null)
+        : null,
+    ]);
+    if (!r) throw new NotFoundError("Payment");
+    const siblings = p.invoiceId
+      ? await db
+          .select()
+          .from(payments)
+          .where(
+            and(
+              eq(payments.invoiceId, p.invoiceId),
+              inArray(payments.status, [...PAID_STATUSES]),
+            ),
+          )
+      : [p];
+    siblings.sort(
+      (a, b) =>
+        (a.succeededAt ?? a.createdAt).getTime() -
+        (b.succeededAt ?? b.createdAt).getTime(),
+    );
+    return {
+      ok: true,
+      data: {
+        paymentId: p.id,
+        kind: p.kind,
+        amountCents: r.amountCents,
+        tipCents: r.tipCents,
+        methodLabel: paymentMethodLabel(p),
+        at: r.at.toISOString(),
+        atLabel: atLabel(r.at, tz),
+        collectedByName: r.collectedByName,
+        entryLabel: r.entryMode ? (ENTRY_LABEL[r.entryMode] ?? null) : null,
+        authCode: r.authCode,
+        invoiceId: p.invoiceId,
+        invoiceNumber: inv?.number ?? null,
+        invoiceStatus: inv?.status ?? null,
+        remainingBalanceCents: r.remainingBalanceCents,
+        jobNumber: r.jobNumber,
+        customerFirstName:
+          cust?.firstName?.trim() ||
+          cust?.name?.split(" ")[0] ||
+          "the customer",
+        customerHasPhone: !!cust?.phone,
+        customerHasEmail: !!cust?.email,
+        invoicePayments: siblings.map((s) => {
+          const at = s.succeededAt ?? s.createdAt;
+          return {
+            id: s.id,
+            label:
+              s.kind === "deposit"
+                ? "Deposit"
+                : s.kind === "tip_only"
+                  ? "Tip"
+                  : s.id === p.id
+                    ? "This payment"
+                    : "Payment",
+            atLabel: atLabel(at, tz),
+            cents: s.amountCents + s.tipCents,
+          };
+        }),
+      },
+    };
+  } catch (e) {
+    return actionFailure(e);
+  }
+}
+
+/**
+ * The customer's receipt page link (/i/…?receipt=), to share or copy. Reused per
+ * payment for a while (mintOrReusePublicToken), not minted on every tap.
+ */
+export const receiptLink = action({
+  anyPerm: ["payments.collect", "payments.record_manual", "invoices.view"],
+  input: z.object({ paymentId: uuid }),
+  async run({ input, tx, user }) {
+    const p = await paymentFor(user, input.paymentId);
+    if (!p.invoiceId)
+      throw new ConflictError(
+        "no_invoice",
+        "This payment isn't on an invoice, so it has no receipt page.",
+      );
+    const link = await mintOrReusePublicToken(tx, {
+      kind: "invoice",
+      entity: { type: "invoice", id: p.invoiceId },
+      customerId: p.customerId,
+      jobId: p.jobId,
+      purpose: "invoice.receipt",
+    });
+    return { url: `${link.url}?receipt=${p.id}` };
+  },
+});
+
+/**
+ * Whether the automatic receipt (built-in `payment_receipt`) went out for this
+ * payment, and where: the success screen says "Receipt emailed to s•••@…".
+ */
+export async function receiptStatus(input: {
+  paymentId: string;
+}): Promise<ActionResult<ReceiptAutoSend[]>> {
+  try {
+    const user = await requireUser();
+    const p = await paymentFor(user, uuid.parse(input.paymentId));
+    const { revealed } = await contactRevealedFor(user, p.customerId);
+    const rows = await db
+      .select({
+        channel: scheduledMessages.channel,
+        status: scheduledMessages.status,
+        to: scheduledMessages.toAddress,
+      })
+      .from(scheduledMessages)
+      .where(
+        and(
+          eq(scheduledMessages.entityType, "payment"),
+          eq(scheduledMessages.entityId, p.id),
+          eq(scheduledMessages.templateKey, "payment.receipt"),
+          inArray(scheduledMessages.status, [
+            "scheduled",
+            "pending_tap",
+            "sent",
+            "sent_manual",
+            "delivered",
+          ]),
+        ),
+      );
+    return {
+      ok: true,
+      data: rows.map((r) => ({
+        channel: r.channel,
+        status: r.status,
+        to: !r.to
+          ? null
+          : revealed
+            ? r.to
+            : r.to.includes("@")
+              ? maskEmail(r.to)
+              : maskPhone(r.to),
+      })),
+    };
+  } catch (e) {
+    return actionFailure(e);
+  }
+}
 
 // ------------------------------------------------------------------ deposits
 

@@ -32,7 +32,19 @@ interface Ctl {
   onOpenChange: (open: boolean) => void;
 }
 
-/** S19 sheet. */
+/**
+ * The sheet's sticky footer slot: the lazy body renders its main button into it
+ * (a portal), so "Record $414.84 in cash" never sits below the fold (Quote to Paid I3).
+ */
+function useFooterSlot() {
+  const [slot, setSlot] = useState<HTMLDivElement | null>(null);
+  return {
+    slot,
+    footer: <div ref={setSlot} className="min-h-[52px]" />,
+  };
+}
+
+/** S19 sheet: "Get paid". */
 export function CollectPaymentSheet({
   open,
   onOpenChange,
@@ -47,17 +59,19 @@ export function CollectPaymentSheet({
   defaultTarget?: "deposit" | "balance";
 }) {
   const hide = () => onOpenChange(false);
+  const f = useFooterSlot();
   return (
     <Sheet
       open={open}
       onOpenChange={onOpenChange}
-      title="Collect payment"
+      title="Get paid"
       detents={["large"]}
-      leading={
+      trailing={
         <Button size="sm" variant="plain" onClick={hide}>
-          Cancel
+          Close
         </Button>
       }
+      footer={f.footer}
     >
       {open && (
         <CollectSheet
@@ -66,6 +80,7 @@ export function CollectPaymentSheet({
           allowDeposit={allowDeposit}
           defaultTarget={defaultTarget}
           onClose={hide}
+          footer={f.slot}
         />
       )}
     </Sheet>
@@ -91,6 +106,7 @@ export function RecordPaymentSheet({
   const [list, setList] = useState<OpenInvoice[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const hide = () => onOpenChange(false);
+  const f = useFooterSlot();
   // Each time the sheet opens: start from the given invoice, else fetch the open ones.
   useEffect(() => {
     if (!open) return;
@@ -110,13 +126,14 @@ export function RecordPaymentSheet({
     <Sheet
       open={open}
       onOpenChange={onOpenChange}
-      title={picked ? "Collect payment" : "Record payment"}
+      title={picked ? "Get paid" : "Record payment"}
       detents={["large"]}
       leading={
         <Button size="sm" variant="plain" onClick={hide}>
           Cancel
         </Button>
       }
+      footer={picked ? f.footer : undefined}
       onClosed={() => {
         setList(null);
         setError(null);
@@ -124,7 +141,7 @@ export function RecordPaymentSheet({
     >
       {open &&
         (picked ? (
-          <CollectSheet invoiceId={picked} onClose={hide} />
+          <CollectSheet invoiceId={picked} onClose={hide} footer={f.slot} />
         ) : (
           <div className="p-4">
             {error ? (

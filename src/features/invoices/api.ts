@@ -473,7 +473,7 @@ export const EMPTY_INVOICE_MESSAGE =
 export async function issueDraftInvoice(
   tx: Tx,
   invoiceId: string,
-  via: "job_completed" | "manual",
+  via: "job_completed" | "manual" | "collect" | "send",
   actor: Actor,
 ): Promise<{ invoiceId: string; number: string; totalCents: number }> {
   const inv = await loadInvoice(tx, invoiceId);
