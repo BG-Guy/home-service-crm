@@ -38,6 +38,11 @@ export interface JobListItem {
     color: string | null;
   }[];
   cancelledAfterArrival: boolean;
+  /**
+   * Where the money stands (the /jobs cards, viewers with invoices.view): a short
+   * label ("Estimate sent", "$360.73 due", "Paid") in the stage's pill tone.
+   */
+  money?: { label: string; tone: "indigo" | "blue" | "green" } | null;
 }
 
 export interface JobListFilters {

@@ -93,8 +93,12 @@ export default function JobPeekSheet({
                 status={p?.status ?? job.status}
                 live={false}
               />
-              {payment !== "none" && (
-                <StatusPill kind="jobPayment" status={payment} />
+              {job.money ? (
+                <Pill tone={job.money.tone}>{job.money.label}</Pill>
+              ) : (
+                payment !== "none" && (
+                  <StatusPill kind="jobPayment" status={payment} />
+                )
               )}
               {priority !== "normal" && (
                 <Pill tone="red" dot={false}>

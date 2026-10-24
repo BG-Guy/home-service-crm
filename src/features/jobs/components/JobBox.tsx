@@ -106,8 +106,20 @@ export function JobBox({
             Callback
           </Pill>
         )}
-        {job.paymentStatus !== "none" && job.paymentStatus !== "paid" && (
-          <StatusPill kind="jobPayment" status={job.paymentStatus} size="sm" />
+        {job.money ? (
+          // Color by stage: estimates violet, invoices blue, paid green.
+          <Pill tone={job.money.tone} size="sm">
+            {job.money.label}
+          </Pill>
+        ) : (
+          job.paymentStatus !== "none" &&
+          job.paymentStatus !== "paid" && (
+            <StatusPill
+              kind="jobPayment"
+              status={job.paymentStatus}
+              size="sm"
+            />
+          )
         )}
       </div>
       <div className="relative z-[1] mt-auto flex justify-between gap-1 border-hairline border-t pt-3">

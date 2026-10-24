@@ -35,7 +35,7 @@ import {
 import { contactRevealedFor } from "@/features/customers/api";
 import { navigateHref } from "@/features/customers/normalize";
 import { requireAnyPerm, requireUser } from "@/lib/auth/current";
-import { getCompanyTimezone } from "@/lib/settings";
+import { getCompanyTimezone, isEnabled } from "@/lib/settings";
 import {
   addDaysToKey,
   dateKey,
@@ -48,6 +48,8 @@ import type { JobStatus, PaymentStatus, RiskBand } from "./contracts";
 import { isoOrNull } from "./internal";
 import { DONE_STATUSES, OPEN_STATUSES } from "./machine";
 import { maskStreetLine, revealsJobAddress } from "./mask";
+import { moneyStagesFor } from "./money-reads";
+import { STAGE_TONE } from "./money-stage";
 import type {
   ChecklistItemView,
   JobDetail,
@@ -340,12 +342,25 @@ export async function listJobs(
     )
     .limit(PAGE + 1);
   const page = rows.slice(0, PAGE);
-  const assignees = await assigneesFor(page.map((r) => r.j.id));
+  const ids = page.map((r) => r.j.id);
+  // Color by stage on the cards: one batched read for the page (invoices.view only).
+  const [assignees, stages] = await Promise.all([
+    assigneesFor(ids),
+    user.perms.has("invoices.view")
+      ? isEnabled("estimates")
+          .then((estimatesOn) => moneyStagesFor(ids, { estimatesOn, tz }))
+          .catch(() => null)
+      : null,
+  ]);
   const last = page[page.length - 1];
   return {
-    items: page.map((r) =>
-      toListItem(r, assignees.get(r.j.id) ?? [], user, ua),
-    ),
+    items: page.map((r) => {
+      const item = toListItem(r, assignees.get(r.j.id) ?? [], user, ua);
+      const s = stages?.get(r.j.id);
+      return s?.badge
+        ? { ...item, money: { label: s.badge, tone: STAGE_TONE[s.color] } }
+        : item;
+    }),
     nextCursor:
       rows.length > PAGE && last
         ? encodeCursor(new Date(last.sort), last.j.id)

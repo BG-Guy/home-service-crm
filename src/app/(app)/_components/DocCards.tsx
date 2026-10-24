@@ -11,6 +11,7 @@ import {
 } from "react";
 import { CallButton } from "@/features/customers/components/CallButton";
 import type { DocCard, DocPeekResult } from "@/lib/doc-cards";
+import { docStage, stageStyle } from "@/lib/stage-colors";
 import { MoneyText } from "@/ui/components/MoneyText";
 import { RoundAction } from "@/ui/components/RoundAction";
 import { StatusPill } from "@/ui/components/StatusPill";
@@ -115,7 +116,12 @@ function DocBox({
   onOpen(id: string): void;
 }) {
   return (
-    <article className="hover-lift relative flex h-full flex-col gap-3 rounded-card bg-card p-4 shadow-card transition-shadow">
+    // Color by stage: the round actions follow the document (estimates violet,
+    // invoices blue, paid green); the status pill keeps its own tone.
+    <article
+      className="hover-lift relative flex h-full flex-col gap-3 rounded-card bg-card p-4 shadow-card transition-shadow"
+      style={stageStyle(docStage(c.kind, c.status))}
+    >
       <div className="flex items-start justify-between gap-2">
         <StatusPill kind={c.kind} status={c.status} size="sm" />
         <span className="flex flex-col items-end">
