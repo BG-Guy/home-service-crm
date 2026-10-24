@@ -29,6 +29,7 @@ import { assertJobAccess } from "@/features/jobs/api";
 import { enqueueMessage, queuedOutcome } from "@/features/messaging/api";
 import { closeTasksFor } from "@/features/tasks/api";
 import { action, actionFailure } from "@/lib/action";
+import { writeAudit } from "@/lib/audit";
 import { requireUser } from "@/lib/auth/current";
 import { ConflictError, ForbiddenError, NotFoundError } from "@/lib/errors";
 import { maskEmail, maskPhone } from "@/lib/mask";
@@ -86,7 +87,15 @@ async function issueForCollect(
       "invoices.create",
     );
   await assertInvoiceAccess(user, invoiceId, "write");
-  await issueDraftInvoice(tx, invoiceId, "collect", actor);
+  const r = await issueDraftInvoice(tx, invoiceId, "collect", actor);
+  // Its own audit row: the action's row is the payment's.
+  await writeAudit(tx, {
+    actor,
+    action: "invoice.issued",
+    entity: { type: "invoice", id: invoiceId },
+    after: { via: "collect", total_cents: r.totalCents },
+    full: true,
+  });
   return true;
 }
 

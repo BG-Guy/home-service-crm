@@ -2,6 +2,43 @@
 
 ## Unreleased
 
+### Quote to Paid, Part I: the invoice screen, getting paid, sending, receipts, photos (2026-10-24)
+- `/invoices/[id]` on phones is section cards: Balance (the big balance or "Paid in full", the
+  status, "Better $450.73 · Deposit −$90.00", the due line, the EST → J → INV strip), Work (the
+  line editor on a draft, compact lines and totals once issued), Photos on the invoice,
+  Signatures (the approved estimate's, and the customer sign-off with "Get customer sign-off"),
+  then payments, receipts, the customer, versions, tags and a named More list (no "…" menu).
+  Desktop keeps the document with the rail. The page wears its money stage (invoice blue, paid
+  green). The job's Invoice tab shows one main action (Get paid) and the link to the invoice.
+- One bar: Send + Get paid, Send receipt once paid. The bar owns its sheets in every state, so
+  the success screen stays up when the payment turns the invoice paid.
+- Get paid on a draft issues it in the same transaction as the payment (offline replays included,
+  same clientId) or before the card pay link; `invoice.issued.via: "collect"` (and `"send"` for
+  Send on a draft) keeps the `invoice_sent` automation from texting it too. An empty draft has
+  nothing to collect yet (it used to say "paid in full").
+- The payment sheet: the amount big with "Includes a $54.11 tip", one-tap tips, big method tiles
+  ("Pay on their phone" = the pay link's QR + Text the link; Card off with its reason without a
+  processor; cash, check, Zelle, Venmo with the business's pay instructions to read out), the main
+  button in the sheet's sticky footer. Success: check, amount, method and tip, the invoice's
+  payments, Send the receipt (Text / Email), "Receipt emailed to …", View receipt, Done. The QR's
+  pay page starts on the tip picked on the tech's phone.
+- Receipts open in the app (a sheet), their share link is reused per payment. Sending says what
+  happened in the sheet ("Ready to text", "Emailed to sophia@…", "Not sent: Sophia opted out of
+  texts", "Will send at 8:00 AM"); the text card goes to the sender's own outbox inside their
+  contact window, else the office's (number hidden).
+- Invoice photos: picked photos only (picking is what shows them; none = none), each labeled
+  Before / During / After (a Problem photo is a Before; Goal photos stay on estimates), plain on
+  the customer's page, its printout and the staff print (staff copies add the time). The photo
+  sheet picks, orders, relabels and takes new ones.
+- Preview as the customer: the customer's own `/i/` page full screen over the invoice (a frame in
+  the kit FullscreenHub), drafts included, Pay off, a banner; no access-log row, no "viewed".
+- Invoice viewed: the customer's first view of an issued invoice emits `invoice.viewed` and writes
+  "Customer opened invoice INV-1067" (once; never drafts, voids, staff or previews).
+- Budgets (production build, budget.md method, base 2e91e12 → now): `/invoices/[id]` route JS
+  25.9 → 18.4 KB gz (the line editor and the islands load as their own chunks), `/i/[token]` 9.4 →
+  9.4, `/p/[token]` 7.6 → 7.6, `/jobs/[id]` 16.3 → 16.3; global CSS 25,410 → 25,369 B gz.
+- Tests: `tests/invoices/quote-to-paid-db.test.ts`, `tests/golden/invoice-screen-copy.test.ts`.
+
 ### Notifications: type icons, cards, filters, sort and a peek (2026-10-23)
 - Every notification shows its type's icon on its color (`src/features/notify/kinds.ts`: new
   lead blue, unconfirmed job orange, estimate approved green, new text green, chargeback red…),

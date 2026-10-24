@@ -295,6 +295,11 @@ describe("I2 Get paid on a draft", () => {
       .where(eq(payments.invoiceId, d.invoiceId));
     expect(pays).toHaveLength(1);
     expect(pays[0]?.amountCents).toBe(14_036);
+    // The issue has its own audit row (the action's row is the payment's).
+    const audits = await execRows<{ action: string; via: string | null }>(
+      sql`select action, after->>'via' as via from audit_log where entity_id = ${d.invoiceId} order by id`,
+    );
+    expect(audits).toContainEqual({ action: "invoice.issued", via: "collect" });
   });
 
   it("a replay with the same clientId (offline outbox) changes nothing", async () => {

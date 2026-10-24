@@ -200,6 +200,10 @@ describe("nothing to collect", () => {
     expect(nothingDueMessage({ ...ctx, invoiceHasLines: true })).toBe(
       "INV-1067 totals $0.00, so there's nothing to collect.",
     );
+    // A draft the deposit already covers isn't a $0 invoice either.
+    expect(
+      nothingDueMessage({ ...ctx, invoiceHasLines: true, totalCents: 45_073 }),
+    ).toBe("Deposits and payments already cover INV-1067.");
   });
   it("paid, void, written off, no invoice", () => {
     expect(nothingDueMessage({ ...ctx, invoiceStatus: "paid" })).toBe(

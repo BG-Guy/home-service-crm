@@ -14,9 +14,11 @@ export function nothingDueMessage(i: {
 }): string {
   if (!i.invoiceNumber) return "There's no invoice or deposit to collect yet.";
   if (i.invoiceStatus === "draft")
-    return i.invoiceHasLines
-      ? `${i.invoiceNumber} totals ${formatMoney(i.totalCents)}, so there's nothing to collect.`
-      : `Nothing to collect yet. Add items to ${i.invoiceNumber} first.`;
+    return !i.invoiceHasLines
+      ? `Nothing to collect yet. Add items to ${i.invoiceNumber} first.`
+      : i.totalCents <= 0
+        ? `${i.invoiceNumber} totals ${formatMoney(0)}, so there's nothing to collect.`
+        : `Deposits and payments already cover ${i.invoiceNumber}.`;
   if (i.invoiceStatus === "void") return `${i.invoiceNumber} was voided.`;
   if (i.invoiceStatus === "uncollectible")
     return `${i.invoiceNumber} was written off.`;

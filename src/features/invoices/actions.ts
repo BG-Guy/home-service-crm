@@ -15,6 +15,7 @@ import { assertJobAccess } from "@/features/jobs/api";
 import { invoicePickableIds, lockEvidenceMedia } from "@/features/media/api";
 import { enqueueMessage, queuedOutcome } from "@/features/messaging/api";
 import { action, zf } from "@/lib/action";
+import { writeAudit } from "@/lib/audit";
 import { ConflictError, NotFoundError } from "@/lib/errors";
 import { sha256Json } from "@/lib/hash";
 import { newId } from "@/lib/ids";
@@ -575,7 +576,15 @@ async function issueForSend(
       "Issue the invoice before sharing it.",
     );
   await assertInvoiceAccess(user, inv.id, "write");
-  await issueDraftInvoice(tx, inv.id, "send", actor);
+  const r = await issueDraftInvoice(tx, inv.id, "send", actor);
+  // Its own audit row: the action's row is the send's (or the link's).
+  await writeAudit(tx, {
+    actor,
+    action: "invoice.issued",
+    entity: { type: "invoice", id: inv.id },
+    after: { via: "send", total_cents: r.totalCents },
+    full: true,
+  });
   const [fresh] = await tx
     .select()
     .from(invoices)
