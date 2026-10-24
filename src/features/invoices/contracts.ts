@@ -28,6 +28,12 @@ export interface LineInput {
   serial?: string | null;
   isServiceFee?: boolean;
   isUpsell?: boolean;
+  /**
+   * Where the line came from (estimate|change_order|lead_quote|part|manual) and the
+   * estimate / change order id. Written only when given, so editing a line keeps it.
+   */
+  sourceType?: "estimate" | "change_order" | "lead_quote" | "part" | "manual";
+  sourceId?: string | null;
 }
 export interface JobLine extends LineInput {
   id: string;

@@ -79,6 +79,7 @@ export const STATUS = {
     approved: s("Approved", "green"),
     declined: s("Declined", "red"),
     expired: s("Expired", "gray"),
+    superseded: s("Replaced", "gray"),
   } satisfies StatusMap<typeof ESTIMATE_STATUSES>,
   changeOrder: {
     draft: s("Draft", "gray"),

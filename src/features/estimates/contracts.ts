@@ -9,7 +9,14 @@ export interface ChangeOrderStatus {
 export interface EstimateBrief {
   id: string;
   number: string;
-  status: "draft" | "sent" | "viewed" | "approved" | "declined" | "expired";
+  status:
+    | "draft"
+    | "sent"
+    | "viewed"
+    | "approved"
+    | "declined"
+    | "expired"
+    | "superseded";
   jobId: string | null;
   customerId: string;
   totalCents: number; // recommended or max option

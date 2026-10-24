@@ -18,6 +18,7 @@ const STAMP: Record<string, string> = {
   approved: "Approved",
   declined: "Declined",
   expired: "Expired",
+  superseded: "Replaced",
 };
 
 const POLICY_ORDER = ["cooling_off", "warranty", "deposit", "cancellation"];

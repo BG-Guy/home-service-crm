@@ -75,7 +75,9 @@ async function openEstimateOrThrow(tx: Tx, estimateId: string) {
   if (!isEstimateOpen(e.status))
     throw new ConflictError(
       "estimate_closed",
-      `Estimate ${e.number} is ${e.status} and can't be changed.`,
+      e.status === "superseded"
+        ? `Estimate ${e.number} was replaced by another estimate on the job. Reopen it to change it.`
+        : `Estimate ${e.number} is ${e.status} and can't be changed.`,
     );
   return e;
 }
@@ -639,7 +641,10 @@ export const declineEstimate = action({
   revalidate: ({ data }) => estPaths(data.estimateId, data.jobId),
 });
 
-/** Re-open a declined or expired estimate as a fresh draft window (new expiry). */
+/**
+ * Re-open a declined, expired or replaced estimate as a fresh window (new expiry).
+ * Approving a reopened one replaces the job's invoice lines like any approval.
+ */
 export const reopenEstimate = action({
   perm: "estimates.create",
   feature: F,
@@ -647,10 +652,10 @@ export const reopenEstimate = action({
   audit: "estimate.reopened",
   async run({ input, user, tx, activity }) {
     const e = await assertEstimateAccess(user, input.estimateId, "write");
-    if (e.status !== "declined" && e.status !== "expired")
+    if (!["declined", "expired", "superseded"].includes(e.status))
       throw new ConflictError(
         "estimate_open",
-        "Only declined or expired estimates can be reopened.",
+        "Only declined, expired or replaced estimates can be reopened.",
       );
     const days = (await getSettings()).estimates.expiry_days;
     await tx

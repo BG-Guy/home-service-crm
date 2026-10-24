@@ -218,6 +218,8 @@ export const addPartToJob = action({
           item?.manufacturerWarrantyMonths ??
           null,
         serial: input.serial ?? null,
+        // An approved estimate keeps parts lines (never bills them twice).
+        sourceType: "part",
       },
       actor,
     );
